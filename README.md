@@ -1,6 +1,6 @@
 # Bakesail
 
-Open source BGA rework station and reflow oven control, built on top of Klipper + Moonraker + MainsailOS.
+Open source BGA rework station and reflow oven control, built on top of Klipper + Moonraker + MainsailOS. The purpose of this is to be a customizable control board for any dead/outdated rework station, or as a a board to build your own station around. setup wizard will let you select and customize your device type and test pins as you go through the menus. 
 
 ## Install
 
@@ -71,7 +71,5 @@ bakesail/
 
 ## Hardware Targets
 
-- Host: BigTreeTech Pi 1.2 (or any Raspberry Pi / SBC running MainsailOS)
+- Host: any old pi
 - MCU: Any Klipper-compatible board (BTT SKR Mini E3 and similar tested)
-- Thermocouples: MAX31855 (SPI)
-- Camera: USB webcam via Crowsnest
