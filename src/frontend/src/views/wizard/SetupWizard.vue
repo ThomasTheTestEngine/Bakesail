@@ -272,8 +272,12 @@
             <input class="field-input" v-model="settings.cameras.bga" placeholder="/dev/video0" />
           </div>
           <div class="item-row">
-            <span class="field-label-inline" style="width:150px">Alignment camera</span>
+            <span class="field-label-inline" style="width:150px">Alignment camera 1</span>
             <input class="field-input" v-model="settings.cameras.alignment" placeholder="/dev/video1" />
+          </div>
+          <div class="item-row">
+            <span class="field-label-inline" style="width:150px">Alignment camera 2</span>
+            <input class="field-input" v-model="settings.cameras.alignment2" placeholder="/dev/video2" />
           </div>
         </div>
 
