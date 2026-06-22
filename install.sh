@@ -5,7 +5,7 @@
 # Run as the default 'pi' user (or equivalent) — not as root.
 #
 # Usage:
-#   curl -sSL https://raw.githubusercontent.com/[org]/bakesail/main/install.sh | bash
+#   curl -sSL https://raw.githubusercontent.com/ThomasTheTestEngine/Bakesail/main/install.sh | bash
 # =============================================================================
 
 set -euo pipefail
@@ -31,7 +31,7 @@ section() { echo -e "\n${CYN}${BLD}>>> $* ${RST}"; }
 # -----------------------------------------------------------------------------
 # Configuration
 # -----------------------------------------------------------------------------
-BAKESAIL_REPO="https://github.com/[org]/bakesail.git"
+BAKESAIL_REPO="https://github.com/ThomasTheTestEngine/Bakesail.git"
 BAKESAIL_BRANCH="main"
 
 BAKESAIL_DIR="${HOME}/bakesail"
@@ -328,7 +328,7 @@ print_done() {
 # -----------------------------------------------------------------------------
 main() {
     echo -e "\n${CYN}${BLD}  Bakesail Installer${RST}"
-    echo -e "  BGA rework station control — https://github.com/[org]/bakesail\n"
+    echo -e "  BGA rework station control — https://github.com/ThomasTheTestEngine/Bakesail\n"
 
     preflight_checks
     install_dependencies
