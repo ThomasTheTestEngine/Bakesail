@@ -385,12 +385,9 @@ async function deleteProfile() {
   if (!confirm(`Delete profile "${editingName.value}"?`)) return
 
   try {
-    const res = await fetch('/server/files/delete_file', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: `config/bakesail_profiles/${editingName.value}.json` }),
+    await send('server.files.delete_file', {
+      path: `config/bakesail_profiles/${editingName.value}.json`,
     })
-    if (!res.ok) throw new Error(`Delete failed: ${res.status}`)
     discardDraft()
     await fetchProfileList()
   } catch (e) {
