@@ -18,8 +18,7 @@ export const tabs = [
   { path: '/profiles',   name: 'profiles',        label: 'Profile Manager',  icon: '⊞', component: ProfileManager  },
   { path: '/cameras',    name: 'cameras',          label: 'Cameras',          icon: '⊙', component: Cameras        },
   { path: '/calibration',name: 'calibration',     label: 'Calibration',      icon: '◎', component: Calibration    },
-  { path: '/alignment',  name: 'alignment',        label: 'Alignment',        icon: '⊕', component: Alignment,
-    meta: { requiresSemiAuto: true } },
+  { path: '/alignment',  name: 'alignment',        label: 'Alignment',        icon: '⊕', component: Alignment },
   { path: '/settings',   name: 'settings',         label: 'Settings',         icon: '⊗', component: Settings       },
 ]
 
