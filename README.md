@@ -7,7 +7,7 @@ Open source BGA rework station and reflow oven control, built on top of Klipper 
 Run on a fresh MainsailOS image over SSH:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/ThomasTheTestEngine/bakesail/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/[org]/bakesail/main/install.sh | bash
 ```
 
 Open a browser to your Pi's IP address. The setup wizard will run on first visit.
