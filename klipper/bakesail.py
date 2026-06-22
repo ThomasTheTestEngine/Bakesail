@@ -82,15 +82,24 @@ class BakesailZone:
     def _resolve(self):
         if self._pheater is None:
             pheaters = self._printer.lookup_object('heaters')
-            self._pheater = pheaters.lookup_heater(self.heater_name)
+            # lookup_heater expects just the name without the type prefix.
+            # Config value may be "heater_generic bottom_zone" — take last word.
+            heater_name = self.heater_name.split()[-1]
+            self._pheater = pheaters.lookup_heater(heater_name)
         if self._psensor is None:
             self._psensor = self._printer.lookup_object(self.sensor_name)
 
     def get_temp(self):
-        """Return current measured temperature for this zone."""
+        """
+        Return current measured temperature for this zone.
+        Handles both heater sensors (returns tuple) and temperature_sensor
+        objects (returns float).
+        """
         self._resolve()
-        current, _target = self._psensor.get_temp(0)
-        return current
+        result = self._psensor.get_temp(self._printer.get_reactor().monotonic())
+        if isinstance(result, tuple):
+            return result[0]
+        return result
 
     def set_target(self, profile_target):
         """
