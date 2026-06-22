@@ -48,10 +48,7 @@ const router     = useRouter()
 const store      = useDeviceStore()
 const { connected, klippyState, connect } = useMoonraker()
 
-// Hide Alignment tab unless semi-auto machine type is configured
-const visibleTabs = computed(() =>
-  tabs.filter(t => !t.meta?.requiresSemiAuto || store.isSemiAuto)
-)
+const visibleTabs = computed(() => tabs)
 
 const connClass = computed(() => {
   if (!connected.value) return 'dot-off'
