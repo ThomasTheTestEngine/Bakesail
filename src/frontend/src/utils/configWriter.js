@@ -152,18 +152,17 @@ export function generateBakesailCfg(settings) {
     lines.push(sectionHeader('Motion axes'))
     for (const slot of motionSlots) {
       const axis = slot.function.replace('motion_', '')
+      const mot = settings.motion || {}
       lines.push(`[stepper_${axis}]`)
       lines.push(`step_pin: ${slot.stepPin}`)
       lines.push(`dir_pin: ${slot.dirPin}`)
       lines.push(`enable_pin: !${slot.enablePin}`)
-      lines.push(`microsteps: 16`)
-      lines.push(`rotation_distance: 40`)
+      lines.push(`microsteps: ${mot.microsteps || 16}`)
+      lines.push(`rotation_distance: ${mot.rotationDistance || 8}`)
       lines.push(`endstop_pin: ${slot.endstopPin || 'probe:z_virtual_endstop'}`)
-      if (axis === 'z') {
-        lines.push(`position_min: 0`)
-        lines.push(`position_max: 50`)
-        lines.push(`homing_speed: 5`)
-      }
+      lines.push(`position_min: 0`)
+      lines.push(`position_max: ${mot[axis + 'Max'] || 50}`)
+      if (axis === 'z') lines.push(`homing_speed: 5`)
       lines.push('')
     }
   }
@@ -204,7 +203,8 @@ export function generateBakesailCfg(settings) {
   if (settings.illumination.laser)    lines.push(`has_laser: True`)
   if (settings.illumination.neopixel) lines.push(`has_neopixel: True`)
   if (settings.cameras.bga)      lines.push(`bga_camera: ${settings.cameras.bga}`)
-  if (settings.cameras.alignment) lines.push(`alignment_camera: ${settings.cameras.alignment}`)
+  if (settings.cameras.alignment)  lines.push(`alignment_camera: ${settings.cameras.alignment}`)
+  if (settings.cameras.alignment2) lines.push(`alignment_camera2: ${settings.cameras.alignment2}`)
   lines.push('')
 
   // ── Macros include ────────────────────────────────────────────────────────
