@@ -58,8 +58,20 @@ export function defaultSettings() {
 
     // ── Cameras ───────────────────────────────────────────────────
     cameras: {
-      bga:       '',   // e.g. /dev/video0
-      alignment: '',   // e.g. /dev/video1
+      bga:        '',   // e.g. /dev/video0
+      alignment:  '',   // e.g. /dev/video1
+      alignment2: '',   // e.g. /dev/video2 (dual alignment camera)
+    },
+
+    // ── Motion ───────────────────────────────────────────────────
+    motion: {
+      maxSpeed:         50,    // mm/s
+      maxAccel:         500,   // mm/s²
+      microsteps:       16,
+      rotationDistance: 8,     // mm (typical lead screw)
+      xMax:             200,
+      yMax:             200,
+      zMax:             50,
     },
 
     // ── Stepper slots ─────────────────────────────────────────────
