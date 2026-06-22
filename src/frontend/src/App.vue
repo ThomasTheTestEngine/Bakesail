@@ -38,12 +38,13 @@
 
 <script setup>
 import { computed, onMounted } from 'vue'
-import { RouterLink, RouterView, useRoute } from 'vue-router'
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { tabs } from './router/index.js'
 import { useMoonraker } from './composables/useMoonraker.js'
 import { useDeviceStore } from './stores/device.js'
 
 const route      = useRoute()
+const router     = useRouter()
 const store      = useDeviceStore()
 const { connected, klippyState, connect } = useMoonraker()
 
@@ -65,7 +66,22 @@ const connLabel = computed(() => {
   return 'Connecting…'
 })
 
-onMounted(() => connect())
+onMounted(async () => {
+  connect()
+  await checkFirstRun()
+})
+
+async function checkFirstRun() {
+  try {
+    const res = await fetch('/server/files/config/bakesail.cfg')
+    if (!res.ok) {
+      // bakesail.cfg doesn't exist — run the wizard
+      router.push('/wizard')
+    }
+  } catch {
+    router.push('/wizard')
+  }
+}
 </script>
 
 <style>
