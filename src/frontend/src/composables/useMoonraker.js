@@ -183,3 +183,29 @@ export function useMoonraker() {
     runGcode,
   }
 }
+
+// ── waitForReady ──────────────────────────────────────────────────────────────
+// Resolves when Klipper is ready (useful after FIRMWARE_RESTART).
+// Rejects after timeoutMs if Klipper never comes back.
+
+export function waitForReady(timeoutMs = 30000) {
+  return new Promise((resolve, reject) => {
+    if (klippyState.value === 'ready') { resolve(); return }
+
+    const timer = setTimeout(() => {
+      unwatch()
+      reject(new Error('Timed out waiting for Klipper ready'))
+    }, timeoutMs)
+
+    // Watch klippyState reactively
+    import('vue').then(({ watch }) => {
+      const unwatch = watch(klippyState, (val) => {
+        if (val === 'ready') {
+          clearTimeout(timer)
+          unwatch()
+          resolve()
+        }
+      })
+    })
+  })
+}
