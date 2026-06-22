@@ -385,7 +385,7 @@ async function deleteProfile() {
   if (!confirm(`Delete profile "${editingName.value}"?`)) return
 
   try {
-    const res = await fetch('/server/files/delete', {
+    const res = await fetch('/server/files/delete_file', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: `config/bakesail_profiles/${editingName.value}.json` }),
