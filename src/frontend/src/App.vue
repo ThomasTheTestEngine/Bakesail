@@ -1,11 +1,15 @@
 <template>
   <div class="app-shell">
 
-    <!-- ── Sidebar nav ─────────────────────────────────────────── -->
+    <!-- ── Sidebar ────────────────────────────────────────────────── -->
     <aside class="sidebar">
       <div class="sidebar-logo">
-        <span class="logo-mark">⬡</span>
-        <span class="logo-text">Bakesail</span>
+        <img
+          :src="isDark ? '/bakesail_logo_dark.png' : '/bakesail_logo_light.png'"
+          alt="Bakesail"
+          class="logo-img"
+          :class="isDark ? 'logo-img--dark' : 'logo-img--light'"
+        />
       </div>
 
       <nav class="sidebar-nav">
@@ -21,14 +25,20 @@
         </RouterLink>
       </nav>
 
-      <!-- Connection status at sidebar bottom -->
-      <div class="sidebar-status">
-        <div class="conn-dot" :class="connClass"></div>
-        <span class="conn-label">{{ connLabel }}</span>
+      <div class="sidebar-footer">
+        <!-- Connection status -->
+        <div class="conn-row">
+          <div class="conn-dot" :class="connClass"></div>
+          <span class="conn-label">{{ connLabel }}</span>
+        </div>
+        <!-- Theme toggle -->
+        <button class="theme-toggle" @click="toggleTheme" :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'">
+          {{ isDark ? '☀' : '☾' }}
+        </button>
       </div>
     </aside>
 
-    <!-- ── Main content ────────────────────────────────────────── -->
+    <!-- ── Content ────────────────────────────────────────────────── -->
     <main class="content">
       <RouterView />
     </main>
@@ -37,55 +47,78 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { tabs } from './router/index.js'
 import { useMoonraker } from './composables/useMoonraker.js'
 import { useDeviceStore } from './stores/device.js'
 
-const route      = useRoute()
-const router     = useRouter()
-const store      = useDeviceStore()
+const route  = useRoute()
+const router = useRouter()
+const store  = useDeviceStore()
 const { connected, klippyState, connect } = useMoonraker()
 
 const visibleTabs = computed(() => tabs)
 
+// ── Theme ─────────────────────────────────────────────────────────
+const isDark = ref(true)
+
+function applyTheme(dark) {
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light')
+  localStorage.setItem('bakesail-theme', dark ? 'dark' : 'light')
+}
+
+function toggleTheme() {
+  isDark.value = !isDark.value
+  applyTheme(isDark.value)
+}
+
+// ── Connection ────────────────────────────────────────────────────
 const connClass = computed(() => {
-  if (!connected.value) return 'dot-off'
-  if (klippyState.value === 'ready') return 'dot-ready'
+  if (!connected.value)                 return 'dot-off'
+  if (klippyState.value === 'ready')    return 'dot-ready'
   return 'dot-connecting'
 })
 
 const connLabel = computed(() => {
-  if (!connected.value)               return 'Disconnected'
-  if (klippyState.value === 'ready')  return 'Connected'
-  if (klippyState.value === 'shutdown') return 'Klipper shutdown'
+  if (!connected.value)                     return 'Disconnected'
+  if (klippyState.value === 'ready')        return 'Connected'
+  if (klippyState.value === 'shutdown')     return 'Klipper shutdown'
   return 'Connecting…'
 })
 
-onMounted(async () => {
-  connect()
-  await checkFirstRun()
-})
-
+// ── First run detection ───────────────────────────────────────────
 async function checkFirstRun() {
   try {
     const res = await fetch('/server/files/config/bakesail.cfg')
-    if (!res.ok) {
-      // bakesail.cfg doesn't exist — run the wizard
-      router.push('/wizard')
-    }
+    if (!res.ok) router.push('/wizard')
   } catch {
     router.push('/wizard')
   }
 }
+
+onMounted(() => {
+  // Restore theme preference
+  const saved = localStorage.getItem('bakesail-theme')
+  isDark.value = saved !== 'light'
+  applyTheme(isDark.value)
+
+  connect()
+  checkFirstRun()
+})
 </script>
 
 <style>
-/* ── Reset + global tokens ─────────────────────────────────────── */
+/* ============================================================
+   Reset + CSS custom properties
+   Two themes: [data-theme="dark"] (default) and [data-theme="light"]
+   Logo palette: pink #F07FAA · yellow #F0D87A · blue #80B4E0
+   ============================================================ */
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-:root {
+/* ── Dark theme (default) ──────────────────────────────────── */
+:root, [data-theme="dark"] {
   --bg:          #0A0A0A;
   --surface:     #141414;
   --surface-2:   #1C1C1C;
@@ -96,21 +129,56 @@ async function checkFirstRun() {
   --text-dim:    #888;
   --text-muted:  #444;
 
-  --amber:       #E8820C;
-  --amber-dim:   #7A4406;
-  --amber-glow:  rgba(232, 130, 12, 0.12);
-  --teal:        #2DBFB8;
-  --teal-glow:   rgba(45, 191, 184, 0.12);
-  --red:         #E04545;
-  --red-glow:    rgba(224, 69, 69, 0.12);
+  /* Logo palette as UI accents */
+  --amber:       #F07FAA;   /* pink — active / running / primary */
+  --amber-dim:   #7A3558;
+  --amber-glow:  rgba(240, 127, 170, 0.12);
+
+  --teal:        #80B4E0;   /* blue — dwelling / info */
+  --teal-glow:   rgba(128, 180, 224, 0.12);
+
+  --yellow:      #F0D87A;   /* yellow — highlights */
+  --yellow-glow: rgba(240, 216, 122, 0.12);
+
+  --red:         #E05555;
+  --red-glow:    rgba(224, 85, 85, 0.12);
+
   --green:       #4CAF7D;
 
-  --font-ui:     'Inter', system-ui, sans-serif;
-  --font-mono:   'JetBrains Mono', 'Courier New', monospace;
+  --font-ui:   'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
 
-  --sidebar-w:   220px;
-  --radius:      6px;
-  --radius-lg:   10px;
+  --sidebar-w:  220px;
+  --radius:     6px;
+  --radius-lg:  10px;
+}
+
+/* ── Light theme ───────────────────────────────────────────── */
+[data-theme="light"] {
+  --bg:          #F5F2F7;   /* very slight lavender tint */
+  --surface:     #FFFFFF;
+  --surface-2:   #EDE8F2;
+  --border:      #DDD8E4;
+  --border-2:    #C8C0D4;
+
+  --text:        #1A1520;
+  --text-dim:    #5A5266;
+  --text-muted:  #A099B0;
+
+  --amber:       #C8507A;   /* deeper pink for light mode readability */
+  --amber-dim:   #8B2850;
+  --amber-glow:  rgba(200, 80, 122, 0.10);
+
+  --teal:        #4A88C0;   /* deeper blue */
+  --teal-glow:   rgba(74, 136, 192, 0.10);
+
+  --yellow:      #C8A020;   /* deeper yellow/gold */
+  --yellow-glow: rgba(200, 160, 32, 0.10);
+
+  --red:         #C83030;
+  --red-glow:    rgba(200, 48, 48, 0.08);
+
+  --green:       #2A8A50;
 }
 
 html, body {
@@ -121,18 +189,19 @@ html, body {
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  transition: background 0.2s, color 0.2s;
 }
 
 a { color: inherit; text-decoration: none; }
 
-/* ── App shell ─────────────────────────────────────────────────── */
+/* ── App shell ──────────────────────────────────────────────── */
 .app-shell {
   display: flex;
   height: 100vh;
   overflow: hidden;
 }
 
-/* ── Sidebar ───────────────────────────────────────────────────── */
+/* ── Sidebar ────────────────────────────────────────────────── */
 .sidebar {
   width: var(--sidebar-w);
   flex-shrink: 0;
@@ -140,49 +209,46 @@ a { color: inherit; text-decoration: none; }
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  padding: 0;
 }
 
+/* ── Logo ───────────────────────────────────────────────────── */
 .sidebar-logo {
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 24px 20px 20px;
-  border-bottom: 1px solid var(--border);
+  justify-content: center;
 }
 
-.logo-mark {
-  font-size: 22px;
-  color: var(--amber);
-  line-height: 1;
+.logo-img {
+  width: 148px;
+  height: auto;
+  display: block;
 }
 
-.logo-text {
-  font-family: var(--font-mono);
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--text);
-}
+/* Blend out solid backgrounds so only the logo art shows */
+.logo-img--dark  { mix-blend-mode: screen;   }
+.logo-img--light { mix-blend-mode: multiply; }
 
-/* ── Nav items ─────────────────────────────────────────────────── */
+/* ── Nav ────────────────────────────────────────────────────── */
 .sidebar-nav {
   flex: 1;
-  padding: 12px 0;
+  padding: 10px 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  overflow-y: auto;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 20px;
+  gap: 10px;
+  padding: 9px 18px;
   color: var(--text-dim);
   font-size: 13px;
   font-weight: 500;
-  transition: color 0.15s, background 0.15s;
+  transition: color 0.12s, background 0.12s;
   border-left: 2px solid transparent;
   cursor: pointer;
 }
@@ -199,7 +265,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 .nav-icon {
-  font-size: 15px;
+  font-size: 14px;
   width: 18px;
   text-align: center;
   flex-shrink: 0;
@@ -212,54 +278,74 @@ a { color: inherit; text-decoration: none; }
   text-overflow: ellipsis;
 }
 
-/* ── Connection status ─────────────────────────────────────────── */
-.sidebar-status {
+/* ── Sidebar footer ─────────────────────────────────────────── */
+.sidebar-footer {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 16px 20px;
+  justify-content: space-between;
+  padding: 12px 16px;
   border-top: 1px solid var(--border);
 }
 
+.conn-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
 .conn-dot {
-  width: 7px;
-  height: 7px;
+  width: 7px; height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
 }
-
 .dot-off         { background: var(--text-muted); }
 .dot-connecting  { background: var(--amber); opacity: 0.6; }
-.dot-ready       { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.dot-ready       { background: var(--green); box-shadow: 0 0 5px var(--green); }
 
 .conn-label {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-dim);
   font-family: var(--font-mono);
 }
 
-/* ── Content area ──────────────────────────────────────────────── */
+.theme-toggle {
+  width: 28px; height: 28px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-2);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, color 0.12s;
+  flex-shrink: 0;
+}
+.theme-toggle:hover { background: var(--surface-2); color: var(--text); }
+
+/* ── Content ────────────────────────────────────────────────── */
 .content {
   flex: 1;
   overflow-y: auto;
-  padding: 28px;
+  padding: 24px 28px;
 }
 
-/* ── Shared component utilities ────────────────────────────────── */
+/* ── Shared utilities ───────────────────────────────────────── */
 .page-title {
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.10em;
   text-transform: uppercase;
   color: var(--text-muted);
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 20px;
+  padding: 18px 20px;
 }
 
 .stub-card {
@@ -270,66 +356,43 @@ a { color: inherit; text-decoration: none; }
   text-align: center;
   color: var(--text-muted);
 }
+.stub-card h2 { font-size: 15px; font-weight: 500; color: var(--text-dim); margin-bottom: 8px; }
+.stub-card p  { font-size: 13px; }
 
-.stub-card h2 {
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--text-dim);
-  margin-bottom: 8px;
-}
-
-.stub-card p {
-  font-size: 13px;
-}
-
-/* ── Buttons ───────────────────────────────────────────────────── */
+/* ── Buttons ────────────────────────────────────────────────── */
 .btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 9px 18px;
+  padding: 8px 16px;
   border-radius: var(--radius);
   font-family: var(--font-ui);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   border: 1px solid transparent;
-  transition: opacity 0.15s, background 0.15s;
+  transition: opacity 0.12s, background 0.12s, color 0.12s, border-color 0.12s;
 }
-
-.btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
+.btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
 .btn-primary {
   background: var(--amber);
-  color: #000;
+  color: #fff;
   border-color: var(--amber);
 }
-
-.btn-primary:not(:disabled):hover {
-  opacity: 0.85;
-}
+.btn-primary:not(:disabled):hover { opacity: 0.85; }
 
 .btn-ghost {
   background: transparent;
   color: var(--text-dim);
   border-color: var(--border-2);
 }
-
-.btn-ghost:not(:disabled):hover {
-  background: var(--surface-2);
-  color: var(--text);
-}
+.btn-ghost:not(:disabled):hover { background: var(--surface-2); color: var(--text); }
 
 .btn-danger {
   background: transparent;
   color: var(--red);
   border-color: var(--red);
 }
-
-.btn-danger:not(:disabled):hover {
-  background: var(--red-glow);
-}
+.btn-danger:not(:disabled):hover { background: var(--red-glow); }
 </style>
