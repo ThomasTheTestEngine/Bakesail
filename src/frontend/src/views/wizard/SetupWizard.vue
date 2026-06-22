@@ -340,6 +340,14 @@
           <code>bakesail.cfg</code> and restart Klipper.
         </p>
 
+        <div v-if="skippedItems.length > 0" class="skip-warning">
+          <strong>⚠ Skipped (missing pins):</strong>
+          <ul style="margin:6px 0 0 16px">
+            <li v-for="item in skippedItems" :key="item" style="font-size:12px">{{ item }}</li>
+          </ul>
+          <span style="font-size:11px;color:var(--text-muted)">Assign pins in Settings after setup.</span>
+        </div>
+
         <pre class="config-preview">{{ configPreview }}</pre>
 
         <div v-if="writeError" class="write-error">{{ writeError }}</div>
@@ -436,6 +444,24 @@ function addStepperSlot() {
 function nextStep() {
   if (currentStep.value < steps.length - 1) currentStep.value++
 }
+
+// ── Skipped items warning ────────────────────────────────────────────────
+
+const skippedItems = computed(() => {
+  const items = []
+  for (const tc of settings.thermocouples) {
+    if (!tc.csPin || !tc.sckPin || !tc.misoPin)
+      items.push(`${tc.label}: missing SPI pins`)
+  }
+  for (const zone of settings.zones) {
+    if (!zone.deferred && !zone.pin)
+      items.push(`${zone.label}: missing heater pin`)
+  }
+  for (const fan of settings.fans) {
+    if (!fan.pin) items.push(`${fan.label}: missing pin`)
+  }
+  return items
+})
 
 // ── Config preview ─────────────────────────────────────────────────
 
@@ -756,6 +782,16 @@ onMounted(() => settings.load())
   font-size: 12px;
   color: var(--red);
   font-family: var(--font-mono);
+}
+
+.skip-warning {
+  padding: 12px 14px;
+  background: rgba(232, 130, 12, 0.08);
+  border: 1px solid var(--amber-dim);
+  border-radius: var(--radius);
+  color: var(--amber);
+  font-size: 13px;
+  margin-bottom: 12px;
 }
 
 /* ── Navigation ─────────────────────────────────────────────────── */

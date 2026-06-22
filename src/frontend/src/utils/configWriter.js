@@ -37,27 +37,33 @@ export function generateBakesailCfg(settings) {
   lines.push('')
 
   // ── Thermocouple sensors ─────────────────────────────────────────────────
-  if (settings.thermocouples.length > 0) {
+  const validTcs = settings.thermocouples.filter(
+    tc => tc.csPin && tc.sckPin && tc.misoPin
+  )
+  if (validTcs.length > 0) {
     lines.push(sectionHeader('Thermocouple sensors (MAX31855)'))
-    for (const tc of settings.thermocouples) {
+    for (const tc of validTcs) {
       lines.push(`[temperature_sensor ${_tcName(tc)}]`)
       lines.push(`sensor_type: MAX31855`)
       lines.push(`sensor_pin: ${tc.csPin}`)
       lines.push(`spi_software_sclk_pin: ${tc.sckPin}`)
       lines.push(`spi_software_miso_pin: ${tc.misoPin}`)
-      // MAX31855 is read-only but Klipper requires MOSI; use a declared spare or same as MISO
       lines.push(`spi_software_mosi_pin: ${tc.mosiPin || tc.misoPin}`)
       lines.push('')
     }
   }
 
   // ── Heater zones ─────────────────────────────────────────────────────────
-  if (settings.zones.length > 0) {
+  const validZones = settings.zones.filter(z => {
+    const pin = _resolveHeaterPin(z, settings)
+    return pin && pin !== 'UNSET'
+  })
+  if (validZones.length > 0) {
     lines.push(sectionHeader('Heater zones'))
-    for (const zone of settings.zones) {
+    for (const zone of validZones) {
       const heaterPin = _resolveHeaterPin(zone, settings)
       const tcId      = settings.zoneTcMap[zone.id]
-      const tc        = settings.thermocouples.find(t => t.id === tcId)
+      const tc        = validTcs.find(t => t.id === tcId)
 
       lines.push(`[heater_generic ${_zoneName(zone)}]`)
       lines.push(`heater_pin: ${heaterPin}`)
@@ -69,7 +75,7 @@ export function generateBakesailCfg(settings) {
         lines.push(`spi_software_miso_pin: ${tc.misoPin}`)
         lines.push(`spi_software_mosi_pin: ${tc.mosiPin || tc.misoPin}`)
       } else {
-        lines.push(comment('WARNING: no thermocouple assigned to this zone'))
+        lines.push(comment('No valid TC assigned — using host temperature as placeholder'))
         lines.push(`sensor_type: temperature_host`)
       }
 
@@ -85,9 +91,10 @@ export function generateBakesailCfg(settings) {
   }
 
   // ── Fans ─────────────────────────────────────────────────────────────────
-  if (settings.fans.length > 0) {
+  const validFans = settings.fans.filter(f => f.pin)
+  if (validFans.length > 0) {
     lines.push(sectionHeader('Fans'))
-    for (const fan of settings.fans) {
+    for (const fan of validFans) {
       if (!fan.pin) continue
       if (fan.pwm) {
         lines.push(`[fan_generic ${_fanName(fan)}]`)
@@ -184,12 +191,14 @@ export function generateBakesailCfg(settings) {
   lines.push(`profiles_path: ~/printer_data/config/bakesail_profiles`)
   lines.push('')
 
-  for (const zone of settings.zones) {
+  for (const zone of validZones) {
     const tcId = settings.zoneTcMap[zone.id]
-    const tc   = settings.thermocouples.find(t => t.id === tcId)
+    const tc   = validTcs.find(t => t.id === tcId)
     lines.push(`heater_zone${zone.id}: heater_generic ${_zoneName(zone)}`)
     if (tc) {
       lines.push(`sensor_zone${zone.id}: temperature_sensor ${_tcName(tc)}`)
+    } else {
+      lines.push(`sensor_zone${zone.id}: temperature_sensor ${_zoneName(zone)}`)
     }
     if (zone.offset) {
       lines.push(`offset_zone${zone.id}: ${zone.offset}`)
