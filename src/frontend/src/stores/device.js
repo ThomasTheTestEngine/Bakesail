@@ -5,7 +5,6 @@
 
 import { defineStore } from 'pinia'
 
-// State display labels and colours
 const STATE_META = {
   idle:     { label: 'Idle',     colour: '#555555' },
   ready:    { label: 'Ready',    colour: '#E8820C' },
@@ -21,96 +20,127 @@ const SUBSTATE_META = {
   cooling:  { label: 'Cooling',  colour: '#2DBFB8' },
 }
 
+// Rolling history length (seconds at ~1 sample/sec)
+const HISTORY_LEN = 300
+
 export const useDeviceStore = defineStore('device', {
   state: () => ({
-    // ── Bakesail state (mirrored from klippy extra's get_status) ──
-    bsState:   'idle',    // idle | ready | running | paused | complete | error
-    substate:  '',        // heating | dwelling | cooling | ''
+    // ── Bakesail state ─────────────────────────────────────────────
+    bsState:   'idle',
+    substate:  '',
     error:     '',
-    profile:   '',        // active profile name
-    stage:     {},        // stage detail object (varies by type)
-    zones:     [],        // array of zone status objects
+    profile:   '',
+    stage:     {},
+    zones:     [],
 
-    // ── Machine capabilities (written by setup wizard) ──
-    hasVacuum:  false,
-    hasLaser:   false,
-    isSemiAuto: false,
+    // ── Rolling temperature history ────────────────────────────────
+    // { [zoneIndex]: [{ t: Date.now(), temp: number }] }
+    tempHistory: {},
+
+    // ── Fan state ──────────────────────────────────────────────────
+    // [{ name, speed }]  speed 0.0–1.0
+    fans: [],
+
+    // ── Vacuum state ──────────────────────────────────────────────
+    vacuumPenOn:    false,
+    nozzleVacuumOn: false,
+
+    // ── Machine capabilities (set by settings store) ───────────────
+    hasVacuumPen:    false,
+    hasNozzleVacuum: false,
+    hasLaser:        false,
+    hasNeopixel:     false,
+    isSemiAuto:      false,
+    isAutomatic:     false,
+
+    // ── Overtemp ──────────────────────────────────────────────────
+    overtempThreshold: 280,   // °C — configurable from dashboard
+    overtempAck:       false, // user acknowledged the alarm
   }),
 
   getters: {
-    // Effective display state: substate when running, state otherwise
     displayState(state) {
       if (state.bsState === 'running' && state.substate) return state.substate
       return state.bsState
     },
-
     displayLabel(state) {
       const ds = this.displayState
       return SUBSTATE_META[ds]?.label ?? STATE_META[ds]?.label ?? ds
     },
-
     displayColour(state) {
       const ds = this.displayState
       return SUBSTATE_META[ds]?.colour ?? STATE_META[ds]?.colour ?? '#555555'
     },
+    isRunning: s => s.bsState === 'running',
+    isPaused:  s => s.bsState === 'paused',
+    isIdle:    s => s.bsState === 'idle' || s.bsState === 'complete',
+    canRun:    s => s.bsState === 'idle' || s.bsState === 'complete',
+    canPause:  s => s.bsState === 'running',
+    canResume: s => s.bsState === 'paused',
+    canAbort:  s => ['running', 'paused', 'complete', 'error'].includes(s.bsState),
 
-    isRunning(state) {
-      return state.bsState === 'running'
-    },
-
-    isPaused(state) {
-      return state.bsState === 'paused'
-    },
-
-    canRun(state) {
-      return state.bsState === 'idle' || state.bsState === 'complete'
-    },
-
-    canPause(state) {
-      return state.bsState === 'running'
-    },
-
-    canResume(state) {
-      return state.bsState === 'paused'
-    },
-
-    canAbort(state) {
-      return ['running', 'paused', 'complete', 'error'].includes(state.bsState)
-    },
-
-    // Stage summary string for the Dashboard header
     stageSummary(state) {
       if (!state.profile) return ''
       const s = state.stage
-      if (!s || !s.type) return state.profile
-
+      if (!s?.type) return state.profile
       const prefix = `${state.profile} — Stage ${s.number ?? '?'}/${s.count ?? '?'}`
-
       if (s.type === 'dwell') {
-        const rem = s.remaining ?? 0
+        const rem  = s.remaining ?? 0
         const mins = Math.floor(rem / 60).toString().padStart(2, '0')
         const secs = Math.floor(rem % 60).toString().padStart(2, '0')
         return `${prefix} · Dwell ${mins}:${secs} remaining`
       }
-      if (s.type === 'ramp') {
-        return `${prefix} · Ramp → ${s.target}°C`
-      }
-      if (s.type === 'cool') {
-        return `${prefix} · Cooling`
-      }
+      if (s.type === 'ramp')  return `${prefix} · Ramp → ${s.target}°C`
+      if (s.type === 'cool')  return `${prefix} · Cooling`
       return prefix
+    },
+
+    // True if any zone is above the overtemp threshold
+    isOvertemp(state) {
+      if (!state.overtempThreshold) return false
+      return state.zones.some(z => z.temp >= state.overtempThreshold)
+    },
+
+    overtempZones(state) {
+      return state.zones.filter(z => z.temp >= state.overtempThreshold)
     },
   },
 
   actions: {
     updateBakesail(data) {
-      // Partial updates — only overwrite keys present in the payload
       if (data.state    !== undefined) this.bsState  = data.state
       if (data.substate !== undefined) this.substate = data.substate
       if (data.error    !== undefined) this.error    = data.error
       if (data.profile  !== undefined) this.profile  = data.profile
       if (data.stage    !== undefined) this.stage    = data.stage
-      if (data.zones    !== undefined) this.zones    = data.zones
+      if (data.zones    !== undefined) {
+        this.zones = data.zones
+        this._appendHistory(data.zones)
+        // Reset overtemp ack if temps came back down
+        if (!this.isOvertemp) this.overtempAck = false
+      }
+    },
+
+    _appendHistory(zones) {
+      const t = Date.now()
+      for (const zone of zones) {
+        const key = zone.index
+        if (!this.tempHistory[key]) this.tempHistory[key] = []
+        this.tempHistory[key].push({ t, temp: zone.temp })
+        // Trim to HISTORY_LEN
+        if (this.tempHistory[key].length > HISTORY_LEN) {
+          this.tempHistory[key].shift()
+        }
+      }
+    },
+
+    updateFans(fans) {
+      this.fans = fans
+    },
+
+    updateVacuum(pen, nozzle) {
+      if (pen    !== undefined) this.vacuumPenOn    = pen
+      if (nozzle !== undefined) this.nozzleVacuumOn = nozzle
     },
 
     setKlippyOffline() {
@@ -118,8 +148,12 @@ export const useDeviceStore = defineStore('device', {
       this.substate = ''
       this.profile  = ''
       this.stage    = {}
-      // Keep zones array but zero the temps so we don't show stale readings
-      this.zones = this.zones.map(z => ({ ...z, temp: 0 }))
+      this.zones    = this.zones.map(z => ({ ...z, temp: 0, power: 0 }))
+      this.fans     = this.fans.map(f => ({ ...f, speed: 0 }))
+    },
+
+    acknowledgeOvertemp() {
+      this.overtempAck = true
     },
   },
 })

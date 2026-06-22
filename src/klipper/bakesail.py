@@ -115,17 +115,25 @@ class BakesailZone:
         self._resolve()
         self._pheater.set_temp(0)
 
-    def get_status(self):
+    def get_status(self, eventtime=0):
         try:
             temp = round(self.get_temp(), 1)
         except Exception:
             temp = 0.0
+        power = 0.0
+        try:
+            self._resolve()
+            hs = self._pheater.get_status(eventtime)
+            power = round(hs.get('power', 0.0), 3)
+        except Exception:
+            pass
         return {
             'index':   self.index,
             'heater':  self.heater_name,
             'sensor':  self.sensor_name,
             'offset':  self.offset,
             'temp':    temp,
+            'power':   power,
         }
 
 
@@ -664,7 +672,7 @@ class Bakesail:
             'profile':  self.profile.name if self.profile else '',
             'stage':    stage_info,
             # Live zone data
-            'zones':    [z.get_status() for z in self.zones],
+            'zones':    [z.get_status(eventtime) for z in self.zones],
         }
 
 
