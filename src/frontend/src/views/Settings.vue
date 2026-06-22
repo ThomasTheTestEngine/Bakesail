@@ -172,8 +172,12 @@
               <input class="field-input" v-model="settings.cameras.bga" placeholder="/dev/video0" />
             </div>
             <div class="item-row">
-              <span class="field-label-inline" style="width:160px">Alignment camera</span>
+              <span class="field-label-inline" style="width:160px">Alignment camera 1</span>
               <input class="field-input" v-model="settings.cameras.alignment" placeholder="/dev/video1" />
+            </div>
+            <div class="item-row">
+              <span class="field-label-inline" style="width:160px">Alignment camera 2</span>
+              <input class="field-input" v-model="settings.cameras.alignment2" placeholder="/dev/video2" />
             </div>
           </div>
         </template>
@@ -202,6 +206,65 @@
               </template>
             </div>
           </div>
+        </template>
+
+        <!-- Movement -->
+        <template v-else-if="activeSection === 'movement'">
+          <div class="section-title">Movement</div>
+          <p class="section-note">
+            Configure motion axes for semi-automatic and automatic machines.
+            Axis pins are assigned via Stepper Slots — set a slot to Motion X/Y/Z there first.
+          </p>
+          <template v-if="!settings.hasMotion">
+            <p class="section-note">No motion axes available for <strong>Manual</strong> class machines.
+            Change machine class in Device settings to enable motion.</p>
+          </template>
+          <template v-else>
+            <div class="field-row">
+              <label class="field-label">Max speed</label>
+              <input class="field-input" type="number" v-model.number="settings.motion.maxSpeed"
+                     min="1" max="500" style="width:80px;flex:none" />
+              <span class="field-label-inline">mm/s</span>
+            </div>
+            <div class="field-row">
+              <label class="field-label">Max accel</label>
+              <input class="field-input" type="number" v-model.number="settings.motion.maxAccel"
+                     min="1" max="5000" style="width:80px;flex:none" />
+              <span class="field-label-inline">mm/s²</span>
+            </div>
+            <div class="field-row" v-if="settings.availableMotionAxes.includes('z')">
+              <label class="field-label">Z travel</label>
+              <input class="field-input" type="number" v-model.number="settings.motion.zMax"
+                     min="1" max="200" style="width:80px;flex:none" />
+              <span class="field-label-inline">mm</span>
+            </div>
+            <div class="field-row" v-if="settings.availableMotionAxes.includes('x')">
+              <label class="field-label">X travel</label>
+              <input class="field-input" type="number" v-model.number="settings.motion.xMax"
+                     min="1" max="500" style="width:80px;flex:none" />
+              <span class="field-label-inline">mm</span>
+            </div>
+            <div class="field-row" v-if="settings.availableMotionAxes.includes('y')">
+              <label class="field-label">Y travel</label>
+              <input class="field-input" type="number" v-model.number="settings.motion.yMax"
+                     min="1" max="500" style="width:80px;flex:none" />
+              <span class="field-label-inline">mm</span>
+            </div>
+            <div class="field-row">
+              <label class="field-label">Microsteps</label>
+              <select class="field-select" v-model.number="settings.motion.microsteps">
+                <option :value="8">8</option>
+                <option :value="16">16</option>
+                <option :value="32">32</option>
+              </select>
+            </div>
+            <div class="field-row">
+              <label class="field-label">Rot distance</label>
+              <input class="field-input" type="number" v-model.number="settings.motion.rotationDistance"
+                     min="1" max="200" step="0.1" style="width:80px;flex:none" />
+              <span class="field-label-inline">mm (lead screw or belt pitch × teeth)</span>
+            </div>
+          </template>
         </template>
 
         <!-- Write config -->
@@ -261,6 +324,7 @@ const sections = [
   { id: 'illumination', label: 'Illumination' },
   { id: 'cameras',      label: 'Cameras' },
   { id: 'steppers',     label: 'Stepper Slots' },
+  { id: 'movement',     label: 'Movement' },
   { id: 'config',       label: 'Write Config' },
 ]
 
