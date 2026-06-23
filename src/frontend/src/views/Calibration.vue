@@ -1,9 +1,9 @@
 <template>
   <div>
-    <div class="page-title">PROFILE MANAGER</div>
+    <div class="page-title">CALIBRATION</div>
     <div class="stub-card">
-      <h2>Profile Manager</h2>
-      <p>Coming in a future milestone.</p>
+      <h2>Calibration</h2>
+      <p>Calibration wizards and offsets</p>
     </div>
   </div>
 </template>
