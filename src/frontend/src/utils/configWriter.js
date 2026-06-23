@@ -37,21 +37,13 @@ export function generateBakesailCfg(settings) {
   lines.push('')
 
   // ── Thermocouple sensors ─────────────────────────────────────────────────
+  // Compute valid TCs (used when embedding sensor in heater_generic)
+  // No standalone [temperature_sensor] objects are created for TCs —
+  // they are embedded directly in [heater_generic] to avoid the
+  // dual-pin-reference Klipper error when the same SPI pins are declared twice.
   const validTcs = settings.thermocouples.filter(
     tc => tc.csPin && tc.sckPin && tc.misoPin
   )
-  if (validTcs.length > 0) {
-    lines.push(sectionHeader('Thermocouple sensors (MAX31855)'))
-    for (const tc of validTcs) {
-      lines.push(`[temperature_sensor ${_tcName(tc)}]`)
-      lines.push(`sensor_type: MAX31855`)
-      lines.push(`sensor_pin: ${tc.csPin}`)
-      lines.push(`spi_software_sclk_pin: ${tc.sckPin}`)
-      lines.push(`spi_software_miso_pin: ${tc.misoPin}`)
-      lines.push(`spi_software_mosi_pin: ${tc.mosiPin || tc.misoPin}`)
-      lines.push('')
-    }
-  }
 
   // ── Heater zones ─────────────────────────────────────────────────────────
   const validZones = settings.zones.filter(z => {
@@ -59,23 +51,6 @@ export function generateBakesailCfg(settings) {
     return pin && pin !== 'UNSET'
   })
   if (validZones.length > 0) {
-    // ── Placeholder sensors for zones without a TC ─────────────────
-    // bakesail.py needs a named temperature_sensor object for every zone.
-    // When no TC is assigned, create a temperature_host placeholder so
-    // Klipper has something to look up.
-    const zonesNeedingPlaceholder = validZones.filter(zone => {
-      const tcId = settings.zoneTcMap[zone.id]
-      return !validTcs.find(t => t.id === tcId)
-    })
-    if (zonesNeedingPlaceholder.length > 0) {
-      lines.push(sectionHeader('Zone temperature placeholders (no TC assigned)'))
-      for (const zone of zonesNeedingPlaceholder) {
-        lines.push(`[temperature_sensor ${_zoneName(zone)}_sensor]`)
-        lines.push(`sensor_type: temperature_host`)
-        lines.push('')
-      }
-    }
-
     lines.push(sectionHeader('Heater zones'))
     for (const zone of validZones) {
       const heaterPin = _resolveHeaterPin(zone, settings)
@@ -208,18 +183,11 @@ export function generateBakesailCfg(settings) {
   lines.push(`profiles_path: ~/printer_data/config/bakesail_profiles`)
   lines.push('')
 
-  // Zones must be numbered contiguously starting at 1 in the [bakesail] block.
-  // Use sequential index regardless of zone.id in the settings store.
+  // Zones numbered contiguously from 1 regardless of settings store IDs.
+  // sensor_zoneN is omitted — bakesail.py reads temperature from the heater directly.
   validZones.forEach((zone, idx) => {
-    const n    = idx + 1
-    const tcId = settings.zoneTcMap[zone.id]
-    const tc   = validTcs.find(t => t.id === tcId)
+    const n = idx + 1
     lines.push(`heater_zone${n}: heater_generic ${_zoneName(zone)}`)
-    if (tc) {
-      lines.push(`sensor_zone${n}: temperature_sensor ${_tcName(tc)}`)
-    } else {
-      lines.push(`sensor_zone${n}: temperature_sensor ${_zoneName(zone)}_sensor`)
-    }
     if (zone.offset) {
       lines.push(`offset_zone${n}: ${zone.offset}`)
     }
