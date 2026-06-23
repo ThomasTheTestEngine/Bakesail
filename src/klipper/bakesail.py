@@ -64,49 +64,32 @@ SUB_COOLING  = 'cooling'      # cool stage in progress
 
 class BakesailZone:
     """
-    Pairs a Klipper heater with a temperature sensor.
-    Applies a per-zone offset to every setpoint so zones can track the same
-    profile curve at different absolute temperatures.
+    Represents one heater zone.
+    Temperature is read directly from the heater object (which wraps its
+    own embedded sensor), avoiding the dual-pin-reference problem that
+    arises when a standalone [temperature_sensor] and a [heater_generic]
+    both reference the same physical TC SPI pins.
     """
 
-    def __init__(self, index, heater_name, sensor_name, offset, printer):
+    def __init__(self, index, heater_name, offset, printer):
         self.index       = index
         self.heater_name = heater_name
-        self.sensor_name = sensor_name
-        self.offset      = offset     # °C added to profile target for this zone
+        self.offset      = offset
         self._printer    = printer
         self._pheater    = None
-        self._psensor    = None
 
-    # Klipper objects aren't available at config parse time, so we resolve lazily
     def _resolve(self):
         if self._pheater is None:
-            pheaters = self._printer.lookup_object('heaters')
-            # lookup_heater expects just the name without the type prefix.
-            # Config value may be "heater_generic bottom_zone" — take last word.
+            pheaters    = self._printer.lookup_object('heaters')
             heater_name = self.heater_name.split()[-1]
             self._pheater = pheaters.lookup_heater(heater_name)
-        if self._psensor is None:
-            self._psensor = self._printer.lookup_object(self.sensor_name)
 
     def get_temp(self):
-        """
-        Return current measured temperature for this zone.
-        Handles both heater sensors (returns tuple) and temperature_sensor
-        objects (returns float).
-        """
         self._resolve()
-        result = self._psensor.get_temp(self._printer.get_reactor().monotonic())
-        if isinstance(result, tuple):
-            return result[0]
-        return result
+        status = self._pheater.get_status(self._printer.get_reactor().monotonic())
+        return status.get('temperature', 0.0)
 
     def set_target(self, profile_target):
-        """
-        Set this zone's heater target.
-        Applies zone offset: actual_target = profile_target + offset.
-        Passing 0 turns the heater off (Klipper convention).
-        """
         self._resolve()
         adjusted = (profile_target + self.offset) if profile_target > 0 else 0.0
         self._pheater.set_temp(adjusted)
@@ -116,24 +99,21 @@ class BakesailZone:
         self._pheater.set_temp(0)
 
     def get_status(self, eventtime=0):
-        try:
-            temp = round(self.get_temp(), 1)
-        except Exception:
-            temp = 0.0
+        temp  = 0.0
         power = 0.0
         try:
             self._resolve()
-            hs = self._pheater.get_status(eventtime)
-            power = round(hs.get('power', 0.0), 3)
-        except Exception:
-            pass
+            hs    = self._pheater.get_status(eventtime)
+            temp  = round(hs.get('temperature', 0.0), 1)
+            power = round(hs.get('power',       0.0), 3)
+        except Exception as e:
+            logging.warning("Bakesail zone %d status error: %s", self.index, e)
         return {
-            'index':   self.index,
-            'heater':  self.heater_name,
-            'sensor':  self.sensor_name,
-            'offset':  self.offset,
-            'temp':    temp,
-            'power':   power,
+            'index':  self.index,
+            'heater': self.heater_name,
+            'offset': self.offset,
+            'temp':   temp,
+            'power':  power,
         }
 
 
@@ -256,6 +236,23 @@ class Bakesail:
             'profiles_path', '~/printer_data/config/bakesail_profiles')
         self.profiles_path = os.path.expanduser(raw_path)
 
+        # Consume offset_zoneN keys so Klipper doesn't reject them as unknown
+        for i in range(1, 5):
+            config.getfloat('offset_zone%d' % i, 0.0)
+
+        # Device identity (informational — used by frontend, not control logic)
+        self.device_type   = config.get('device_type',   'oven')
+        self.machine_class = config.get('machine_class', 'manual')
+
+        # Optional peripheral flags
+        self.has_vacuum_pen    = config.getboolean('has_vacuum_pen',    False)
+        self.has_nozzle_vacuum = config.getboolean('has_nozzle_vacuum', False)
+        self.has_laser         = config.getboolean('has_laser',         False)
+        self.has_neopixel      = config.getboolean('has_neopixel',      False)
+        self.bga_camera        = config.get('bga_camera',        '')
+        self.alignment_camera  = config.get('alignment_camera',  '')
+        self.alignment_camera2 = config.get('alignment_camera2', '')
+
         # Zone configuration
         self.zones = self._parse_zones(config)
 
@@ -306,8 +303,9 @@ class Bakesail:
     def _parse_zones(self, config):
         """
         Parse zone1..zone4 entries from [bakesail] config block.
-        Zones must be defined contiguously starting at 1.
-        Raises config.error on missing required keys.
+        Zones must be contiguous starting at 1.
+        sensor_zoneN is consumed for backward compatibility but ignored —
+        temperature is read from the heater object directly.
         """
         zones = []
         for i in range(1, 5):
@@ -319,18 +317,14 @@ class Bakesail:
             if heater_name is None:
                 break  # no more zones
 
-            sensor_name = config.get(sensor_key, None)
-            if sensor_name is None:
-                raise config.error(
-                    "Bakesail: %s defined but %s is missing" % (heater_key, sensor_key))
-
+            config.get(sensor_key, None)   # consume for backward compat
             offset = config.getfloat(offset_key, 0.0)
-            zones.append(BakesailZone(i, heater_name, sensor_name, offset, self.printer))
+            zones.append(BakesailZone(i, heater_name, offset, self.printer))
 
         if not zones:
             raise config.error(
                 "Bakesail: no zones configured. "
-                "Define at least heater_zone1 and sensor_zone1 in [bakesail].")
+                "Define at least heater_zone1 in [bakesail].")
         return zones
 
     def _parse_fan_names(self, config):
@@ -695,6 +689,13 @@ class Bakesail:
                 })
 
         return {
+            # Device identity
+            'device_type':   self.device_type,
+            'machine_class': self.machine_class,
+            'has_vacuum_pen':    self.has_vacuum_pen,
+            'has_nozzle_vacuum': self.has_nozzle_vacuum,
+            'has_laser':         self.has_laser,
+            'has_neopixel':      self.has_neopixel,
             # State machine
             'state':    self.state,
             'substate': self.substate,
