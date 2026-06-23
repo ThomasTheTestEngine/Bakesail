@@ -289,12 +289,21 @@
       </div>
     </div>
 
-    <!-- ── Save bar ───────────────────────────────────────────────── -->
-    <div class="settings-save-bar" v-if="activeSection !== 'config'">
-      <span class="save-note">Changes apply when you write the config.</span>
-      <button class="btn btn-ghost btn-sm" @click="activeSection = 'config'">
-        Review & Write Config →
-      </button>
+    <!-- ── Apply bar — always visible ───────────────────────────────── -->
+    <div class="settings-apply-bar">
+      <span class="apply-note">
+        Changes take effect when you apply. Klipper will restart.
+      </span>
+      <div class="apply-actions">
+        <button class="btn btn-ghost btn-sm" @click="activeSection = 'config'">
+          Preview config
+        </button>
+        <button class="btn btn-primary" :disabled="applying" @click="applyConfig">
+          {{ applying ? 'Applying…' : 'Apply & Restart' }}
+        </button>
+      </div>
+      <div v-if="applyError" class="apply-error">{{ applyError }}</div>
+      <div v-if="applySuccess" class="apply-success">✓ Config written — Klipper restarting</div>
     </div>
 
   </div>
@@ -314,6 +323,9 @@ const { runGcode } = useMoonraker()
 const activeSection = ref('device')
 const saving        = ref(false)
 const saveError     = ref('')
+const applying      = ref(false)
+const applyError    = ref('')
+const applySuccess  = ref(false)
 
 const sections = [
   { id: 'device',       label: 'Device' },
@@ -342,6 +354,24 @@ async function writeConfig() {
     saveError.value = e.message
   } finally {
     saving.value = false
+  }
+}
+
+async function applyConfig() {
+  applying.value    = true
+  applyError.value  = ''
+  applySuccess.value = false
+  try {
+    await saveBakesailCfg(settings.$state)
+    await settings.save()
+    await ensurePrinterCfgInclude()
+    await runGcode('FIRMWARE_RESTART')
+    applySuccess.value = true
+    setTimeout(() => { applySuccess.value = false }, 4000)
+  } catch (e) {
+    applyError.value = e.message
+  } finally {
+    applying.value = false
   }
 }
 
@@ -503,15 +533,22 @@ onMounted(() => settings.load())
   max-height: 340px;
   white-space: pre;
 }
-.settings-save-bar {
+.settings-apply-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
+  position: sticky;
+  bottom: 0;
 }
-.save-note { font-size: 12px; color: var(--text-muted); }
+.apply-note { font-size: 12px; color: var(--text-muted); flex: 1; }
+.apply-actions { display: flex; gap: 8px; align-items: center; }
+.apply-error   { font-size: 12px; color: var(--red); font-family: var(--font-mono); width: 100%; }
+.apply-success { font-size: 12px; color: var(--green); width: 100%; }
 .btn-sm { padding: 6px 12px; font-size: 12px; }
 </style>
