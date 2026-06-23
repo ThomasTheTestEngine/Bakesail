@@ -140,13 +140,15 @@ function connect() {
     try {
       const info = await send('printer.info')
       console.log('[bakesail] printer.info state:', info.state)
-      klippyState.value = info.state ?? 'disconnected'
-      // Subscribe regardless — bakesail works even if kinematics is 'none'
-      if (info.state === 'ready' || info.state === 'startup') {
+      // Klipper reports 'error' with kinematics:none or minor faults but
+      // bakesail extras still load and work. Treat anything except shutdown
+      // or disconnected as subscribable.
+      const unsubscribableStates = ['shutdown', 'disconnected']
+      if (!unsubscribableStates.includes(info.state)) {
+        klippyState.value = 'ready'
         await subscribe()
       } else {
-        // Still try to subscribe; Klipper may be ready even if state looks odd
-        await subscribe()
+        klippyState.value = info.state ?? 'disconnected'
       }
     } catch (e) {
       console.warn('[bakesail] printer.info failed:', e)
