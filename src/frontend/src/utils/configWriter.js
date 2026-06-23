@@ -225,6 +225,11 @@ export function generateBakesailCfg(settings) {
   }
   lines.push('')
 
+  // Fan references — tell bakesail.py which fan objects to report
+  for (let i = 0; i < validFans.length; i++) {
+    lines.push(`fan${i + 1}: fan_generic ${_fanName(validFans[i])}`)
+  }
+
   // Optional peripherals
   if (settings.vacuum.pen)       lines.push(`has_vacuum_pen: True`)
   if (settings.vacuum.nozzle)    lines.push(`has_nozzle_vacuum: True`)
@@ -333,8 +338,16 @@ function _resolveHeaterPin(zone, settings) {
 }
 
 function _firstAvailablePin(settings) {
-  // Find a pin we know exists to use as the default test pin placeholder
-  if (settings.zones.length > 0 && settings.zones[0].pin) return settings.zones[0].pin
-  if (settings.fans.length > 0 && settings.fans[0].pin) return settings.fans[0].pin
-  return 'PA2'  // fallback
+  const GPIO_POOL = [
+    'gpio17','gpio18','gpio19','gpio20','gpio21',
+    'gpio22','gpio23','gpio24','gpio25','gpio26','gpio27'
+  ]
+  const used = new Set()
+  for (const z of (settings.zones || [])) if (z.pin) used.add(z.pin)
+  for (const f of (settings.fans  || [])) if (f.pin) used.add(f.pin)
+  if (settings.vacuum?.penPin)            used.add(settings.vacuum.penPin)
+  if (settings.vacuum?.nozzlePin)         used.add(settings.vacuum.nozzlePin)
+  if (settings.illumination?.laserPin)    used.add(settings.illumination.laserPin)
+  if (settings.illumination?.neopixelPin) used.add(settings.illumination.neopixelPin)
+  return GPIO_POOL.find(p => !used.has(p)) || 'gpio27'
 }
