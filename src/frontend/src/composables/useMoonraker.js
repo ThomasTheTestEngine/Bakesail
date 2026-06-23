@@ -139,8 +139,13 @@ function connect() {
     // Check current Klipper state
     try {
       const info = await send('printer.info')
+      console.log('[bakesail] printer.info state:', info.state)
       klippyState.value = info.state ?? 'disconnected'
-      if (info.state === 'ready') {
+      // Subscribe regardless — bakesail works even if kinematics is 'none'
+      if (info.state === 'ready' || info.state === 'startup') {
+        await subscribe()
+      } else {
+        // Still try to subscribe; Klipper may be ready even if state looks odd
         await subscribe()
       }
     } catch (e) {
