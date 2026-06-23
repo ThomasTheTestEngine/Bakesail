@@ -141,14 +141,20 @@
       <!-- Profile + run/pause/stop row -->
       <div class="controls-main">
         <div class="profile-info">
-          <span class="profile-loaded" v-if="store.profile">
+          <span class="profile-loaded" v-if="store.isRunning || store.isPaused">
             {{ store.profile }}
           </span>
-          <span class="profile-none" v-else>No profile loaded</span>
+          <span class="profile-loaded" v-else-if="selectedProfile">
+            {{ selectedProfile }}
+          </span>
+          <span class="profile-none" v-else>No profile selected</span>
         </div>
 
         <div class="controls-btns">
-          <button class="btn btn-primary" :disabled="!store.canRun" @click="showRunModal = true">
+          <button class="btn btn-ghost" @click="showRunModal = true" :disabled="store.isRunning || store.isPaused">
+            ⊞ Load
+          </button>
+          <button class="btn btn-primary" :disabled="!store.canRun || !selectedProfile" @click="runProfile">
             ▶ Run
           </button>
           <button class="btn btn-ghost"
@@ -232,12 +238,14 @@
     <!-- ── Run modal ─────────────────────────────────────────────── -->
     <div v-if="showRunModal" class="modal-backdrop" @click.self="showRunModal = false">
       <div class="modal card">
-        <div class="modal-title">Select Profile</div>
+        <div class="modal-title">Load Profile</div>
         <div v-if="profiles.length === 0" class="modal-empty">
           No profiles found. Add .json files to ~/printer_data/config/bakesail_profiles/
         </div>
         <div v-else class="profile-list">
-          <button v-for="p in profiles" :key="p" class="profile-item" @click="runProfile(p)">
+          <button v-for="p in profiles" :key="p" class="profile-item"
+                  :class="{ 'profile-item--selected': p === selectedProfile }"
+                  @click="chooseProfile(p)">
             {{ p }}
           </button>
         </div>
@@ -260,8 +268,9 @@ const store    = useDeviceStore()
 const settings = useSettingsStore()
 const { send, runGcode, connected } = useMoonraker()
 
-const showRunModal = ref(false)
-const profiles     = ref([])
+const showRunModal    = ref(false)
+const profiles        = ref([])
+const selectedProfile = ref(localStorage.getItem('bakesail-last-profile') || '')
 
 // ── Chart constants ───────────────────────────────────────────────
 
@@ -333,14 +342,32 @@ async function loadProfiles() {
     profiles.value = res
       .filter(f => f.path?.startsWith('bakesail_profiles/') && f.path.endsWith('.json'))
       .map(f => f.path.replace('bakesail_profiles/', '').replace('.json', ''))
+
+    // Auto-select: restore last used, or pick first if none saved
+    if (!selectedProfile.value && profiles.value.length > 0) {
+      selectProfile(profiles.value[0])
+    } else if (selectedProfile.value && !profiles.value.includes(selectedProfile.value)) {
+      // Saved profile no longer exists — fall back to first
+      selectProfile(profiles.value[0] || '')
+    }
   } catch (e) {
     console.warn('[bakesail] could not load profiles:', e)
   }
 }
 
-async function runProfile(name) {
+function selectProfile(name) {
+  selectedProfile.value = name
+  if (name) localStorage.setItem('bakesail-last-profile', name)
+}
+
+function chooseProfile(name) {
+  selectProfile(name)
   showRunModal.value = false
-  try { await runGcode(`BGA_PROFILE_RUN PROFILE="${name}"`) }
+}
+
+async function runProfile() {
+  if (!selectedProfile.value) { showRunModal.value = true; return }
+  try { await runGcode(`BGA_PROFILE_RUN PROFILE="${selectedProfile.value}"`) }
   catch (e) { console.error(e) }
 }
 
@@ -641,6 +668,7 @@ onMounted(() => {
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
 .profile-item:hover { background: var(--amber-glow); border-color: var(--amber-dim); color: var(--amber); }
+.profile-item--selected { border-color: var(--amber-dim); color: var(--amber); background: var(--amber-glow); }
 
 /* ── Utility ────────────────────────────────────────────────────── */
 .btn-sm { padding: 6px 12px; font-size: 12px; }
