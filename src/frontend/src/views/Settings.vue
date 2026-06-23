@@ -317,23 +317,104 @@
           </template>
         </template>
 
-        <!-- Write config -->
-        <template v-else-if="activeSection === 'config'">
-          <div class="section-title">Configuration</div>
+        <!-- View current config -->
+        <template v-else-if="activeSection === 'current'">
+          <div class="section-title">View Current Config</div>
           <p class="section-note">
-            Saves current settings and regenerates <code>bakesail.cfg</code>.
-            Klipper will restart to load the new config.
+            The config currently loaded by Klipper. Does not include changes
+            made in the settings tabs since the last reboot.
           </p>
-          <div class="config-actions">
-            <button class="btn btn-primary" :disabled="saving" @click="writeConfig">
-              {{ saving ? 'Writing…' : 'Write Config & Restart' }}
+
+          <div class="config-toolbar">
+            <button class="btn btn-ghost btn-sm" @click="loadCurrentCfg" :disabled="currentCfgLoading">
+              ↻ Refresh
             </button>
-            <button class="btn btn-ghost" @click="router.push('/wizard')">
-              Re-run Setup Wizard
+            <button
+              class="btn btn-sm"
+              :class="markedGood ? 'btn-primary' : 'btn-ghost'"
+              @click="markAsGood"
+              :disabled="markingGood"
+            >
+              {{ markingGood ? 'Saving…' : markedGood ? '✓ Marked as Good' : '★ Mark as Good Config' }}
             </button>
           </div>
+
+          <div v-if="markGoodMsg" class="apply-success">{{ markGoodMsg }}</div>
+          <pre v-if="currentCfg" class="config-preview">{{ currentCfg }}</pre>
+          <div v-else class="section-note">{{ currentCfgLoading ? 'Loading…' : 'Could not load config.' }}</div>
+        </template>
+
+        <!-- Write config -->
+        <template v-else-if="activeSection === 'config'">
+          <div class="section-title">Write Config</div>
+          <p class="section-note">
+            Preview the config that will be generated from your current settings.
+            Edit before applying, backup the current config, or revert to a known good one.
+          </p>
+
+          <div class="config-toolbar">
+            <button class="btn btn-ghost btn-sm" @click="editMode = !editMode">
+              {{ editMode ? '✕ Cancel Edit' : '✎ Edit' }}
+            </button>
+            <button class="btn btn-ghost btn-sm" @click="backupConfig" :disabled="backingUp">
+              {{ backingUp ? 'Saving…' : '⬇ Backup Current' }}
+            </button>
+            <button class="btn btn-ghost btn-sm" @click="loadDefaultSettings">
+              ↺ Load Defaults
+            </button>
+            <button class="btn btn-ghost btn-sm" @click="showRevertDialog = true" :disabled="goodConfigs.length === 0"
+                    :title="goodConfigs.length === 0 ? 'No good configs saved yet' : ''">
+              ⟲ Revert to Good
+            </button>
+            <button class="btn btn-ghost btn-sm" @click="router.push('/wizard')">
+              ⊞ Re-run Wizard
+            </button>
+          </div>
+
           <div v-if="saveError" class="save-error">{{ saveError }}</div>
-          <pre class="config-preview">{{ configPreview }}</pre>
+
+          <textarea v-if="editMode"
+            class="config-preview config-edit"
+            v-model="editedConfig"
+          ></textarea>
+          <pre v-else class="config-preview">{{ configPreview }}</pre>
+
+          <!-- Revert dialog -->
+          <div v-if="showRevertDialog" class="modal-overlay" @click.self="showRevertDialog = false">
+            <div class="revert-dialog card">
+              <div class="section-title">Revert to Good Config</div>
+              <div class="revert-list">
+                <button
+                  v-for="cfg in goodConfigs"
+                  :key="cfg.name"
+                  class="revert-item"
+                  @click="confirmRevert(cfg)"
+                >
+                  <span class="revert-name">{{ cfg.label }}</span>
+                  <span class="revert-date">{{ cfg.date }}</span>
+                </button>
+              </div>
+              <button class="btn btn-ghost btn-sm" style="margin-top:12px;width:100%"
+                      @click="showRevertDialog = false">Cancel</button>
+            </div>
+          </div>
+
+          <!-- Revert confirm dialog -->
+          <div v-if="revertTarget" class="modal-overlay" @click.self="revertTarget = null">
+            <div class="revert-dialog card">
+              <div class="section-title">Confirm Revert</div>
+              <p class="section-note">
+                Revert to <strong>{{ revertTarget.label }}</strong>?<br>
+                Current config will be replaced and Klipper will restart.
+              </p>
+              <div class="config-toolbar" style="margin-top:16px">
+                <button class="btn btn-danger" :disabled="reverting" @click="doRevert">
+                  {{ reverting ? 'Reverting…' : 'Yes, Revert' }}
+                </button>
+                <button class="btn btn-ghost" @click="revertTarget = null">Cancel</button>
+              </div>
+            </div>
+          </div>
         </template>
 
       </div>
@@ -362,7 +443,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useSettingsStore } from '../stores/settings.js'
+import { useSettingsStore, defaultSettings } from '../stores/settings.js'
 import { useTestPins } from '../composables/useTestPins.js'
 import { saveBakesailCfg, ensurePrinterCfgInclude, generateBakesailCfg } from '../utils/configWriter.js'
 import { useMoonraker } from '../composables/useMoonraker.js'
@@ -379,6 +460,134 @@ const applying      = ref(false)
 const applyError    = ref('')
 const applySuccess  = ref(false)
 
+// ── View Current Config ──────────────────────────────────────────────
+const currentCfg        = ref('')
+const currentCfgLoading = ref(false)
+const markedGood        = ref(false)
+const markingGood       = ref(false)
+const markGoodMsg       = ref('')
+
+async function loadCurrentCfg() {
+  currentCfgLoading.value = true
+  try {
+    const res = await fetch('/server/files/config/bakesail.cfg')
+    if (res.ok) currentCfg.value = await res.text()
+  } catch (e) { console.warn('Could not load bakesail.cfg:', e) }
+  finally { currentCfgLoading.value = false }
+}
+
+async function markAsGood() {
+  markingGood.value = true
+  markGoodMsg.value = ''
+  try {
+    const now      = new Date()
+    const pad      = n => String(n).padStart(2, '0')
+    const stamp    = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}`
+    const filename = `bakesail_${stamp}_good.cfg`
+    const blob     = new Blob([currentCfg.value], { type: 'text/plain' })
+    const form     = new FormData()
+    form.append('file', blob, filename)
+    form.append('root', 'config')
+    const res = await fetch('/server/files/upload', { method: 'POST', body: form })
+    if (!res.ok) throw new Error('Upload failed')
+    markedGood.value  = true
+    markGoodMsg.value = `Saved as ${filename}`
+    await loadGoodConfigs()
+  } catch (e) {
+    markGoodMsg.value = 'Error: ' + e.message
+  } finally { markingGood.value = false }
+}
+
+// ── Write Config ─────────────────────────────────────────────────────
+const editMode     = ref(false)
+const editedConfig = ref('')
+const backingUp    = ref(false)
+
+// Watch configPreview and seed editedConfig when edit mode opens
+function startEdit() {
+  editedConfig.value = configPreview.value
+  editMode.value = true
+}
+
+async function backupConfig() {
+  backingUp.value = true
+  try {
+    const res = await fetch('/server/files/config/bakesail.cfg')
+    if (!res.ok) throw new Error('Could not read config')
+    const text  = await res.text()
+    const now   = new Date()
+    const pad   = n => String(n).padStart(2, '0')
+    const stamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}`
+    const fname = `bakesail_${stamp}_backup.cfg`
+    const blob  = new Blob([text], { type: 'text/plain' })
+    const form  = new FormData()
+    form.append('file', blob, fname)
+    form.append('root', 'config')
+    const up = await fetch('/server/files/upload', { method: 'POST', body: form })
+    if (!up.ok) throw new Error('Upload failed')
+    saveError.value = ''
+    applySuccess.value = true
+    setTimeout(() => applySuccess.value = false, 3000)
+  } catch (e) { saveError.value = e.message }
+  finally { backingUp.value = false }
+}
+
+function loadDefaultSettings() {
+  if (!confirm('Reset all settings to defaults? This does not restart Klipper until you Apply.')) return
+  Object.assign(settings.$state, defaultSettings())
+}
+
+// ── Good configs / revert ────────────────────────────────────────────
+const goodConfigs      = ref([])
+const showRevertDialog = ref(false)
+const revertTarget     = ref(null)
+const reverting        = ref(false)
+
+async function loadGoodConfigs() {
+  try {
+    const res   = await send('server.files.list', { root: 'config' })
+    goodConfigs.value = res
+      .filter(f => f.path?.endsWith('_good.cfg'))
+      .map(f => {
+        const name  = f.path.replace('.cfg', '')
+        // Extract timestamp from bakesail_YYYY-MM-DD_HH-MM_good
+        const match = name.match(/(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2})/)
+        const date  = match ? `${match[1]} ${match[2].replace('-', ':')}` : name
+        return { name: f.path, label: name, date }
+      })
+      .sort((a, b) => b.name.localeCompare(a.name))  // newest first
+  } catch (e) { console.warn('Could not load good configs:', e) }
+}
+
+function confirmRevert(cfg) {
+  revertTarget.value = cfg
+  showRevertDialog.value = false
+}
+
+async function doRevert() {
+  if (!revertTarget.value) return
+  reverting.value = true
+  try {
+    // Read the good config file
+    const res = await fetch(`/server/files/config/${revertTarget.value.name}`)
+    if (!res.ok) throw new Error('Could not read config file')
+    const text = await res.text()
+
+    // Write it as bakesail.cfg
+    const blob = new Blob([text], { type: 'text/plain' })
+    const form = new FormData()
+    form.append('file', blob, 'bakesail.cfg')
+    form.append('root', 'config')
+    const up = await fetch('/server/files/upload', { method: 'POST', body: form })
+    if (!up.ok) throw new Error('Could not write config')
+
+    revertTarget.value = null
+    await runGcode('FIRMWARE_RESTART')
+  } catch (e) {
+    saveError.value = e.message
+  } finally { reverting.value = false }
+}
+
 const sections = [
   { id: 'device',       label: 'Device' },
   { id: 'zones',        label: 'Heater Zones' },
@@ -389,6 +598,7 @@ const sections = [
   { id: 'cameras',      label: 'Cameras' },
   { id: 'steppers',     label: 'Stepper Slots' },
   { id: 'movement',     label: 'Movement' },
+  { id: 'current',      label: 'View Current Config' },
   { id: 'config',       label: 'Write Config' },
 ]
 
@@ -410,14 +620,25 @@ async function writeConfig() {
 }
 
 async function applyConfig() {
-  applying.value    = true
-  applyError.value  = ''
+  applying.value     = true
+  applyError.value   = ''
   applySuccess.value = false
   try {
-    await saveBakesailCfg(settings.$state)
+    if (editMode.value && editedConfig.value) {
+      // User edited manually — write exactly what's in the editor
+      const blob = new Blob([editedConfig.value], { type: 'text/plain' })
+      const form = new FormData()
+      form.append('file', blob, 'bakesail.cfg')
+      form.append('root', 'config')
+      const res = await fetch('/server/files/upload', { method: 'POST', body: form })
+      if (!res.ok) throw new Error('Config upload failed')
+    } else {
+      await saveBakesailCfg(settings.$state)
+    }
     await settings.save()
     await ensurePrinterCfgInclude()
     await runGcode('FIRMWARE_RESTART')
+    editMode.value     = false
     applySuccess.value = true
     setTimeout(() => { applySuccess.value = false }, 4000)
   } catch (e) {
@@ -427,7 +648,11 @@ async function applyConfig() {
   }
 }
 
-onMounted(() => settings.load())
+onMounted(() => {
+  settings.load()
+  loadCurrentCfg()
+  loadGoodConfigs()
+})
 </script>
 
 <style scoped>
@@ -603,6 +828,67 @@ onMounted(() => settings.load())
 .apply-error   { font-size: 12px; color: var(--red); font-family: var(--font-mono); width: 100%; }
 .apply-success { font-size: 12px; color: var(--green); width: 100%; }
 .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+.config-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.config-edit {
+  width: 100%;
+  resize: vertical;
+  min-height: 320px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border: 1px solid var(--amber-dim);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.revert-dialog {
+  width: 420px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.revert-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.revert-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+  text-align: left;
+  width: 100%;
+}
+.revert-item:hover { border-color: var(--amber); background: var(--amber-glow); }
+.revert-name { font-family: var(--font-mono); font-size: 12px; color: var(--text); }
+.revert-date { font-size: 11px; color: var(--text-muted); }
 
 .test-pin-label {
   display: flex;
