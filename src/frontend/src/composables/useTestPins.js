@@ -29,9 +29,14 @@ export function useTestPins(settings) {
       if (isTestPin(zone.pin)) pins.add(zone.pin)
     }
     for (const tc of (settings.thermocouples ?? [])) {
-      if (isTestPin(tc.csPin))   pins.add(tc.csPin)
-      if (isTestPin(tc.sckPin))  pins.add(tc.sckPin)
-      if (isTestPin(tc.misoPin)) pins.add(tc.misoPin)
+      if (isTestPin(tc.pin)) pins.add(tc.pin)
+    }
+    const spi = settings.spiSettings || {}
+    if (isTestPin(spi.sckPin))  pins.add(spi.sckPin)
+    if (isTestPin(spi.misoPin)) pins.add(spi.misoPin)
+    if (isTestPin(spi.mosiPin)) pins.add(spi.mosiPin)
+    for (const z of (settings.zones ?? [])) {
+      if (isTestPin(z.sensorPin)) pins.add(z.sensorPin)
     }
     for (const fan of (settings.fans ?? [])) {
       if (isTestPin(fan.pin)) pins.add(fan.pin)

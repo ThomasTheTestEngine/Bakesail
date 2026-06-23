@@ -41,75 +41,109 @@
         <!-- Zones -->
         <template v-else-if="activeSection === 'zones'">
           <div class="section-title">Heater Zones</div>
+          <p class="section-note">Up to 8 zones. Zone type controls position on the dashboard.</p>
           <div class="item-list">
-            <div v-for="zone in settings.zones" :key="zone.id" class="item-row">
+            <div v-for="zone in settings.zones" :key="zone.id" class="item-row item-row--wrap zone-row">
+              <!-- Label + type -->
               <div class="item-num">{{ zone.id }}</div>
-              <input class="field-input" v-model="zone.label" style="width:130px;flex:none" />
-              <label class="field-label-inline">
-                <input type="checkbox" v-model="zone.deferred" /> Via stepper slot
-              </label>
+              <input class="field-input" v-model="zone.label" style="width:100px;flex:none" placeholder="Zone label" />
+              <select class="field-select" v-model="zone.type" style="width:120px;flex:none">
+                <option v-for="zt in zoneTypes" :key="zt.value" :value="zt.value">{{ zt.label }}</option>
+              </select>
+
+              <!-- Heater pin -->
+              <label class="field-label-inline" style="margin-left:4px">Heater</label>
               <template v-if="!zone.deferred">
                 <input class="field-input field-input--pin" v-model="zone.pin" placeholder="e.g. PA2" />
-              <label class="test-pin-label" :class="{ active: isTestPin(zone.pin) }">
-                <input type="checkbox" :checked="isTestPin(zone.pin)"
-                  @change="zone.pin = toggleTestPin(zone.pin)" />
-                Test
-              </label>
+                <label class="test-pin-label" :class="{ active: isTestPin(zone.pin) }">
+                  <input type="checkbox" :checked="isTestPin(zone.pin)"
+                    @change="zone.pin = toggleTestPin(zone.pin)" />
+                  Test
+                </label>
               </template>
-              <span v-else class="defer-note">Assigned in Stepper Slots</span>
+              <label class="field-label-inline">
+                <input type="checkbox" v-model="zone.deferred" /> Stepper slot
+              </label>
+
+              <!-- TC selection -->
+              <label class="field-label-inline" style="margin-left:4px">TC</label>
+              <select class="field-select tc-select"
+                v-model="zone.tcId"
+                @change="settings.onZoneTcChange(zone)">
+                <option :value="null">None</option>
+                <option v-for="tc in settings.thermocouples" :key="tc.id" :value="tc.id">
+                  {{ tc.label }}
+                </option>
+              </select>
+              <input class="field-input field-input--pin" v-model="zone.sensorPin"
+                     :placeholder="zone.tcId ? 'auto' : 'manual pin'" />
+
               <button class="item-remove" @click="settings.removeZone(zone.id)"
                       :disabled="settings.zones.length <= 1">×</button>
             </div>
           </div>
-          <button class="btn btn-ghost btn-sm" @click="settings.addZone()" style="margin-top:10px">
-            + Add Zone
+          <button class="btn btn-ghost btn-sm" @click="settings.addZone()"
+                  style="margin-top:12px" :disabled="settings.zones.length >= 8">
+            + Add Zone {{ settings.zones.length >= 8 ? '(max 8)' : '' }}
           </button>
         </template>
 
         <!-- Thermocouples -->
         <template v-else-if="activeSection === 'tc'">
-          <div class="section-title">Thermocouples</div>
+          <div class="section-title">K-type Thermocouples (MAX31855)</div>
+          <p class="section-note">
+            Each TC needs only its unique CS/sensor pin. SCK, MISO and MOSI
+            are shared across all TCs on the same SPI bus — configure them below.
+          </p>
+
           <div class="item-list">
-            <div v-for="tc in settings.thermocouples" :key="tc.id" class="item-row item-row--wrap">
+            <div v-for="tc in settings.thermocouples" :key="tc.id" class="item-row">
               <div class="item-num">{{ tc.id }}</div>
-              <input class="field-input" v-model="tc.label" style="width:100px;flex:none" />
-              <span class="field-label-inline">CS</span>
-              <input class="field-input field-input--pin" v-model="tc.csPin" placeholder="PB12" />
-              <label class="test-pin-label" :class="{ active: isTestPin(tc.csPin) }">
-                <input type="checkbox" :checked="isTestPin(tc.csPin)"
-                  @change="tc.csPin = toggleTestPin(tc.csPin)" />
-                Test
-              </label>
-              <span class="field-label-inline">SCK</span>
-              <input class="field-input field-input--pin" v-model="tc.sckPin" placeholder="PB13" />
-              <label class="test-pin-label" :class="{ active: isTestPin(tc.sckPin) }">
-                <input type="checkbox" :checked="isTestPin(tc.sckPin)"
-                  @change="tc.sckPin = toggleTestPin(tc.sckPin)" />
-                Test
-              </label>
-              <span class="field-label-inline">MISO</span>
-              <input class="field-input field-input--pin" v-model="tc.misoPin" placeholder="PB14" />
-              <label class="test-pin-label" :class="{ active: isTestPin(tc.misoPin) }">
-                <input type="checkbox" :checked="isTestPin(tc.misoPin)"
-                  @change="tc.misoPin = toggleTestPin(tc.misoPin)" />
+              <input class="field-input" v-model="tc.label" style="width:90px;flex:none"
+                     placeholder="TC label" />
+              <span class="field-label-inline">CS/Pin</span>
+              <input class="field-input field-input--pin" v-model="tc.pin" placeholder="e.g. PF3" />
+              <label class="test-pin-label" :class="{ active: isTestPin(tc.pin) }">
+                <input type="checkbox" :checked="isTestPin(tc.pin)"
+                  @change="tc.pin = toggleTestPin(tc.pin)" />
                 Test
               </label>
               <button class="item-remove" @click="settings.removeTc(tc.id)"
                       :disabled="settings.thermocouples.length <= 1">×</button>
             </div>
           </div>
-          <button class="btn btn-ghost btn-sm" @click="settings.addTc()" style="margin-top:10px">
-            + Add TC
+
+          <button class="btn btn-ghost btn-sm" @click="settings.addTc()" style="margin-top:12px">
+            + Add K-type TC
           </button>
-          <div class="section-title" style="margin-top:20px">Zone → TC Mapping</div>
+
+          <div class="section-title" style="margin-top:24px">SPI Bus (shared by all TCs)</div>
+          <p class="section-note">
+            Octopus Pro: SCK = PF0, MISO = PF1 · SKR Mini E3: SCK = PB13, MISO = PB14
+          </p>
           <div class="item-list" style="margin-top:8px">
-            <div v-for="zone in settings.zones" :key="zone.id" class="item-row">
-              <span class="field-label-inline" style="width:100px">{{ zone.label }}</span>
-              <select class="field-select" v-model="settings.zoneTcMap[zone.id]">
-                <option v-for="tc in settings.thermocouples" :key="tc.id" :value="tc.id">
-                  {{ tc.label }}
-                </option>
-              </select>
+            <div class="item-row">
+              <span class="field-label-inline" style="width:50px">SCK</span>
+              <input class="field-input field-input--pin" v-model="settings.spiSettings.sckPin" placeholder="PF0" />
+              <label class="test-pin-label" :class="{ active: isTestPin(settings.spiSettings.sckPin) }">
+                <input type="checkbox" :checked="isTestPin(settings.spiSettings.sckPin)"
+                  @change="settings.spiSettings.sckPin = toggleTestPin(settings.spiSettings.sckPin)" />
+                Test
+              </label>
+            </div>
+            <div class="item-row">
+              <span class="field-label-inline" style="width:50px">MISO</span>
+              <input class="field-input field-input--pin" v-model="settings.spiSettings.misoPin" placeholder="PF1" />
+              <label class="test-pin-label" :class="{ active: isTestPin(settings.spiSettings.misoPin) }">
+                <input type="checkbox" :checked="isTestPin(settings.spiSettings.misoPin)"
+                  @change="settings.spiSettings.misoPin = toggleTestPin(settings.spiSettings.misoPin)" />
+                Test
+              </label>
+            </div>
+            <div class="item-row">
+              <span class="field-label-inline" style="width:50px">MOSI</span>
+              <input class="field-input field-input--pin" v-model="settings.spiSettings.mosiPin" placeholder="PA7" />
+              <span class="section-note" style="margin:0">(MAX31855 unused — any spare pin)</span>
             </div>
           </div>
         </template>
@@ -443,7 +477,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useSettingsStore, defaultSettings } from '../stores/settings.js'
+import { useSettingsStore, defaultSettings, ZONE_TYPES } from '../stores/settings.js'
 import { useTestPins } from '../composables/useTestPins.js'
 import { saveBakesailCfg, ensurePrinterCfgInclude, generateBakesailCfg } from '../utils/configWriter.js'
 import { useMoonraker } from '../composables/useMoonraker.js'
@@ -451,6 +485,7 @@ import { useMoonraker } from '../composables/useMoonraker.js'
 const router   = useRouter()
 const settings = useSettingsStore()
 const { isTestPin, toggleTestPin } = useTestPins(settings)
+const zoneTypes = ZONE_TYPES
 const { runGcode } = useMoonraker()
 
 const activeSection = ref('device')
@@ -889,6 +924,9 @@ onMounted(() => {
 .revert-item:hover { border-color: var(--amber); background: var(--amber-glow); }
 .revert-name { font-family: var(--font-mono); font-size: 12px; color: var(--text); }
 .revert-date { font-size: 11px; color: var(--text-muted); }
+
+.zone-row { gap: 6px; }
+.tc-select { width: 90px; flex: none; }
 
 .test-pin-label {
   display: flex;

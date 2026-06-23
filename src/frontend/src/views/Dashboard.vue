@@ -23,35 +23,64 @@
       <div class="stage-summary">{{ store.stageSummary || 'No profile running' }}</div>
     </div>
 
-    <!-- ── Zone readouts ────────────────────────────────────────── -->
-    <div class="zones-row">
-      <div v-for="zone in store.zones" :key="zone.index" class="zone-card card">
-        <div class="zone-name">Zone {{ zone.index }}</div>
-        <div class="zone-temp" :class="tempClass(zone.temp)">
-          {{ zone.temp.toFixed(1) }}<span class="unit">°C</span>
-        </div>
-        <div v-if="store.isRunning && store.stage.setpoint" class="zone-setpoint">
-          SP {{ (store.stage.setpoint + (zone.offset || 0)).toFixed(1) }}°C
-        </div>
-        <div v-else class="zone-setpoint zone-setpoint--dim">
-          {{ store.bsState === 'idle' ? 'Idle' : '—' }}
-        </div>
-        <!-- Heater power bar -->
-        <div class="power-row">
-          <div class="power-bar-track">
-            <div class="power-bar-fill" :style="{ width: (zone.power * 100).toFixed(0) + '%' }"></div>
-          </div>
-          <span class="power-pct">{{ (zone.power * 100).toFixed(0) }}%</span>
+    <!-- ── Zone readouts — arranged by type ─────────────────────── -->
+
+    <!-- Top row: target + upper -->
+    <div class="zones-row" v-if="topZones.length > 0">
+      <div v-for="zone in topZones" :key="zone.index" class="zone-card card">
+        <ZoneCard :zone="zone" :running="store.isRunning" :setpoint="store.stage.setpoint" />
+      </div>
+    </div>
+
+    <!-- Middle row -->
+    <div class="zones-row" v-if="middleZones.length > 0">
+      <div v-for="zone in middleZones" :key="zone.index" class="zone-card card">
+        <ZoneCard :zone="zone" :running="store.isRunning" :setpoint="store.stage.setpoint" />
+      </div>
+    </div>
+
+    <!-- Bottom row: lower variants positioned left/center/right -->
+    <div class="zones-row zones-row--lower" v-if="bottomZones.length > 0">
+      <div class="lower-slot">
+        <div v-for="zone in bottomZones.filter(z=>z.type==='lower_left')" :key="zone.index"
+             class="zone-card card">
+          <ZoneCard :zone="zone" :running="store.isRunning" :setpoint="store.stage.setpoint" />
         </div>
       </div>
+      <div class="lower-slot">
+        <div v-for="zone in bottomZones.filter(z=>z.type==='lower')" :key="zone.index"
+             class="zone-card card">
+          <ZoneCard :zone="zone" :running="store.isRunning" :setpoint="store.stage.setpoint" />
+        </div>
+      </div>
+      <div class="lower-slot">
+        <div v-for="zone in bottomZones.filter(z=>z.type==='lower_right')" :key="zone.index"
+             class="zone-card card">
+          <ZoneCard :zone="zone" :running="store.isRunning" :setpoint="store.stage.setpoint" />
+        </div>
+      </div>
+    </div>
 
-      <div v-if="store.zones.length === 0" class="zone-card card zone-card--empty">
+    <!-- Empty state -->
+    <div class="zones-row" v-if="store.zones.length === 0">
+      <div class="zone-card card zone-card--empty">
         <div class="zone-name">Zone 1</div>
         <div class="zone-temp zone-temp--dim">—.—<span class="unit">°C</span></div>
         <div class="zone-setpoint zone-setpoint--dim">Waiting</div>
         <div class="power-row">
           <div class="power-bar-track"><div class="power-bar-fill" style="width:0%"></div></div>
           <span class="power-pct">0%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Auxiliary bubble: plate / pot / ambient -->
+    <div class="aux-bubble card" v-if="auxZones.length > 0">
+      <div class="aux-label">Auxiliary</div>
+      <div class="zones-row">
+        <div v-for="zone in auxZones" :key="zone.index" class="zone-card zone-card--compact card">
+          <ZoneCard :zone="zone" :running="store.isRunning" :setpoint="store.stage.setpoint"
+                    compact />
         </div>
       </div>
     </div>
@@ -259,7 +288,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, defineComponent, h } from 'vue'
 import { useDeviceStore } from '../stores/device.js'
 import { useSettingsStore } from '../stores/settings.js'
 import { useMoonraker } from '../composables/useMoonraker.js'
@@ -271,6 +300,54 @@ const { send, runGcode, connected } = useMoonraker()
 const showRunModal    = ref(false)
 const profiles        = ref([])
 const selectedProfile = ref(localStorage.getItem('bakesail-last-profile') || '')
+
+// ── ZoneCard inline component ────────────────────────────────────
+const ZoneCard = defineComponent({
+  props: { zone: Object, running: Boolean, setpoint: Number, compact: Boolean },
+  setup(props) {
+    function tempClass(temp) {
+      if (temp <= 0)  return 'zone-temp--dim'
+      if (temp > 220) return 'zone-temp--hot'
+      if (temp > 100) return 'zone-temp--warm'
+      return ''
+    }
+    return () => {
+      const z = props.zone
+      const sp = props.running && props.setpoint
+        ? (props.setpoint + (z.offset || 0)).toFixed(1) + '°C'
+        : null
+      return h('div', { class: 'zone-inner' }, [
+        h('div', { class: 'zone-name' }, z.label || `Zone ${z.index}`),
+        h('div', { class: ['zone-temp', tempClass(z.temp)] }, [
+          z.temp.toFixed(1), h('span', { class: 'unit' }, '°C'),
+        ]),
+        h('div', { class: sp ? 'zone-setpoint' : 'zone-setpoint zone-setpoint--dim' },
+          sp || (z.temp > 0 ? 'On' : 'Idle')),
+        h('div', { class: 'power-row' }, [
+          h('div', { class: 'power-bar-track' }, [
+            h('div', { class: 'power-bar-fill', style: { width: (z.power * 100).toFixed(0) + '%' } }),
+          ]),
+          h('span', { class: 'power-pct' }, (z.power * 100).toFixed(0) + '%'),
+        ]),
+      ])
+    }
+  }
+})
+
+// ── Zone groups by type ───────────────────────────────────────────
+const TOP_TYPES    = ['target', 'upper']
+const MIDDLE_TYPES = ['middle']
+const BOTTOM_TYPES = ['lower', 'lower_left', 'lower_right']
+const AUX_TYPES    = ['plate', 'pot', 'ambient']
+
+const topZones    = computed(() => store.zones.filter(z => TOP_TYPES.includes(z.type)))
+const middleZones = computed(() => store.zones.filter(z => MIDDLE_TYPES.includes(z.type)))
+const bottomZones = computed(() => store.zones.filter(z => BOTTOM_TYPES.includes(z.type)))
+const auxZones    = computed(() => store.zones.filter(z => AUX_TYPES.includes(z.type)))
+// Zones with no type or unrecognised type fall through to top
+const untypedZones = computed(() =>
+  store.zones.filter(z => ![...TOP_TYPES,...MIDDLE_TYPES,...BOTTOM_TYPES,...AUX_TYPES].includes(z.type))
+)
 
 // ── Chart constants ───────────────────────────────────────────────
 
@@ -478,6 +555,40 @@ onMounted(() => {
   color: var(--text-dim);
   font-family: var(--font-mono);
 }
+
+/* ── Zone layout ────────────────────────────────────────────────── */
+.zones-row--lower {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 14px;
+}
+
+.lower-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 20px;
+}
+
+.aux-bubble {
+  padding: 14px 16px;
+  border-color: var(--border-2);
+}
+
+.aux-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.zone-card--compact .zone-temp {
+  font-size: 28px;
+}
+
+.zone-inner { display: contents; }
 
 /* ── Zone cards ─────────────────────────────────────────────────── */
 .zones-row { display: flex; gap: 14px; }

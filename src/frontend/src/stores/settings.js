@@ -3,88 +3,101 @@
  *
  * Persisted to ~/printer_data/config/bakesail_settings.json via Moonraker.
  * bakesail.cfg is generated FROM this store by configWriter.js.
- *
- * Deletion of bakesail.cfg triggers the setup wizard on next visit.
- * Deletion of bakesail_settings.json resets all settings to defaults.
  */
 
 import { defineStore } from 'pinia'
 
-// ── Default settings object ───────────────────────────────────────────────────
+// Zone types — controls position on dashboard
+export const ZONE_TYPES = [
+  { value: 'target',      label: 'Target'      },
+  { value: 'upper',       label: 'Upper'       },
+  { value: 'middle',      label: 'Middle'      },
+  { value: 'lower',       label: 'Lower'       },
+  { value: 'lower_left',  label: 'Lower Left'  },
+  { value: 'lower_right', label: 'Lower Right' },
+  { value: 'plate',       label: 'Plate'       },
+  { value: 'pot',         label: 'Pot'         },
+  { value: 'ambient',     label: 'Ambient'     },
+]
 
 export function defaultSettings() {
   return {
-    // ── Device identity ───────────────────────────────────────────
-    deviceType:   'oven',    // oven | ir_rework | hot_air | hot_plate
-    machineClass: 'manual',  // manual | semi_auto | automatic
+    // Device identity
+    deviceType:   'oven',
+    machineClass: 'manual',
 
-    // ── Heater zones ──────────────────────────────────────────────
-    // pin: Klipper pin name (e.g. 'PA2') OR null if deferred to stepper slot
+    // Heater zones (up to 8)
+    // type: see ZONE_TYPES above
+    // tcId: id of TC in thermocouples array (or null for no TC)
+    // sensorPin: the TC CS/sensor pin — auto-filled from TC or manual
     zones: [
-      { id: 1, label: 'Zone 1', pin: null, deferred: false },
+      { id: 1, label: 'Zone 1', type: 'target', pin: null, deferred: false, tcId: null, sensorPin: '' },
     ],
 
-    // ── Thermocouples (MAX31855 SPI) ──────────────────────────────
+    // K-type thermocouples (MAX31855)
+    // Each TC has only its unique CS/sensor pin.
+    // SCK/MISO/MOSI are shared across all TCs via spiSettings.
     thermocouples: [
-      { id: 1, label: 'TC 1', csPin: '', sckPin: '', misoPin: '', mosiPin: 'PA7' },
+      { id: 1, label: 'TC 1', pin: '' },
     ],
 
-    // ── Zone → TC mapping ─────────────────────────────────────────
-    // zoneTcMap[zoneId] = tcId
-    zoneTcMap: { 1: 1 },
+    // Shared SPI bus for all MAX31855 TCs
+    spiSettings: {
+      sckPin:  '',
+      misoPin: '',
+      mosiPin: 'PA7',  // MAX31855 is read-only but Klipper requires MOSI
+    },
 
-    // ── Fans ──────────────────────────────────────────────────────
+    // Fans
     fans: [
       { id: 1, label: 'Fan 1', pin: '', pwm: true },
     ],
 
-    // ── Vacuum ────────────────────────────────────────────────────
+    // Vacuum
     vacuum: {
-      pen:        false,
-      penPin:     '',
-      nozzle:     false,
-      nozzlePin:  '',
+      pen:       false,
+      penPin:    '',
+      nozzle:    false,
+      nozzlePin: '',
     },
 
-    // ── Illumination ──────────────────────────────────────────────
+    // Illumination
     illumination: {
-      laser:          false,
-      laserPin:       '',
-      neopixel:       false,
-      neopixelPin:    '',
-      neopixelCount:  8,
-      neopixelColor:  '#ffffff',
+      laser:         false,
+      laserPin:      '',
+      neopixel:      false,
+      neopixelPin:   '',
+      neopixelCount: 8,
+      neopixelColor: '#ffffff',
     },
 
-    // ── Cameras ───────────────────────────────────────────────────
+    // Cameras
     cameras: {
-      bga:        '',   // e.g. /dev/video0
-      alignment:  '',   // e.g. /dev/video1
-      alignment2: '',   // e.g. /dev/video2 (dual alignment camera)
+      bga:        '',
+      alignment:  '',
+      alignment2: '',
     },
 
-    // ── Motion ───────────────────────────────────────────────────
+    // Motion
     motion: {
-      maxSpeed:         50,    // mm/s
-      maxAccel:         500,   // mm/s²
+      maxSpeed:         50,
+      maxAccel:         500,
       microsteps:       16,
-      rotationDistance: 8,     // mm (typical lead screw)
+      rotationDistance: 8,
       xMax:             200,
       yMax:             200,
       zMax:             50,
     },
 
-    // ── Stepper slots ─────────────────────────────────────────────
-    // function: 'unused' | 'heater_zoneN' | 'motion_x' | 'motion_y' | 'motion_z' | 'gpio'
-    // heaterPin: the high-side output pin for this slot (board-specific)
+    // Stepper slots
     stepperSlots: [],
 
-    // ── Wizard state ──────────────────────────────────────────────
+    // Overtemp threshold (°C)
+    overtempThreshold: 280,
+
     wizardComplete: false,
   }
 }
-
-// ── Store ─────────────────────────────────────────────────────────────────────
 
 export const useSettingsStore = defineStore('settings', {
   state: () => ({
@@ -94,49 +107,29 @@ export const useSettingsStore = defineStore('settings', {
   }),
 
   getters: {
-    // Zones whose heater pin is deferred to a stepper slot
     deferredZones(state) {
       return state.zones.filter(z => z.deferred)
     },
-
-    // Is nozzle vacuum available given machine class?
     nozzleVacuumAvailable(state) {
       return state.machineClass === 'semi_auto' || state.machineClass === 'automatic'
     },
-
-    // Does this machine have any motion axes?
     hasMotion(state) {
       return state.machineClass === 'semi_auto' || state.machineClass === 'automatic'
     },
-
-    // Motion axes available by class
     availableMotionAxes(state) {
       if (state.machineClass === 'automatic') return ['x', 'y', 'z']
       if (state.machineClass === 'semi_auto') return ['z']
       return []
     },
-
-    // All stepper slot functions in use (to show in dropdowns)
-    usedSlotFunctions(state) {
-      return state.stepperSlots.map(s => s.function).filter(f => f !== 'unused')
-    },
   },
 
   actions: {
-    // ── Persistence ─────────────────────────────────────────────────
-
     async load() {
       try {
         const res = await fetch('/server/files/config/bakesail_settings.json')
-        if (!res.ok) {
-          // File doesn't exist yet — use defaults
-          this._loaded = true
-          return false
-        }
+        if (!res.ok) { this._loaded = true; return false }
         const data = await res.json()
-        // Merge loaded data over defaults (so new fields get defaults)
-        const defaults = defaultSettings()
-        Object.assign(this.$state, defaults, data)
+        Object.assign(this.$state, defaultSettings(), data)
         this._loaded = true
         return true
       } catch (e) {
@@ -152,12 +145,10 @@ export const useSettingsStore = defineStore('settings', {
         const data = { ...this.$state }
         delete data._loaded
         delete data._saving
-
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
         const form = new FormData()
         form.append('file', blob, 'bakesail_settings.json')
         form.append('root', 'config')
-
         const res = await fetch('/server/files/upload', { method: 'POST', body: form })
         if (!res.ok) throw new Error(`Settings save failed: ${res.status}`)
         return true
@@ -169,40 +160,27 @@ export const useSettingsStore = defineStore('settings', {
       }
     },
 
-    // ── Zone management ──────────────────────────────────────────────
-
     addZone() {
+      if (this.zones.length >= 8) return
       const id = Math.max(0, ...this.zones.map(z => z.id)) + 1
-      this.zones.push({ id, label: `Zone ${id}`, pin: null, deferred: false })
-      // Default to mapping to TC 1 if available
-      if (this.thermocouples.length > 0) {
-        this.zoneTcMap[id] = this.thermocouples[0].id
-      }
+      this.zones.push({ id, label: `Zone ${id}`, type: 'lower', pin: null, deferred: false, tcId: null, sensorPin: '' })
     },
 
     removeZone(id) {
       this.zones = this.zones.filter(z => z.id !== id)
-      delete this.zoneTcMap[id]
     },
-
-    // ── TC management ────────────────────────────────────────────────
 
     addTc() {
       const id = Math.max(0, ...this.thermocouples.map(t => t.id)) + 1
-      this.thermocouples.push({ id, label: `TC ${id}`, csPin: '', sckPin: '', misoPin: '', mosiPin: 'PA7' })
+      this.thermocouples.push({ id, label: `TC ${id}`, pin: '' })
     },
 
     removeTc(id) {
       this.thermocouples = this.thermocouples.filter(t => t.id !== id)
-      // Remap any zones that were using this TC to TC 1
-      for (const zoneId in this.zoneTcMap) {
-        if (this.zoneTcMap[zoneId] === id) {
-          this.zoneTcMap[zoneId] = this.thermocouples[0]?.id ?? null
-        }
+      for (const zone of this.zones) {
+        if (zone.tcId === id) { zone.tcId = null; zone.sensorPin = '' }
       }
     },
-
-    // ── Fan management ───────────────────────────────────────────────
 
     addFan() {
       const id = Math.max(0, ...this.fans.map(f => f.id)) + 1
@@ -213,10 +191,14 @@ export const useSettingsStore = defineStore('settings', {
       this.fans = this.fans.filter(f => f.id !== id)
     },
 
-    // ── Stepper slots ────────────────────────────────────────────────
-
     setStepperSlots(slots) {
       this.stepperSlots = slots
+    },
+
+    // When a TC is selected on a zone, auto-fill its pin
+    onZoneTcChange(zone) {
+      const tc = this.thermocouples.find(t => t.id === zone.tcId)
+      if (tc) zone.sensorPin = tc.pin
     },
   },
 })

@@ -37,13 +37,11 @@ export function generateBakesailCfg(settings) {
   lines.push('')
 
   // ── Thermocouple sensors ─────────────────────────────────────────────────
-  // Compute valid TCs (used when embedding sensor in heater_generic)
-  // No standalone [temperature_sensor] objects are created for TCs —
-  // they are embedded directly in [heater_generic] to avoid the
-  // dual-pin-reference Klipper error when the same SPI pins are declared twice.
-  const validTcs = settings.thermocouples.filter(
-    tc => tc.csPin && tc.sckPin && tc.misoPin
-  )
+  // Valid TCs: must have a CS/sensor pin set.
+  // SPI bus pins (SCK/MISO/MOSI) come from spiSettings and are shared.
+  const spi      = settings.spiSettings || {}
+  const spiBusOk = spi.sckPin && spi.misoPin
+  const validTcs = settings.thermocouples.filter(tc => tc.pin)
 
   // ── Heater zones ─────────────────────────────────────────────────────────
   const validZones = settings.zones.filter(z => {
@@ -60,14 +58,17 @@ export function generateBakesailCfg(settings) {
       lines.push(`[heater_generic ${_zoneName(zone)}]`)
       lines.push(`heater_pin: ${heaterPin}`)
 
-      if (tc) {
+      // Find TC for this zone: zone.tcId references a TC, zone.sensorPin is the CS pin
+      const zoneTc = zone.tcId ? validTcs.find(t => t.id === zone.tcId) : null
+      const sensorPin = zone.sensorPin || (zoneTc ? zoneTc.pin : '')
+      if (sensorPin && spiBusOk) {
         lines.push(`sensor_type: MAX31855`)
-        lines.push(`sensor_pin: ${tc.csPin}`)
-        lines.push(`spi_software_sclk_pin: ${tc.sckPin}`)
-        lines.push(`spi_software_miso_pin: ${tc.misoPin}`)
-        lines.push(`spi_software_mosi_pin: ${tc.mosiPin || tc.misoPin}`)
+        lines.push(`sensor_pin: ${sensorPin}`)
+        lines.push(`spi_software_sclk_pin: ${spi.sckPin}`)
+        lines.push(`spi_software_miso_pin: ${spi.misoPin}`)
+        lines.push(`spi_software_mosi_pin: ${spi.mosiPin || spi.misoPin}`)
       } else {
-        lines.push(comment('No TC assigned — using host temperature as placeholder'))
+        lines.push(comment('No TC / SPI bus configured — using host temperature as placeholder'))
         lines.push(`sensor_type: temperature_host`)
       }
 
@@ -188,9 +189,8 @@ export function generateBakesailCfg(settings) {
   validZones.forEach((zone, idx) => {
     const n = idx + 1
     lines.push(`heater_zone${n}: heater_generic ${_zoneName(zone)}`)
-    if (zone.offset) {
-      lines.push(`offset_zone${n}: ${zone.offset}`)
-    }
+    if (zone.type)   lines.push(`type_zone${n}: ${zone.type}`)
+    if (zone.offset) lines.push(`offset_zone${n}: ${zone.offset}`)
   })
   lines.push('')
 
@@ -312,13 +312,16 @@ function _firstAvailablePin(settings) {
     'gpio22','gpio23','gpio24','gpio25','gpio26','gpio27'
   ]
   const used = new Set()
-  for (const z of (settings.zones || [])) if (z.pin) used.add(z.pin)
-  for (const f of (settings.fans  || [])) if (f.pin) used.add(f.pin)
-  for (const t of (settings.thermocouples || [])) {
-    if (t.csPin)   used.add(t.csPin)
-    if (t.sckPin)  used.add(t.sckPin)
-    if (t.misoPin) used.add(t.misoPin)
+  for (const z of (settings.zones || [])) {
+    if (z.pin)        used.add(z.pin)
+    if (z.sensorPin)  used.add(z.sensorPin)
   }
+  for (const f of (settings.fans  || [])) if (f.pin) used.add(f.pin)
+  for (const t of (settings.thermocouples || [])) if (t.pin) used.add(t.pin)
+  const spi = settings.spiSettings || {}
+  if (spi.sckPin)  used.add(spi.sckPin)
+  if (spi.misoPin) used.add(spi.misoPin)
+  if (spi.mosiPin) used.add(spi.mosiPin)
   if (settings.vacuum?.penPin)            used.add(settings.vacuum.penPin)
   if (settings.vacuum?.nozzlePin)         used.add(settings.vacuum.nozzlePin)
   if (settings.illumination?.laserPin)    used.add(settings.illumination.laserPin)
