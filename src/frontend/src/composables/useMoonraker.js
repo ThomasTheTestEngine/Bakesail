@@ -103,10 +103,12 @@ function handleMessage(event) {
     case 'notify_klippy_shutdown':
       klippyState.value = 'shutdown'
       useDeviceStore().setKlippyOffline()
+      startKlippyPoll()
       break
     case 'notify_klippy_disconnected':
       klippyState.value = 'disconnected'
       useDeviceStore().setKlippyOffline()
+      startKlippyPoll()
       break
     // Ignore other notifications for now
   }
@@ -149,6 +151,7 @@ function connect() {
         await subscribe()
       } else {
         klippyState.value = info.state ?? 'disconnected'
+        startKlippyPoll()
       }
     } catch (e) {
       console.warn('[bakesail] printer.info failed:', e)
@@ -179,6 +182,34 @@ function runGcode(script) {
   return send('printer.gcode.script', { script })
 }
 
+// ── Klippy state poller ──────────────────────────────────────────────────────
+// After a FIRMWARE_RESTART the WS to Moonraker stays open but Klipper
+// goes through a disconnect/reconnect cycle. We poll printer.info every
+// 2s when not ready so the UI updates without requiring a page refresh.
+
+let klippyPollTimer = null
+
+function startKlippyPoll() {
+  if (klippyPollTimer) return
+  klippyPollTimer = setInterval(async () => {
+    if (!connected.value) { stopKlippyPoll(); return }
+    if (klippyState.value === 'ready') { stopKlippyPoll(); return }
+    try {
+      const info = await send('printer.info')
+      const unsubscribable = ['shutdown', 'disconnected']
+      if (!unsubscribable.includes(info.state)) {
+        klippyState.value = 'ready'
+        await subscribe()
+        stopKlippyPoll()
+      }
+    } catch { /* still waiting */ }
+  }, 2000)
+}
+
+function stopKlippyPoll() {
+  if (klippyPollTimer) { clearInterval(klippyPollTimer); klippyPollTimer = null }
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export function useMoonraker() {
@@ -188,6 +219,7 @@ export function useMoonraker() {
     connect,
     send,
     runGcode,
+    startKlippyPoll,
   }
 }
 
