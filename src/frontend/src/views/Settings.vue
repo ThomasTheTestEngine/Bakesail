@@ -50,6 +50,11 @@
               </label>
               <template v-if="!zone.deferred">
                 <input class="field-input field-input--pin" v-model="zone.pin" placeholder="e.g. PA2" />
+              <label class="test-pin-label" :class="{ active: isTestPin(zone.pin) }">
+                <input type="checkbox" :checked="isTestPin(zone.pin)"
+                  @change="zone.pin = toggleTestPin(zone.pin)" />
+                Test
+              </label>
               </template>
               <span v-else class="defer-note">Assigned in Stepper Slots</span>
               <button class="item-remove" @click="settings.removeZone(zone.id)"
@@ -102,6 +107,11 @@
               <div class="item-num">{{ fan.id }}</div>
               <input class="field-input" v-model="fan.label" style="width:110px;flex:none" />
               <input class="field-input field-input--pin" v-model="fan.pin" placeholder="e.g. PC6" />
+              <label class="test-pin-label" :class="{ active: isTestPin(fan.pin) }">
+                <input type="checkbox" :checked="isTestPin(fan.pin)"
+                  @change="fan.pin = toggleTestPin(fan.pin)" />
+                Test
+              </label>
               <label class="field-label-inline">
                 <input type="checkbox" v-model="fan.pwm" /> PWM
               </label>
@@ -123,6 +133,11 @@
               </label>
               <input v-if="settings.vacuum.pen" class="field-input field-input--pin"
                      v-model="settings.vacuum.penPin" placeholder="e.g. PA1" />
+              <label v-if="settings.vacuum.pen" class="test-pin-label" :class="{ active: isTestPin(settings.vacuum.penPin) }">
+                <input type="checkbox" :checked="isTestPin(settings.vacuum.penPin)"
+                  @change="settings.vacuum.penPin = toggleTestPin(settings.vacuum.penPin)" />
+                Test
+              </label>
             </div>
             <div class="item-row" v-if="settings.nozzleVacuumAvailable">
               <label class="field-label-inline" style="width:180px">
@@ -130,6 +145,11 @@
               </label>
               <input v-if="settings.vacuum.nozzle" class="field-input field-input--pin"
                      v-model="settings.vacuum.nozzlePin" placeholder="e.g. PA0" />
+              <label v-if="settings.vacuum.nozzle" class="test-pin-label" :class="{ active: isTestPin(settings.vacuum.nozzlePin) }">
+                <input type="checkbox" :checked="isTestPin(settings.vacuum.nozzlePin)"
+                  @change="settings.vacuum.nozzlePin = toggleTestPin(settings.vacuum.nozzlePin)" />
+                Test
+              </label>
             </div>
           </div>
         </template>
@@ -144,6 +164,11 @@
               </label>
               <input v-if="settings.illumination.laser" class="field-input field-input--pin"
                      v-model="settings.illumination.laserPin" placeholder="e.g. PB0" />
+              <label v-if="settings.illumination.laser" class="test-pin-label" :class="{ active: isTestPin(settings.illumination.laserPin) }">
+                <input type="checkbox" :checked="isTestPin(settings.illumination.laserPin)"
+                  @change="settings.illumination.laserPin = toggleTestPin(settings.illumination.laserPin)" />
+                Test
+              </label>
             </div>
             <div class="item-row item-row--wrap">
               <label class="field-label-inline" style="width:180px">
@@ -152,6 +177,11 @@
               <template v-if="settings.illumination.neopixel">
                 <span class="field-label-inline">Pin</span>
                 <input class="field-input field-input--pin" v-model="settings.illumination.neopixelPin" placeholder="PB1" />
+                <label class="test-pin-label" :class="{ active: isTestPin(settings.illumination.neopixelPin) }">
+                  <input type="checkbox" :checked="isTestPin(settings.illumination.neopixelPin)"
+                    @change="settings.illumination.neopixelPin = toggleTestPin(settings.illumination.neopixelPin)" />
+                  Test
+                </label>
                 <span class="field-label-inline">LEDs</span>
                 <input class="field-input" type="number" v-model.number="settings.illumination.neopixelCount"
                        min="1" max="300" style="width:70px;flex:none" />
@@ -203,6 +233,11 @@
               <template v-if="slot.function.startsWith('heater_zone')">
                 <span class="field-label-inline">Heater pin</span>
                 <input class="field-input field-input--pin" v-model="slot.heaterPin" placeholder="PC8" />
+              <label class="test-pin-label" :class="{ active: isTestPin(slot.heaterPin) }">
+                <input type="checkbox" :checked="isTestPin(slot.heaterPin)"
+                  @change="slot.heaterPin = toggleTestPin(slot.heaterPin)" />
+                Test
+              </label>
               </template>
             </div>
           </div>
@@ -313,11 +348,13 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSettingsStore } from '../stores/settings.js'
+import { useTestPins } from '../composables/useTestPins.js'
 import { saveBakesailCfg, ensurePrinterCfgInclude, generateBakesailCfg } from '../utils/configWriter.js'
 import { useMoonraker } from '../composables/useMoonraker.js'
 
 const router   = useRouter()
 const settings = useSettingsStore()
+const { isTestPin, toggleTestPin } = useTestPins(settings)
 const { runGcode } = useMoonraker()
 
 const activeSection = ref('device')
@@ -551,4 +588,24 @@ onMounted(() => settings.load())
 .apply-error   { font-size: 12px; color: var(--red); font-family: var(--font-mono); width: 100%; }
 .apply-success { font-size: 12px; color: var(--green); width: 100%; }
 .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+.test-pin-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  padding: 4px 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+  flex-shrink: 0;
+  user-select: none;
+}
+.test-pin-label input[type="checkbox"] { margin: 0; accent-color: var(--teal); }
+.test-pin-label:hover { color: var(--teal); border-color: var(--teal); }
+.test-pin-label.active { color: var(--teal); border-color: var(--teal); background: var(--teal-glow); }
 </style>
