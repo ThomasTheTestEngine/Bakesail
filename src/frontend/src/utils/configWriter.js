@@ -59,6 +59,23 @@ export function generateBakesailCfg(settings) {
     return pin && pin !== 'UNSET'
   })
   if (validZones.length > 0) {
+    // ── Placeholder sensors for zones without a TC ─────────────────
+    // bakesail.py needs a named temperature_sensor object for every zone.
+    // When no TC is assigned, create a temperature_host placeholder so
+    // Klipper has something to look up.
+    const zonesNeedingPlaceholder = validZones.filter(zone => {
+      const tcId = settings.zoneTcMap[zone.id]
+      return !validTcs.find(t => t.id === tcId)
+    })
+    if (zonesNeedingPlaceholder.length > 0) {
+      lines.push(sectionHeader('Zone temperature placeholders (no TC assigned)'))
+      for (const zone of zonesNeedingPlaceholder) {
+        lines.push(`[temperature_sensor ${_zoneName(zone)}_sensor]`)
+        lines.push(`sensor_type: temperature_host`)
+        lines.push('')
+      }
+    }
+
     lines.push(sectionHeader('Heater zones'))
     for (const zone of validZones) {
       const heaterPin = _resolveHeaterPin(zone, settings)
@@ -75,7 +92,7 @@ export function generateBakesailCfg(settings) {
         lines.push(`spi_software_miso_pin: ${tc.misoPin}`)
         lines.push(`spi_software_mosi_pin: ${tc.mosiPin || tc.misoPin}`)
       } else {
-        lines.push(comment('No valid TC assigned — using host temperature as placeholder'))
+        lines.push(comment('No TC assigned — using host temperature as placeholder'))
         lines.push(`sensor_type: temperature_host`)
       }
 
@@ -196,9 +213,11 @@ export function generateBakesailCfg(settings) {
     const tc   = validTcs.find(t => t.id === tcId)
     lines.push(`heater_zone${zone.id}: heater_generic ${_zoneName(zone)}`)
     if (tc) {
+      // Reference the named TC sensor object
       lines.push(`sensor_zone${zone.id}: temperature_sensor ${_tcName(tc)}`)
     } else {
-      lines.push(`sensor_zone${zone.id}: temperature_sensor ${_zoneName(zone)}`)
+      // Reference the placeholder sensor we created above
+      lines.push(`sensor_zone${zone.id}: temperature_sensor ${_zoneName(zone)}_sensor`)
     }
     if (zone.offset) {
       lines.push(`offset_zone${zone.id}: ${zone.offset}`)
