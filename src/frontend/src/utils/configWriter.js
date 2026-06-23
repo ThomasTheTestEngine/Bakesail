@@ -208,21 +208,22 @@ export function generateBakesailCfg(settings) {
   lines.push(`profiles_path: ~/printer_data/config/bakesail_profiles`)
   lines.push('')
 
-  for (const zone of validZones) {
+  // Zones must be numbered contiguously starting at 1 in the [bakesail] block.
+  // Use sequential index regardless of zone.id in the settings store.
+  validZones.forEach((zone, idx) => {
+    const n    = idx + 1
     const tcId = settings.zoneTcMap[zone.id]
     const tc   = validTcs.find(t => t.id === tcId)
-    lines.push(`heater_zone${zone.id}: heater_generic ${_zoneName(zone)}`)
+    lines.push(`heater_zone${n}: heater_generic ${_zoneName(zone)}`)
     if (tc) {
-      // Reference the named TC sensor object
-      lines.push(`sensor_zone${zone.id}: temperature_sensor ${_tcName(tc)}`)
+      lines.push(`sensor_zone${n}: temperature_sensor ${_tcName(tc)}`)
     } else {
-      // Reference the placeholder sensor we created above
-      lines.push(`sensor_zone${zone.id}: temperature_sensor ${_zoneName(zone)}_sensor`)
+      lines.push(`sensor_zone${n}: temperature_sensor ${_zoneName(zone)}_sensor`)
     }
     if (zone.offset) {
-      lines.push(`offset_zone${zone.id}: ${zone.offset}`)
+      lines.push(`offset_zone${n}: ${zone.offset}`)
     }
-  }
+  })
   lines.push('')
 
   // Fan references — tell bakesail.py which fan objects to report
