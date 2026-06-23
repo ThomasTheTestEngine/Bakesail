@@ -26,15 +26,20 @@
       </nav>
 
       <div class="sidebar-footer">
-        <!-- Connection status -->
+        <!-- Mainsail link -->
+        <a class="mainsail-btn" :href="`http://${host}:8080`" target="_blank" rel="noopener">
+          ⊞ Mainsail ↗
+        </a>
+        <!-- Connection status + theme toggle -->
         <div class="conn-row">
-          <div class="conn-dot" :class="connClass"></div>
-          <span class="conn-label">{{ connLabel }}</span>
+          <div style="display:flex;align-items:center;gap:7px">
+            <div class="conn-dot" :class="connClass"></div>
+            <span class="conn-label">{{ connLabel }}</span>
+          </div>
+          <button class="theme-toggle" @click="toggleTheme" :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'">
+            {{ isDark ? '☀' : '☾' }}
+          </button>
         </div>
-        <!-- Theme toggle -->
-        <button class="theme-toggle" @click="toggleTheme" :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'">
-          {{ isDark ? '☀' : '☾' }}
-        </button>
       </div>
     </aside>
 
@@ -57,6 +62,7 @@ const route  = useRoute()
 const router = useRouter()
 const store  = useDeviceStore()
 const { connected, klippyState, connect } = useMoonraker()
+const host = window.location.hostname
 
 const visibleTabs = computed(() => tabs)
 
@@ -281,15 +287,35 @@ a { color: inherit; text-decoration: none; }
 /* ── Sidebar footer ─────────────────────────────────────────── */
 .sidebar-footer {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 8px;
   padding: 12px 16px;
   border-top: 1px solid var(--border);
+}
+
+.mainsail-btn {
+  display: block;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-2);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+  text-decoration: none;
+}
+.mainsail-btn:hover {
+  color: var(--text);
+  border-color: var(--border-2);
+  background: var(--surface-2);
 }
 
 .conn-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 7px;
 }
 
