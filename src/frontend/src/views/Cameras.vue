@@ -1,9 +1,9 @@
 <template>
   <div>
-    <div class="page-title">PROFILE MANAGER</div>
+    <div class="page-title">CAMERAS</div>
     <div class="stub-card">
-      <h2>Profile Manager</h2>
-      <p>Coming in a future milestone.</p>
+      <h2>Cameras</h2>
+      <p>Camera view and config page</p>
     </div>
   </div>
 </template>
