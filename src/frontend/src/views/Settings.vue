@@ -75,10 +75,25 @@
               <input class="field-input" v-model="tc.label" style="width:100px;flex:none" />
               <span class="field-label-inline">CS</span>
               <input class="field-input field-input--pin" v-model="tc.csPin" placeholder="PB12" />
+              <label class="test-pin-label" :class="{ active: isTestPin(tc.csPin) }">
+                <input type="checkbox" :checked="isTestPin(tc.csPin)"
+                  @change="tc.csPin = toggleTestPin(tc.csPin)" />
+                Test
+              </label>
               <span class="field-label-inline">SCK</span>
               <input class="field-input field-input--pin" v-model="tc.sckPin" placeholder="PB13" />
+              <label class="test-pin-label" :class="{ active: isTestPin(tc.sckPin) }">
+                <input type="checkbox" :checked="isTestPin(tc.sckPin)"
+                  @change="tc.sckPin = toggleTestPin(tc.sckPin)" />
+                Test
+              </label>
               <span class="field-label-inline">MISO</span>
               <input class="field-input field-input--pin" v-model="tc.misoPin" placeholder="PB14" />
+              <label class="test-pin-label" :class="{ active: isTestPin(tc.misoPin) }">
+                <input type="checkbox" :checked="isTestPin(tc.misoPin)"
+                  @change="tc.misoPin = toggleTestPin(tc.misoPin)" />
+                Test
+              </label>
               <button class="item-remove" @click="settings.removeTc(tc.id)"
                       :disabled="settings.thermocouples.length <= 1">×</button>
             </div>
