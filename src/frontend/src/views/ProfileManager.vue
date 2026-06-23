@@ -356,9 +356,11 @@ async function saveProfile() {
   saveError.value = ''
   saving.value    = true
 
-  // Derive filename from name if this is a new profile
-  const filename = editingName.value
-    || draft.value.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+  // Always derive filename from the current profile name.
+  // If the name changed, this creates a new file — the old one is left intact.
+  const derivedName = draft.value.name
+    .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+  const filename = derivedName || editingName.value || 'untitled'
 
   try {
     const json = JSON.stringify(draft.value, null, 2)
@@ -373,6 +375,7 @@ async function saveProfile() {
 
     editingName.value = filename
     await fetchProfileList()
+    // If name changed, new file was created — old file persists (user can delete it)
   } catch (e) {
     saveError.value = e.message
   } finally {
