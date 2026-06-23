@@ -113,6 +113,7 @@ export const useDeviceStore = defineStore('device', {
       if (data.error    !== undefined) this.error    = data.error
       if (data.profile  !== undefined) this.profile  = data.profile
       if (data.stage    !== undefined) this.stage    = data.stage
+      if (data.fans     !== undefined) this.fans = data.fans
       if (data.zones    !== undefined) {
         this.zones = data.zones
         this._appendHistory(data.zones)

@@ -259,6 +259,9 @@ class Bakesail:
         # Zone configuration
         self.zones = self._parse_zones(config)
 
+        # Fan configuration (optional — fan1, fan2, … in [bakesail] config)
+        self.fan_names = self._parse_fan_names(config)
+
         # ── State machine ──────────────────────────────────────────────────
         self.state     = STATE_IDLE
         self.substate  = SUB_NONE
@@ -329,6 +332,34 @@ class Bakesail:
                 "Bakesail: no zones configured. "
                 "Define at least heater_zone1 and sensor_zone1 in [bakesail].")
         return zones
+
+    def _parse_fan_names(self, config):
+        """
+        Read optional fan1, fan2, … entries from [bakesail] config.
+        Values are full Klipper object names, e.g. 'fan_generic fan_1'.
+        """
+        names = []
+        for i in range(1, 9):
+            name = config.get('fan%d' % i, None)
+            if name is None:
+                break
+            names.append(name)
+        return names
+
+    def _get_fan_statuses(self, eventtime):
+        result = []
+        for name in self.fan_names:
+            try:
+                obj    = self.printer.lookup_object(name)
+                status = obj.get_status(eventtime)
+                speed  = status.get('speed', status.get('value', 0.0))
+                result.append({
+                    'name':  name.split()[-1],   # strip type prefix
+                    'speed': round(float(speed), 3),
+                })
+            except Exception:
+                pass
+        return result
 
     # =========================================================================
     # Profile I/O
@@ -673,6 +704,8 @@ class Bakesail:
             'stage':    stage_info,
             # Live zone data
             'zones':    [z.get_status(eventtime) for z in self.zones],
+            # Fan speeds
+            'fans':     self._get_fan_statuses(eventtime),
         }
 
 
