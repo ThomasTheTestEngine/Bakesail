@@ -314,6 +314,11 @@ function _firstAvailablePin(settings) {
   const used = new Set()
   for (const z of (settings.zones || [])) if (z.pin) used.add(z.pin)
   for (const f of (settings.fans  || [])) if (f.pin) used.add(f.pin)
+  for (const t of (settings.thermocouples || [])) {
+    if (t.csPin)   used.add(t.csPin)
+    if (t.sckPin)  used.add(t.sckPin)
+    if (t.misoPin) used.add(t.misoPin)
+  }
   if (settings.vacuum?.penPin)            used.add(settings.vacuum.penPin)
   if (settings.vacuum?.nozzlePin)         used.add(settings.vacuum.nozzlePin)
   if (settings.illumination?.laserPin)    used.add(settings.illumination.laserPin)
