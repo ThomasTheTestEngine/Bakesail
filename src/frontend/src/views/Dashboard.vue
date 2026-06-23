@@ -251,14 +251,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useDeviceStore } from '../stores/device.js'
 import { useSettingsStore } from '../stores/settings.js'
 import { useMoonraker } from '../composables/useMoonraker.js'
 
 const store    = useDeviceStore()
 const settings = useSettingsStore()
-const { send, runGcode } = useMoonraker()
+const { send, runGcode, connected } = useMoonraker()
 
 const showRunModal = ref(false)
 const profiles     = ref([])
@@ -384,8 +384,15 @@ async function emergencyStop() {
 }
 
 onMounted(() => {
-  loadProfiles()
   settings.load()
+  // Wait for websocket to be open before querying profiles
+  if (connected.value) {
+    loadProfiles()
+  } else {
+    const stop = watch(connected, (val) => {
+      if (val) { loadProfiles(); stop() }
+    })
+  }
 })
 </script>
 
