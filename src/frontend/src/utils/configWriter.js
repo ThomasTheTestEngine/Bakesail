@@ -188,8 +188,9 @@ export function generateBakesailCfg(settings) {
   // sensor_zoneN is omitted — bakesail.py reads temperature from the heater directly.
   validZones.forEach((zone, idx) => {
     const n = idx + 1
+    const zoneLabel = zone.label || zone.type || `Zone ${n}`
     lines.push(`heater_zone${n}: heater_generic ${_zoneName(zone)}`)
-    if (zone.label)  lines.push(`label_zone${n}: ${zone.label}`)
+    lines.push(`label_zone${n}: ${zoneLabel}`)
     if (zone.type)   lines.push(`type_zone${n}: ${zone.type}`)
     if (zone.offset) lines.push(`offset_zone${n}: ${zone.offset}`)
   })
@@ -282,9 +283,9 @@ export async function ensurePrinterCfgInclude() {
 // ── Internal naming helpers ───────────────────────────────────────────────────
 
 function _zoneName(zone) {
-  return zone.label
-    ? zone.label.toLowerCase().replace(/\s+/g, '_')
-    : `zone${zone.id}`
+  if (zone.label) return zone.label.toLowerCase().replace(/\s+/g, '_')
+  if (zone.type)  return zone.type.toLowerCase().replace(/\s+/g, '_')
+  return `zone${zone.id}`
 }
 
 function _tcName(tc) {
@@ -329,3 +330,4 @@ function _firstAvailablePin(settings) {
   if (settings.illumination?.neopixelPin) used.add(settings.illumination.neopixelPin)
   return GPIO_POOL.find(p => !used.has(p)) || 'gpio27'
 }
+
