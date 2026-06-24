@@ -6,18 +6,18 @@
 import { defineStore } from 'pinia'
 
 const STATE_META = {
-  idle:     { label: 'Idle',     colour: '#555555' },
-  ready:    { label: 'Ready',    colour: '#E8820C' },
-  running:  { label: 'Running',  colour: '#E8820C' },
-  paused:   { label: 'Paused',   colour: '#9B5E00' },
-  complete: { label: 'Complete', colour: '#4CAF7D' },
-  error:    { label: 'Error',    colour: '#E04545' },
+  idle:     { label: 'Idle',     colour: 'var(--text-muted)' },
+  ready:    { label: 'Ready',    colour: 'var(--amber)'      },
+  running:  { label: 'Running',  colour: 'var(--amber)'      },
+  paused:   { label: 'Paused',   colour: 'var(--amber-dim)'  },
+  complete: { label: 'Complete', colour: 'var(--green)'      },
+  error:    { label: 'Error',    colour: 'var(--red)'        },
 }
 
 const SUBSTATE_META = {
-  heating:  { label: 'Heating',  colour: '#E8820C' },
-  dwelling: { label: 'Dwelling', colour: '#2DBFB8' },
-  cooling:  { label: 'Cooling',  colour: '#2DBFB8' },
+  heating:  { label: 'Heating',  colour: 'var(--amber)' },
+  dwelling: { label: 'Dwelling', colour: 'var(--teal)'  },
+  cooling:  { label: 'Cooling',  colour: 'var(--teal)'  },
 }
 
 // Rolling history length (seconds at ~1 sample/sec)

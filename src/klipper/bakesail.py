@@ -71,11 +71,12 @@ class BakesailZone:
     both reference the same physical TC SPI pins.
     """
 
-    def __init__(self, index, heater_name, offset, zone_type, printer):
+    def __init__(self, index, heater_name, offset, zone_type, label, printer):
         self.index       = index
         self.heater_name = heater_name
         self.offset      = offset
         self.zone_type   = zone_type
+        self.label       = label
         self._printer    = printer
         self._pheater    = None
 
@@ -112,6 +113,7 @@ class BakesailZone:
         return {
             'index':  self.index,
             'heater': self.heater_name,
+            'label':  self.label,
             'type':   self.zone_type,
             'offset': self.offset,
             'temp':   temp,
@@ -241,7 +243,8 @@ class Bakesail:
         # Consume offset_zoneN and type_zoneN keys (8 zones max)
         for i in range(1, 9):
             config.getfloat('offset_zone%d' % i, 0.0)
-            config.get('type_zone%d' % i, None)
+            config.get('type_zone%d'  % i, None)
+            config.get('label_zone%d' % i, None)
 
         # Device identity (informational — used by frontend, not control logic)
         self.device_type   = config.get('device_type',   'oven')
@@ -322,8 +325,9 @@ class Bakesail:
 
             config.get(sensor_key, None)   # consume for backward compat
             offset = config.getfloat(offset_key, 0.0)
-            zone_type = config.get('type_zone%d' % i, 'target')
-            zones.append(BakesailZone(i, heater_name, offset, zone_type, self.printer))
+            zone_type  = config.get('type_zone%d'  % i, 'target')
+            zone_label = config.get('label_zone%d' % i, 'Zone %d' % i)
+            zones.append(BakesailZone(i, heater_name, offset, zone_type, zone_label, self.printer))
 
         if not zones:
             raise config.error(

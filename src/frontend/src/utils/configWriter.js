@@ -189,6 +189,7 @@ export function generateBakesailCfg(settings) {
   validZones.forEach((zone, idx) => {
     const n = idx + 1
     lines.push(`heater_zone${n}: heater_generic ${_zoneName(zone)}`)
+    if (zone.label)  lines.push(`label_zone${n}: ${zone.label}`)
     if (zone.type)   lines.push(`type_zone${n}: ${zone.type}`)
     if (zone.offset) lines.push(`offset_zone${n}: ${zone.offset}`)
   })

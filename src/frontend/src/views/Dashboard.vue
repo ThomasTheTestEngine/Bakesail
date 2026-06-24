@@ -25,44 +25,168 @@
 
     <!-- ── Zone readouts — arranged by type ─────────────────────── -->
 
-    <!-- Top row: target + upper -->
-    <div class="zones-row" v-if="topZones.length > 0">
-      <div v-for="zone in topZones" :key="zone.index" class="zone-card card">
-        <ZoneCard :zone="zone" :running="store.isRunning" :setpoint="store.stage.setpoint" />
+    <!-- Top row: combined target+upper, or individual wide cards -->
+    <div class="zones-row zones-row--centered" v-if="topZones.length > 0">
+
+      <!-- Combined cell when both target and upper are present -->
+      <div v-if="targetZone && upperZone" class="zone-card zone-card--combined card">
+        <!-- Upper zone — compact single line -->
+        <div class="combined-upper">
+          <span class="cu-name">{{ zoneLabel(upperZone) }}</span>
+          <span class="cu-temp" :class="tempClass(upperZone.temp)">
+            {{ upperZone.temp.toFixed(1) }}°C
+          </span>
+          <span class="cu-sp" v-if="zoneSP(upperZone)">SP {{ zoneSP(upperZone) }}</span>
+          <span class="cu-pwr">{{ (upperZone.power * 100).toFixed(0) }}%</span>
+        </div>
+        <div class="combined-divider"></div>
+        <!-- Target zone — full display -->
+        <div class="zone-name">{{ zoneLabel(targetZone) }}</div>
+        <div class="zone-temp" :class="tempClass(targetZone.temp)">
+          {{ targetZone.temp.toFixed(1) }}<span class="unit">°C</span>
+        </div>
+        <div :class="zoneSP(targetZone) ? 'zone-setpoint' : 'zone-setpoint zone-setpoint--dim'">
+          {{ zoneSP(targetZone) || 'Idle' }}
+        </div>
+        <div class="power-row">
+          <div class="power-bar-track">
+            <div class="power-bar-fill" :style="{ width: (targetZone.power*100).toFixed(0)+'%' }"></div>
+          </div>
+          <span class="power-pct">{{ (targetZone.power*100).toFixed(0) }}%</span>
+        </div>
+      </div>
+
+      <!-- Target only (no upper) -->
+      <div v-else-if="targetZone && !upperZone" class="zone-card zone-card--wide card">
+        <div class="zone-name">{{ zoneLabel(targetZone) }}</div>
+        <div class="zone-temp" :class="tempClass(targetZone.temp)">
+          {{ targetZone.temp.toFixed(1) }}<span class="unit">°C</span>
+        </div>
+        <div :class="zoneSP(targetZone) ? 'zone-setpoint' : 'zone-setpoint zone-setpoint--dim'">
+          {{ zoneSP(targetZone) || 'Idle' }}
+        </div>
+        <div class="power-row">
+          <div class="power-bar-track">
+            <div class="power-bar-fill" :style="{ width: (targetZone.power*100).toFixed(0)+'%' }"></div>
+          </div>
+          <span class="power-pct">{{ (targetZone.power*100).toFixed(0) }}%</span>
+        </div>
+      </div>
+
+      <!-- Upper only (no target) -->
+      <div v-else-if="upperZone && !targetZone" class="zone-card zone-card--wide card">
+        <div class="zone-name">{{ zoneLabel(upperZone) }}</div>
+        <div class="zone-temp" :class="tempClass(upperZone.temp)">
+          {{ upperZone.temp.toFixed(1) }}<span class="unit">°C</span>
+        </div>
+        <div :class="zoneSP(upperZone) ? 'zone-setpoint' : 'zone-setpoint zone-setpoint--dim'">
+          {{ zoneSP(upperZone) || 'Idle' }}
+        </div>
+        <div class="power-row">
+          <div class="power-bar-track">
+            <div class="power-bar-fill" :style="{ width: (upperZone.power*100).toFixed(0)+'%' }"></div>
+          </div>
+          <span class="power-pct">{{ (upperZone.power*100).toFixed(0) }}%</span>
+        </div>
+      </div>
+
+      <!-- Extra top zones (e.g. multiple target or multiple upper) -->
+      <div v-for="zone in extraTopZones" :key="zone.index" class="zone-card zone-card--wide card">
+        <div class="zone-name">{{ zoneLabel(zone) }}</div>
+        <div class="zone-temp" :class="tempClass(zone.temp)">
+          {{ zone.temp.toFixed(1) }}<span class="unit">°C</span>
+        </div>
+        <div :class="zoneSP(zone) ? 'zone-setpoint' : 'zone-setpoint zone-setpoint--dim'">
+          {{ zoneSP(zone) || 'Idle' }}
+        </div>
+        <div class="power-row">
+          <div class="power-bar-track">
+            <div class="power-bar-fill" :style="{ width: (zone.power*100).toFixed(0)+'%' }"></div>
+          </div>
+          <span class="power-pct">{{ (zone.power*100).toFixed(0) }}%</span>
+        </div>
       </div>
     </div>
 
     <!-- Middle row -->
-    <div class="zones-row" v-if="middleZones.length > 0">
+    <div class="zones-row zones-row--centered" v-if="middleZones.length > 0">
       <div v-for="zone in middleZones" :key="zone.index" class="zone-card card">
-        <ZoneCard :zone="zone" :running="store.isRunning" :setpoint="store.stage.setpoint" />
+        <div class="zone-name">{{ zoneLabel(zone) }}</div>
+        <div class="zone-temp" :class="tempClass(zone.temp)">
+          {{ zone.temp.toFixed(1) }}<span class="unit">°C</span>
+        </div>
+        <div :class="zoneSP(zone) ? 'zone-setpoint' : 'zone-setpoint zone-setpoint--dim'">
+          {{ zoneSP(zone) || 'Idle' }}
+        </div>
+        <div class="power-row">
+          <div class="power-bar-track">
+            <div class="power-bar-fill" :style="{ width: (zone.power*100).toFixed(0)+'%' }"></div>
+          </div>
+          <span class="power-pct">{{ (zone.power*100).toFixed(0) }}%</span>
+        </div>
       </div>
     </div>
 
-    <!-- Bottom row: lower variants positioned left/center/right -->
+    <!-- Bottom row: lower variants in fixed 3-column grid -->
     <div class="zones-row zones-row--lower" v-if="bottomZones.length > 0">
-      <div class="lower-slot">
+      <div class="lower-slot lower-slot--left">
         <div v-for="zone in bottomZones.filter(z=>z.type==='lower_left')" :key="zone.index"
              class="zone-card card">
-          <ZoneCard :zone="zone" :running="store.isRunning" :setpoint="store.stage.setpoint" />
+          <div class="zone-name">{{ zoneLabel(zone) }}</div>
+          <div class="zone-temp" :class="tempClass(zone.temp)">
+            {{ zone.temp.toFixed(1) }}<span class="unit">°C</span>
+          </div>
+          <div :class="zoneSP(zone) ? 'zone-setpoint' : 'zone-setpoint zone-setpoint--dim'">
+            {{ zoneSP(zone) || 'Idle' }}
+          </div>
+          <div class="power-row">
+            <div class="power-bar-track">
+              <div class="power-bar-fill" :style="{ width: (zone.power*100).toFixed(0)+'%' }"></div>
+            </div>
+            <span class="power-pct">{{ (zone.power*100).toFixed(0) }}%</span>
+          </div>
         </div>
       </div>
-      <div class="lower-slot">
+      <div class="lower-slot lower-slot--center">
         <div v-for="zone in bottomZones.filter(z=>z.type==='lower')" :key="zone.index"
              class="zone-card card">
-          <ZoneCard :zone="zone" :running="store.isRunning" :setpoint="store.stage.setpoint" />
+          <div class="zone-name">{{ zoneLabel(zone) }}</div>
+          <div class="zone-temp" :class="tempClass(zone.temp)">
+            {{ zone.temp.toFixed(1) }}<span class="unit">°C</span>
+          </div>
+          <div :class="zoneSP(zone) ? 'zone-setpoint' : 'zone-setpoint zone-setpoint--dim'">
+            {{ zoneSP(zone) || 'Idle' }}
+          </div>
+          <div class="power-row">
+            <div class="power-bar-track">
+              <div class="power-bar-fill" :style="{ width: (zone.power*100).toFixed(0)+'%' }"></div>
+            </div>
+            <span class="power-pct">{{ (zone.power*100).toFixed(0) }}%</span>
+          </div>
         </div>
       </div>
-      <div class="lower-slot">
+      <div class="lower-slot lower-slot--right">
         <div v-for="zone in bottomZones.filter(z=>z.type==='lower_right')" :key="zone.index"
              class="zone-card card">
-          <ZoneCard :zone="zone" :running="store.isRunning" :setpoint="store.stage.setpoint" />
+          <div class="zone-name">{{ zoneLabel(zone) }}</div>
+          <div class="zone-temp" :class="tempClass(zone.temp)">
+            {{ zone.temp.toFixed(1) }}<span class="unit">°C</span>
+          </div>
+          <div :class="zoneSP(zone) ? 'zone-setpoint' : 'zone-setpoint zone-setpoint--dim'">
+            {{ zoneSP(zone) || 'Idle' }}
+          </div>
+          <div class="power-row">
+            <div class="power-bar-track">
+              <div class="power-bar-fill" :style="{ width: (zone.power*100).toFixed(0)+'%' }"></div>
+            </div>
+            <span class="power-pct">{{ (zone.power*100).toFixed(0) }}%</span>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- Empty state -->
-    <div class="zones-row" v-if="store.zones.length === 0">
+    <div class="zones-row zones-row--centered" v-if="store.zones.length === 0">
       <div class="zone-card card zone-card--empty">
         <div class="zone-name">Zone 1</div>
         <div class="zone-temp zone-temp--dim">—.—<span class="unit">°C</span></div>
@@ -77,10 +201,17 @@
     <!-- Auxiliary bubble: plate / pot / ambient -->
     <div class="aux-bubble card" v-if="auxZones.length > 0">
       <div class="aux-label">Auxiliary</div>
-      <div class="zones-row">
+      <div class="zones-row zones-row--centered aux-zones">
         <div v-for="zone in auxZones" :key="zone.index" class="zone-card zone-card--compact card">
-          <ZoneCard :zone="zone" :running="store.isRunning" :setpoint="store.stage.setpoint"
-                    compact />
+          <div class="aux-zone-line1">
+            <span class="zone-name">{{ zoneLabel(zone) }}</span>
+            <span class="aux-temp" :class="tempClass(zone.temp)">{{ zone.temp.toFixed(1) }}°C</span>
+          </div>
+          <div class="aux-zone-line2">
+            <span v-if="zoneSP(zone)" class="zone-setpoint">SP {{ zoneSP(zone) }}</span>
+            <span v-else class="zone-setpoint zone-setpoint--dim">Idle</span>
+            <span class="power-pct">{{ (zone.power*100).toFixed(0) }}%</span>
+          </div>
         </div>
       </div>
     </div>
@@ -168,6 +299,14 @@
     <!-- ── Controls ──────────────────────────────────────────────── -->
     <div class="controls-card card">
       <!-- Profile + run/pause/stop row -->
+      <!-- Stage progress — shown above buttons when running -->
+      <div v-if="store.isRunning || store.isPaused" class="stage-progress stage-progress--top">
+        <div class="stage-bar-track">
+          <div class="stage-bar-fill" :style="{ width: stageProgress + '%' }"></div>
+        </div>
+        <span class="stage-frac">Stage {{ store.stage.number ?? 0 }}/{{ store.stage.count ?? 0 }}</span>
+      </div>
+
       <div class="controls-main">
         <div class="profile-info">
           <span class="profile-loaded" v-if="store.isRunning || store.isPaused">
@@ -196,14 +335,6 @@
           <button class="btn btn-danger" :disabled="!store.canAbort" @click="abortProfile">
             ✕ Stop
           </button>
-        </div>
-
-        <!-- Stage progress -->
-        <div v-if="store.isRunning || store.isPaused" class="stage-progress">
-          <div class="stage-bar-track">
-            <div class="stage-bar-fill" :style="{ width: stageProgress + '%' }"></div>
-          </div>
-          <span class="stage-frac">{{ store.stage.number ?? 0 }}/{{ store.stage.count ?? 0 }}</span>
         </div>
       </div>
 
@@ -288,7 +419,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, defineComponent, h } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useDeviceStore } from '../stores/device.js'
 import { useSettingsStore } from '../stores/settings.js'
 import { useMoonraker } from '../composables/useMoonraker.js'
@@ -301,38 +432,18 @@ const showRunModal    = ref(false)
 const profiles        = ref([])
 const selectedProfile = ref(localStorage.getItem('bakesail-last-profile') || '')
 
-// ── ZoneCard inline component ────────────────────────────────────
-const ZoneCard = defineComponent({
-  props: { zone: Object, running: Boolean, setpoint: Number, compact: Boolean },
-  setup(props) {
-    function tempClass(temp) {
-      if (temp <= 0)  return 'zone-temp--dim'
-      if (temp > 220) return 'zone-temp--hot'
-      if (temp > 100) return 'zone-temp--warm'
-      return ''
-    }
-    return () => {
-      const z = props.zone
-      const sp = props.running && props.setpoint
-        ? (props.setpoint + (z.offset || 0)).toFixed(1) + '°C'
-        : null
-      return h('div', { class: 'zone-inner' }, [
-        h('div', { class: 'zone-name' }, z.label || `Zone ${z.index}`),
-        h('div', { class: ['zone-temp', tempClass(z.temp)] }, [
-          z.temp.toFixed(1), h('span', { class: 'unit' }, '°C'),
-        ]),
-        h('div', { class: sp ? 'zone-setpoint' : 'zone-setpoint zone-setpoint--dim' },
-          sp || (z.temp > 0 ? 'On' : 'Idle')),
-        h('div', { class: 'power-row' }, [
-          h('div', { class: 'power-bar-track' }, [
-            h('div', { class: 'power-bar-fill', style: { width: (z.power * 100).toFixed(0) + '%' } }),
-          ]),
-          h('span', { class: 'power-pct' }, (z.power * 100).toFixed(0) + '%'),
-        ]),
-      ])
-    }
-  }
-})
+// ── Zone helpers ─────────────────────────────────────────────────
+function zoneLabel(z)  { return z.label || `Zone ${z.index}` }
+function tempClass(t)  {
+  if (t <= 0)  return 'zone-temp--dim'
+  if (t > 220) return 'zone-temp--hot'
+  if (t > 100) return 'zone-temp--warm'
+  return ''
+}
+function zoneSP(z) {
+  if (!store.isRunning || !store.stage.setpoint) return null
+  return (store.stage.setpoint + (z.offset || 0)).toFixed(1) + '°C'
+}
 
 // ── Zone groups by type ───────────────────────────────────────────
 const TOP_TYPES    = ['target', 'upper']
@@ -341,13 +452,14 @@ const BOTTOM_TYPES = ['lower', 'lower_left', 'lower_right']
 const AUX_TYPES    = ['plate', 'pot', 'ambient']
 
 const topZones    = computed(() => store.zones.filter(z => TOP_TYPES.includes(z.type)))
+const targetZone  = computed(() => store.zones.find(z => z.type === 'target') || null)
+const upperZone   = computed(() => store.zones.find(z => z.type === 'upper')  || null)
+const extraTopZones = computed(() =>
+  store.zones.filter(z => TOP_TYPES.includes(z.type) && z !== targetZone.value && z !== upperZone.value)
+)
 const middleZones = computed(() => store.zones.filter(z => MIDDLE_TYPES.includes(z.type)))
 const bottomZones = computed(() => store.zones.filter(z => BOTTOM_TYPES.includes(z.type)))
 const auxZones    = computed(() => store.zones.filter(z => AUX_TYPES.includes(z.type)))
-// Zones with no type or unrecognised type fall through to top
-const untypedZones = computed(() =>
-  store.zones.filter(z => ![...TOP_TYPES,...MIDDLE_TYPES,...BOTTOM_TYPES,...AUX_TYPES].includes(z.type))
-)
 
 // ── Chart constants ───────────────────────────────────────────────
 
@@ -557,6 +669,11 @@ onMounted(() => {
 }
 
 /* ── Zone layout ────────────────────────────────────────────────── */
+.zones-row--centered {
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
 .zones-row--lower {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
@@ -570,11 +687,71 @@ onMounted(() => {
   min-height: 20px;
 }
 
-.aux-bubble {
-  padding: 14px 16px;
-  border-color: var(--border-2);
+/* Standard zone card */
+.zone-card {
+  flex: 0 0 150px !important;
+  width: 150px;
 }
 
+/* Wide (target/upper individual) */
+.zone-card--wide {
+  flex: 0 0 200px !important;
+  width: 200px;
+}
+
+/* Combined target+upper cell */
+.zone-card--combined {
+  flex: 0 0 250px !important;
+  width: 250px;
+  min-width: 250px;
+}
+
+.combined-upper {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding-bottom: 8px;
+  flex-wrap: wrap;
+}
+.combined-divider {
+  height: 1px;
+  background: var(--border);
+  margin-bottom: 8px;
+}
+.cu-name { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.cu-temp { font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--text); }
+.cu-sp   { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); }
+.cu-pwr  { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-left: auto; }
+
+/* Compact auxiliary zone */
+.zone-card--compact {
+  flex: 0 0 150px !important;
+  width: 150px;
+  padding: 10px 12px !important;
+}
+.aux-zone-line1 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+.aux-temp {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 700;
+}
+.aux-zone-line2 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Auxiliary bubble */
+.aux-bubble {
+  padding: 12px 16px;
+  border-color: var(--border-2);
+}
 .aux-label {
   font-size: 10px;
   font-weight: 600;
@@ -583,12 +760,6 @@ onMounted(() => {
   color: var(--text-muted);
   margin-bottom: 10px;
 }
-
-.zone-card--compact .zone-temp {
-  font-size: 28px;
-}
-
-.zone-inner { display: contents; }
 
 /* ── Zone cards ─────────────────────────────────────────────────── */
 .zones-row { display: flex; gap: 14px; }
@@ -698,6 +869,7 @@ onMounted(() => {
 .controls-btns { display: flex; gap: 8px; flex-shrink: 0; }
 
 .stage-progress { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 120px; }
+.stage-progress--top { flex: none; width: 100%; margin-bottom: 10px; }
 .stage-bar-track { flex: 1; height: 4px; background: var(--border-2); border-radius: 2px; overflow: hidden; }
 .stage-bar-fill { height: 100%; background: var(--amber); border-radius: 2px; transition: width 0.5s ease; }
 .stage-frac { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); white-space: nowrap; }
