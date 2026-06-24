@@ -497,13 +497,6 @@ function chartPoints(zoneIndex) {
 
 // ── Computed ──────────────────────────────────────────────────────
 
-function tempClass(temp) {
-  if (temp <= 0)  return 'zone-temp--dim'
-  if (temp > 220) return 'zone-temp--hot'
-  if (temp > 100) return 'zone-temp--warm'
-  return ''
-}
-
 const stageProgress = computed(() => {
   const s = store.stage
   if (!s.number || !s.count) return 0
