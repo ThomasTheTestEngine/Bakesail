@@ -147,6 +147,29 @@ export const useSettingsStore = defineStore('settings', {
         if (!res.ok) { this._loaded = true; return false }
         const data = await res.json()
         Object.assign(this.$state, defaultSettings(), data)
+
+        // ── Migration: old cameras was { bga, alignment, alignment2 } ──
+        // If it loaded as a plain object (not an array), convert it.
+        if (!Array.isArray(this.cameras)) {
+          const old = this.cameras || {}
+          const migrated = []
+          if (old.bga)        migrated.push({ id: 'cam_migrated_0', device: old.bga,        type: 'bga_grid',       name: '', test: false })
+          if (old.alignment)  migrated.push({ id: 'cam_migrated_1', device: old.alignment,  type: 'alignment_chip', name: '', test: false })
+          if (old.alignment2) migrated.push({ id: 'cam_migrated_2', device: old.alignment2, type: 'alignment_chip', name: '', test: false })
+          this.cameras = migrated
+        }
+
+        this._loaded = true
+        return true
+      } catch (e) {
+        console.warn('[bakesail] settings load failed:', e)
+        this._loaded = true
+        return false
+      }
+    },
+        if (!res.ok) { this._loaded = true; return false }
+        const data = await res.json()
+        Object.assign(this.$state, defaultSettings(), data)
         this._loaded = true
         return true
       } catch (e) {
@@ -213,17 +236,19 @@ export const useSettingsStore = defineStore('settings', {
     },
 
     addCamera(test = false) {
+      if (!Array.isArray(this.cameras)) this.cameras = []
       const id = 'cam_' + Date.now().toString(36)
       this.cameras.push({
         id,
-        device: test ? '' : '',
+        device: '',
         type:   'bga_grid',
-        name:   '',   // blank = use type label as display name
-        test,
+        name:   '',
+        test:   !!test,
       })
     },
 
     removeCamera(id) {
+      if (!Array.isArray(this.cameras)) { this.cameras = []; return }
       this.cameras = this.cameras.filter(c => c.id !== id)
     },
 
