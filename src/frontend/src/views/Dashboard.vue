@@ -247,7 +247,7 @@
 
     <!-- ── Customize mode footer bar ─────────────────────── -->
     <div v-if="layout.customizeMode.value" class="customize-footer">
-      <button class="btn btn-danger btn-sm" @click="layout.revertToDefault()">↺ Revert to Default Dashboard</button>
+      <button class="btn btn-danger btn-sm" @click="layout.revertToDefault(buildDefaultLayout(store.zones))">↺ Revert to Default Dashboard</button>
       <div class="cf-right">
         <span v-if="layout.saveMsg.value" class="cf-msg">{{ layout.saveMsg.value }}</span>
         <div class="load-wrap" @click.stop>
@@ -363,32 +363,31 @@ function defaultConfig(type)  { return WIDGET_DEFS.find(d => d.type === type)?.d
 
 // ── Default layout — mirrors the old static layout ─────────────
 // Each zone gets its own widget. State, chart, controls are fixed.
-function buildDefaultLayout() {
-  const zones = store.zones.length > 0 ? store.zones : [{ index: 1 }]
-  const layout = [
+function buildDefaultLayout(zones) {
+  const zoneList = (zones && zones.length > 0) ? zones : [{ index: 1, label: 'Zone 1', type: 'target' }]
+  const result = [
     { id: 'state',    type: 'state',    x: 0,   y: 0,   w: 700, h: 80,  config: {} },
     { id: 'controls', type: 'controls', x: 0,   y: 360, w: 700, h: 220, config: {} },
     { id: 'chart',    type: 'chart',    x: 0,   y: 600, w: 700, h: 200, config: {} },
     { id: 'fans',     type: 'fans',     x: 720, y: 360, w: 280, h: 120, config: {} },
     { id: 'dwell',    type: 'dwell',    x: 720, y: 500, w: 280, h: 100, config: {} },
   ]
-  // Place zone widgets
   let zx = 0
-  zones.forEach((z, i) => {
-    layout.push({
-      id: `zone_${z.index}`,
-      type: 'zone',
+  zoneList.forEach(z => {
+    result.push({
+      id:     `zone_${z.index}`,
+      type:   'zone',
       x: zx, y: 100,
       w: 180, h: 200,
       config: { zoneIndex: z.index },
     })
     zx += 190
   })
-  return layout
+  return result
 }
 
-const DEFAULT_LAYOUT = buildDefaultLayout()
-const layout = useDashboardLayout('thermal', DEFAULT_LAYOUT)
+// Seed with placeholder — rebuilt once zones are known in onMounted
+const layout = useDashboardLayout('thermal', buildDefaultLayout([]))
 
 // Canvas size — tracks bounding box of all widgets + padding
 const canvasStyle = computed(() => {
@@ -504,9 +503,23 @@ function promptSaveAs() {
 
 onMounted(async () => {
   settings.load()
-  await layout.tryAutoLoad()
-  if (connected.value) { loadProfiles() }
-  else { const stop = watch(connected, v => { if (v) { loadProfiles(); stop() } }) }
+
+  // Wait for websocket before querying
+  const init = async () => {
+    await loadProfiles()
+
+    // Try to load a user-saved layout from disk.
+    // If none exists, build the default layout using the real zone list from
+    // the device store (which is populated once Moonraker is connected).
+    const loaded = await layout.tryAutoLoad()
+    if (!loaded) {
+      // No saved layout — use real zones from store
+      layout.widgets.value = buildDefaultLayout(store.zones)
+    }
+  }
+
+  if (connected.value) { init() }
+  else { const stop = watch(connected, v => { if (v) { init(); stop() } }) }
 })
 </script>
 

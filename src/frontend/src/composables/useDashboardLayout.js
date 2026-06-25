@@ -173,8 +173,8 @@ export function useDashboardLayout(dashboardId, defaultLayout) {
   }
 
   // ── Revert to default ─────────────────────────────────────
-  function revertToDefault() {
-    widgets.value = deepClone(defaultLayout)
+  function revertToDefault(freshLayout) {
+    widgets.value = deepClone(freshLayout || defaultLayout)
     openWidgetSettings.value = null
   }
 
@@ -247,13 +247,15 @@ export function useDashboardLayout(dashboardId, defaultLayout) {
     const filename = `bakesail_dashboard_${dashboardId}.json`
     try {
       const res = await fetch(`/server/files/config/${filename}`)
-      if (!res.ok) return
+      if (!res.ok) return false
       const data = await res.json()
       if (Array.isArray(data.widgets) && data.widgets.length > 0) {
         widgets.value = data.widgets
+        return true
       }
+      return false
     } catch {
-      // No saved layout yet — use default
+      return false
     }
   }
 
