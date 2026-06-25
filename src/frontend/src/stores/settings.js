@@ -167,17 +167,6 @@ export const useSettingsStore = defineStore('settings', {
         return false
       }
     },
-        if (!res.ok) { this._loaded = true; return false }
-        const data = await res.json()
-        Object.assign(this.$state, defaultSettings(), data)
-        this._loaded = true
-        return true
-      } catch (e) {
-        console.warn('[bakesail] settings load failed:', e)
-        this._loaded = true
-        return false
-      }
-    },
 
     async save() {
       this._saving = true
