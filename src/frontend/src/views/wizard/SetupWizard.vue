@@ -277,8 +277,8 @@
             </select>
             <select class="field-select" style="width:160px;flex:none" v-model="cam.type">
               <option value="bga_grid">BGA Grid</option>
-              <option value="alignment_chip">Alignment — Chip</option>
-              <option value="alignment_board">Alignment — Board</option>
+              <option value="alignment_chip">Alignment - Chip</option>
+              <option value="alignment_board">Alignment - Board</option>
               <option value="custom">Custom</option>
             </select>
             <input class="field-input" style="width:130px;flex:none" v-model="cam.name"

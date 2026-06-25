@@ -352,11 +352,10 @@
               <span v-if="cam.test" class="cam-test-badge">TEST</span>
 
               <!-- Type dropdown -->
-              <select class="field-select cam-type-select" v-model="cam.type"
-                      @change="if (!cam.name) cam.name = ''">
+              <select class="field-select cam-type-select" v-model="cam.type">
                 <option value="bga_grid">BGA Grid</option>
-                <option value="alignment_chip">Alignment — Chip</option>
-                <option value="alignment_board">Alignment — Board</option>
+                <option value="alignment_chip">Alignment - Chip</option>
+                <option value="alignment_board">Alignment - Board</option>
                 <option value="custom">Custom</option>
               </select>
 
@@ -627,8 +626,8 @@ const zoneTypes = ZONE_TYPES
 // ── Camera helpers ─────────────────────────────────────────────
 const CAMERA_TYPE_LABELS = {
   bga_grid:        'BGA Grid',
-  alignment_chip:  'Alignment — Chip',
-  alignment_board: 'Alignment — Board',
+  alignment_chip:  'Alignment - Chip',
+  alignment_board: 'Alignment - Board',
   custom:          'Custom',
 }
 function camTypeLabel(type) { return CAMERA_TYPE_LABELS[type] || type }
