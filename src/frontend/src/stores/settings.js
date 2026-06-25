@@ -108,6 +108,10 @@ export function defaultSettings() {
     // Overtemp threshold (°C)
     overtempThreshold: 280,
 
+    // Dashboard customization
+    dashboardGridSnap: true,   // snap widgets to 20px grid
+    dashboardGridSize: 20,     // px — exposed in settings for the freaks
+
     wizardComplete: false,
   }
 }

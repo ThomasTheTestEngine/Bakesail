@@ -466,6 +466,26 @@
           <div v-else class="section-note">{{ currentCfgLoading ? 'Loading…' : 'Could not load config.' }}</div>
         </template>
 
+        <!-- Dashboard -->
+        <template v-else-if="activeSection === 'dashboard_prefs'">
+          <div class="section-title">Dashboard Preferences</div>
+          <p class="section-note">Controls behaviour when customizing dashboard layouts.</p>
+          <div class="field-row" style="margin-top:14px">
+            <label class="field-label">Grid Snap</label>
+            <label class="field-label-inline">
+              <input type="checkbox" v-model="settings.dashboardGridSnap" />
+              Snap widgets to grid while dragging/resizing
+            </label>
+          </div>
+          <div class="field-row">
+            <label class="field-label">Grid Size (px)</label>
+            <input class="field-input" type="number" v-model.number="settings.dashboardGridSize"
+                   min="4" max="80" style="width:80px;flex:none"
+                   :disabled="!settings.dashboardGridSnap" />
+            <span class="section-note" style="margin:0">Default 20px — smaller = finer control</span>
+          </div>
+        </template>
+
         <!-- Write config -->
         <template v-else-if="activeSection === 'config'">
           <div class="section-title">Write Config</div>
@@ -730,8 +750,9 @@ const sections = computed(() => {
     { id: 'cameras',      label: 'Cameras' },
     { id: 'steppers',     label: 'Stepper Slots' },
     { id: 'movement',     label: 'Movement' },
-    { id: 'current',      label: 'View Current Config' },
-    { id: 'config',       label: 'Write Config' },
+    { id: 'current',          label: 'View Current Config' },
+    { id: 'dashboard_prefs', label: 'Dashboard' },
+    { id: 'config',           label: 'Write Config' },
   ]
   return base
 })
