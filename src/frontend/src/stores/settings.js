@@ -84,12 +84,12 @@ export function defaultSettings() {
       neopixelColor: '#ffffff',
     },
 
-    // Cameras
-    cameras: {
-      bga:        '',
-      alignment:  '',
-      alignment2: '',
-    },
+    // Cameras — array of { id, device, type, name, test }
+    // device: '/dev/video0' etc, or '' for test
+    // type: 'bga_grid' | 'alignment_chip' | 'alignment_board' | 'custom'
+    // name: display name (defaults to type label)
+    // test: true = dummy camera (shows placeholder, no real device needed)
+    cameras: [],
 
     // Motion
     motion: {
@@ -210,6 +210,21 @@ export const useSettingsStore = defineStore('settings', {
 
     setStepperSlots(slots) {
       this.stepperSlots = slots
+    },
+
+    addCamera(test = false) {
+      const id = 'cam_' + Date.now().toString(36)
+      this.cameras.push({
+        id,
+        device: test ? '' : '',
+        type:   'bga_grid',
+        name:   '',   // blank = use type label as display name
+        test,
+      })
+    },
+
+    removeCamera(id) {
+      this.cameras = this.cameras.filter(c => c.id !== id)
     },
 
     // When a TC is selected on a zone, auto-fill its pin

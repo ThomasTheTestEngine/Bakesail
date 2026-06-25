@@ -262,26 +262,38 @@
       <template v-else-if="currentStep === 8">
         <div class="step-title">Cameras</div>
         <p class="step-desc">
-          Enter the device paths for connected USB cameras.
-          Leave blank if not using a camera.
+          Add each USB camera. You can skip this step and configure cameras later in Settings → Cameras.
         </p>
 
-        <div class="item-list">
-          <div class="item-row">
-            <span class="field-label-inline" style="width:150px">BGA edge camera</span>
-            <input class="field-input" v-model="settings.cameras.bga" placeholder="/dev/video0" />
+        <div class="item-list" style="margin-top:10px">
+          <div v-for="cam in settings.cameras" :key="cam.id" class="item-row" style="gap:8px;flex-wrap:wrap">
+            <span v-if="cam.test" class="wiz-cam-test-badge" style="display:inline-flex;align-items:center;padding:3px 8px;border-radius:4px;border:1px solid var(--teal);background:var(--teal-glow);color:var(--teal);font-size:10px;font-weight:700;letter-spacing:0.1em;width:150px;justify-content:center;flex-shrink:0">TEST</span>
+            <select v-else class="field-select" style="width:150px;flex:none" v-model="cam.device">
+              <option value="">— select —</option>
+              <option value="/dev/video0">/dev/video0</option>
+              <option value="/dev/video1">/dev/video1</option>
+              <option value="/dev/video2">/dev/video2</option>
+              <option value="/dev/video3">/dev/video3</option>
+            </select>
+            <select class="field-select" style="width:160px;flex:none" v-model="cam.type">
+              <option value="bga_grid">BGA Grid</option>
+              <option value="alignment_chip">Alignment — Chip</option>
+              <option value="alignment_board">Alignment — Board</option>
+              <option value="custom">Custom</option>
+            </select>
+            <input class="field-input" style="width:130px;flex:none" v-model="cam.name"
+                   :placeholder="{ bga_grid:'BGA Grid', alignment_chip:'Alignment Chip', alignment_board:'Alignment Board', custom:'Camera name' }[cam.type]" />
+            <button class="item-remove" @click="settings.removeCamera(cam.id)">×</button>
           </div>
-          <div class="item-row">
-            <span class="field-label-inline" style="width:150px">Alignment camera 1</span>
-            <input class="field-input" v-model="settings.cameras.alignment" placeholder="/dev/video1" />
-          </div>
-          <div class="item-row">
-            <span class="field-label-inline" style="width:150px">Alignment camera 2</span>
-            <input class="field-input" v-model="settings.cameras.alignment2" placeholder="/dev/video2" />
-          </div>
+          <div v-if="settings.cameras.length === 0" class="step-note" style="margin:0">No cameras added yet.</div>
         </div>
 
-        <p class="step-note">
+        <div style="display:flex;gap:10px;margin-top:12px">
+          <button class="btn btn-ghost btn-sm" @click="settings.addCamera(false)">+ Add Camera</button>
+          <button class="btn btn-ghost btn-sm" @click="settings.addCamera(true)">+ TEST Camera</button>
+        </div>
+
+        <p class="step-note" style="margin-top:12px">
           Run <code>ls /dev/video*</code> over SSH to list connected video devices.
         </p>
       </template>

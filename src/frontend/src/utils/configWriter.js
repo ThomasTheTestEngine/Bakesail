@@ -206,9 +206,21 @@ export function generateBakesailCfg(settings) {
   if (settings.vacuum.nozzle)    lines.push(`has_nozzle_vacuum: True`)
   if (settings.illumination.laser)    lines.push(`has_laser: True`)
   if (settings.illumination.neopixel) lines.push(`has_neopixel: True`)
-  if (settings.cameras.bga)      lines.push(`bga_camera: ${settings.cameras.bga}`)
-  if (settings.cameras.alignment)  lines.push(`alignment_camera: ${settings.cameras.alignment}`)
-  if (settings.cameras.alignment2) lines.push(`alignment_camera2: ${settings.cameras.alignment2}`)
+  if (settings.cameras && Array.isArray(settings.cameras)) {
+    settings.cameras.forEach((cam, i) => {
+      const dev = cam.device === '__manual__' ? (cam.deviceManual || '') : cam.device
+      if (!dev && !cam.test) return
+      const name = cam.name || (
+        cam.type === 'bga_grid'        ? 'BGA Grid' :
+        cam.type === 'alignment_chip'  ? 'Alignment Chip' :
+        cam.type === 'alignment_board' ? 'Alignment Board' : `Camera ${i + 1}`
+      )
+      lines.push(`camera_${i + 1}_name: ${name}`)
+      lines.push(`camera_${i + 1}_type: ${cam.type}`)
+      if (dev) lines.push(`camera_${i + 1}_device: ${dev}`)
+      if (cam.test) lines.push(`camera_${i + 1}_test: True`)
+    })
+  }
   lines.push('')
 
   // ── Macros include ────────────────────────────────────────────────────────

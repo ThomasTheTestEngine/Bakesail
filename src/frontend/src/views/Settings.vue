@@ -333,19 +333,48 @@
         <!-- Cameras -->
         <template v-else-if="activeSection === 'cameras'">
           <div class="section-title">Cameras</div>
-          <div class="item-list">
-            <div class="item-row">
-              <span class="field-label-inline" style="width:160px">BGA edge camera</span>
-              <input class="field-input" v-model="settings.cameras.bga" placeholder="/dev/video0" />
+          <p class="section-note">
+            Add each USB camera individually. Run <code>ls /dev/video*</code> over SSH to list connected video devices.
+            Use the TEST button to add a placeholder camera with no real device — useful for dashboard layout without hardware.
+          </p>
+
+          <div class="item-list" style="margin-top:14px">
+            <div v-for="cam in settings.cameras" :key="cam.id" class="item-row item-row--wrap cam-row">
+              <!-- Device dropdown -->
+              <select class="field-select cam-device-select" v-model="cam.device" v-if="!cam.test">
+                <option value="">— select device —</option>
+                <option v-for="d in availableVideoDevices" :key="d" :value="d">{{ d }}</option>
+                <option value="__manual__">Enter manually…</option>
+              </select>
+              <input v-if="!cam.test && cam.device === '__manual__'"
+                     class="field-input field-input--pin" v-model="cam.deviceManual"
+                     placeholder="/dev/video0" style="width:120px;flex:none" />
+              <span v-if="cam.test" class="cam-test-badge">TEST</span>
+
+              <!-- Type dropdown -->
+              <select class="field-select cam-type-select" v-model="cam.type"
+                      @change="if (!cam.name) cam.name = ''">
+                <option value="bga_grid">BGA Grid</option>
+                <option value="alignment_chip">Alignment — Chip</option>
+                <option value="alignment_board">Alignment — Board</option>
+                <option value="custom">Custom</option>
+              </select>
+
+              <!-- Name input -->
+              <input class="field-input cam-name-input" v-model="cam.name"
+                     :placeholder="camTypeLabel(cam.type)" />
+
+              <button class="item-remove" @click="settings.removeCamera(cam.id)">×</button>
             </div>
-            <div class="item-row">
-              <span class="field-label-inline" style="width:160px">Alignment camera 1</span>
-              <input class="field-input" v-model="settings.cameras.alignment" placeholder="/dev/video1" />
+
+            <div v-if="settings.cameras.length === 0" class="section-note" style="margin-top:4px">
+              No cameras added yet.
             </div>
-            <div class="item-row">
-              <span class="field-label-inline" style="width:160px">Alignment camera 2</span>
-              <input class="field-input" v-model="settings.cameras.alignment2" placeholder="/dev/video2" />
-            </div>
+          </div>
+
+          <div style="display:flex;gap:10px;margin-top:14px">
+            <button class="btn btn-ghost btn-sm" @click="settings.addCamera(false)">+ Add Camera</button>
+            <button class="btn btn-ghost btn-sm" @click="settings.addCamera(true)">+ TEST Camera</button>
           </div>
         </template>
 
@@ -594,6 +623,29 @@ const router   = useRouter()
 const settings = useSettingsStore()
 const { isTestPin, toggleTestPin } = useTestPins(settings)
 const zoneTypes = ZONE_TYPES
+
+// ── Camera helpers ─────────────────────────────────────────────
+const CAMERA_TYPE_LABELS = {
+  bga_grid:        'BGA Grid',
+  alignment_chip:  'Alignment — Chip',
+  alignment_board: 'Alignment — Board',
+  custom:          'Custom',
+}
+function camTypeLabel(type) { return CAMERA_TYPE_LABELS[type] || type }
+
+// Probe /dev/video* devices via a simple fetch to Moonraker's system info,
+// falling back to a static list of common paths if unavailable.
+const availableVideoDevices = ref(['/dev/video0', '/dev/video1', '/dev/video2', '/dev/video3'])
+onMounted(async () => {
+  try {
+    const res = await fetch('/server/system_info')
+    if (res.ok) {
+      const data = await res.json()
+      // Moonraker may expose available_services or similar — best effort
+      // For now, static list is the safe fallback
+    }
+  } catch { /* stay with defaults */ }
+})
 const { runGcode } = useMoonraker()
 
 const activeSection = ref('device')
@@ -1047,6 +1099,23 @@ onMounted(() => {
 
 .zone-row { gap: 6px; }
 .tc-select { width: 90px; flex: none; }
+
+.cam-row { gap: 8px; align-items: center; }
+.cam-device-select { width: 160px; flex: none; }
+.cam-type-select   { width: 170px; flex: none; }
+.cam-name-input    { width: 140px; flex: none; }
+.cam-test-badge {
+  display: inline-flex; align-items: center;
+  padding: 3px 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--teal);
+  background: var(--teal-glow);
+  color: var(--teal);
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  width: 160px; justify-content: center;
+}
 
 .test-pin-label {
   display: flex;
