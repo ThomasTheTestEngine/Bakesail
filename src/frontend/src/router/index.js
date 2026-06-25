@@ -1,43 +1,130 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useDeviceStore } from '../stores/device.js'
+import { useSettingsStore } from '../stores/settings.js'
 
-import Dashboard      from '../views/Dashboard.vue'
-import SetupWizard    from '../views/wizard/SetupWizard.vue'
-import ProfileManager from '../views/ProfileManager.vue'
-import Cameras        from '../views/Cameras.vue'
-import Calibration    from '../views/Calibration.vue'
-import Alignment      from '../views/Alignment.vue'
-import Settings       from '../views/Settings.vue'
+import Dashboard       from '../views/Dashboard.vue'
+import LaserDashboard  from '../views/LaserDashboard.vue'
+import SetupWizard     from '../views/wizard/SetupWizard.vue'
+import ProfileManager  from '../views/ProfileManager.vue'
+import Cameras         from '../views/Cameras.vue'
+import Calibration     from '../views/Calibration.vue'
+import Alignment       from '../views/Alignment.vue'
+import Settings        from '../views/Settings.vue'
+import JobQueue        from '../views/JobQueue.vue'
+import MaterialLibrary from '../views/MaterialLibrary.vue'
 
 export const routes_extra = [
   { path: '/wizard', name: 'wizard', component: SetupWizard },
 ]
 
-export const tabs = [
-  { path: '/',           name: 'dashboard',      label: 'Dashboard',        icon: '◈', component: Dashboard      },
-  { path: '/profiles',   name: 'profiles',        label: 'Profile Manager',  icon: '⊞', component: ProfileManager  },
-  { path: '/cameras',    name: 'cameras',          label: 'Cameras',          icon: '⊙', component: Cameras        },
-  { path: '/calibration',name: 'calibration',     label: 'Calibration',      icon: '◎', component: Calibration    },
-  { path: '/alignment',  name: 'alignment',        label: 'Alignment',        icon: '⊕', component: Alignment },
-  { path: '/settings',   name: 'settings',         label: 'Settings',         icon: '⊗', component: Settings       },
+// ── Tab definitions ────────────────────────────────────────────
+// hiddenFor: array of deviceType values where this tab is NOT shown.
+// onlyFor:   array of deviceType values where this tab IS shown (exclusive).
+
+export const ALL_TABS = [
+  {
+    path: '/',
+    name: 'dashboard',
+    label: 'Dashboard',
+    icon: '◈',
+    // Dashboard always visible; component is swapped in App.vue based on device type
+    component: Dashboard,
+  },
+  {
+    path: '/profiles',
+    name: 'profiles',
+    label: 'Profile Manager',
+    icon: '⊞',
+    component: ProfileManager,
+    hiddenFor: ['laser_plotter'],
+  },
+  {
+    path: '/job-queue',
+    name: 'job-queue',
+    label: 'Job Queue',
+    icon: '⊡',
+    component: JobQueue,
+    onlyFor: ['laser_plotter'],
+  },
+  {
+    path: '/material-library',
+    name: 'material-library',
+    label: 'Material Library',
+    icon: '◧',
+    component: MaterialLibrary,
+    onlyFor: ['laser_plotter'],
+  },
+  {
+    path: '/cameras',
+    name: 'cameras',
+    label: 'Cameras',
+    icon: '⊙',
+    component: Cameras,
+  },
+  {
+    path: '/calibration',
+    name: 'calibration',
+    label: 'Calibration',
+    icon: '◎',
+    component: Calibration,
+  },
+  {
+    path: '/alignment',
+    name: 'alignment',
+    label: 'Alignment',
+    icon: '⊕',
+    component: Alignment,
+    hiddenFor: ['hot_plate', 'laser_plotter'],
+    meta: { requiresSemiAuto: true },
+  },
+  {
+    path: '/settings',
+    name: 'settings',
+    label: 'Settings',
+    icon: '⊗',
+    component: Settings,
+  },
 ]
+
+// Helper — returns the tabs visible for a given deviceType
+export function tabsForDevice(deviceType) {
+  return ALL_TABS.filter(tab => {
+    if (tab.onlyFor  && !tab.onlyFor.includes(deviceType))  return false
+    if (tab.hiddenFor && tab.hiddenFor.includes(deviceType)) return false
+    return true
+  })
+}
+
+// Legacy export kept for any existing imports
+export const tabs = ALL_TABS
 
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
     ...routes_extra,
-    ...tabs.map(t => ({
-    path:      t.path,
-    name:      t.name,
-    component: t.component,
-    meta:      t.meta || {},
-  }))],
+    ...ALL_TABS.map(t => ({
+      path:      t.path,
+      name:      t.name,
+      component: t.component,
+      meta:      t.meta || {},
+    })),
+  ],
 })
 
-// Guard Alignment tab — only accessible when semi-auto machine type is configured
+// Guard: alignment only for semi-auto/automatic
+// Guard: redirect laser-hidden tabs back to dashboard
 router.beforeEach((to) => {
+  const deviceStore   = useDeviceStore()
+  const settingsStore = useSettingsStore()
+  const deviceType    = settingsStore.deviceType || 'oven'
+
   if (to.meta.requiresSemiAuto) {
-    const store = useDeviceStore()
-    if (!store.isSemiAuto) return { name: 'dashboard' }
+    if (!deviceStore.isSemiAuto) return { name: 'dashboard' }
+  }
+
+  const tab = ALL_TABS.find(t => t.name === to.name)
+  if (tab) {
+    if (tab.onlyFor   && !tab.onlyFor.includes(deviceType))   return { name: 'dashboard' }
+    if (tab.hiddenFor &&  tab.hiddenFor.includes(deviceType))  return { name: 'dashboard' }
   }
 })

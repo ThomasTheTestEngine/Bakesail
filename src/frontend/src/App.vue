@@ -54,17 +54,19 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
-import { tabs } from './router/index.js'
+import { tabsForDevice } from './router/index.js'
 import { useMoonraker } from './composables/useMoonraker.js'
 import { useDeviceStore } from './stores/device.js'
+import { useSettingsStore } from './stores/settings.js'
 
-const route  = useRoute()
-const router = useRouter()
-const store  = useDeviceStore()
+const route    = useRoute()
+const router   = useRouter()
+const store    = useDeviceStore()
+const settings = useSettingsStore()
 const { connected, klippyState, connect } = useMoonraker()
 const host = window.location.hostname
 
-const visibleTabs = computed(() => tabs)
+const visibleTabs = computed(() => tabsForDevice(settings.deviceType || 'oven'))
 
 // ── Theme ─────────────────────────────────────────────────────────
 const isDark = ref(true)

@@ -26,6 +26,7 @@
               <option value="ir_rework">IR Rework Station</option>
               <option value="hot_air">Hot Air Station</option>
               <option value="hot_plate">Hot Plate</option>
+              <option value="laser_plotter">Laser Plotter / Cutter</option>
             </select>
           </div>
           <div class="field-row">
@@ -238,6 +239,93 @@
                 <input type="color" v-model="settings.illumination.neopixelColor"
                        style="width:40px;height:32px;border:none;background:none;cursor:pointer;padding:0" />
               </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- Cameras -->
+        <!-- Laser -->
+        <template v-else-if="activeSection === 'laser'">
+          <div class="section-title">Laser Plotter / Cutter</div>
+          <p class="section-note">
+            Pin configuration for a CO2 or diode laser controlled via PWM. The
+            <code>laser_pwm</code> output pin name is used by Bakesail macros and
+            the Job Queue — keep it as-is unless you edit the macros manually.
+          </p>
+
+          <div class="item-list" style="margin-top:14px">
+
+            <div class="item-row">
+              <span class="field-label" style="width:130px">PWM Pin</span>
+              <input class="field-input field-input--pin" v-model="settings.laser.pwmPin" placeholder="e.g. PA8" />
+              <label class="test-pin-label" :class="{ active: isTestPin(settings.laser.pwmPin) }">
+                <input type="checkbox" :checked="isTestPin(settings.laser.pwmPin)"
+                  @change="settings.laser.pwmPin = toggleTestPin(settings.laser.pwmPin)" />
+                Test
+              </label>
+              <span class="section-note" style="margin:0">→ Moonraker output_pin <code>laser_pwm</code></span>
+            </div>
+
+            <div class="item-row">
+              <span class="field-label" style="width:130px">Enable / Interlock Pin</span>
+              <input class="field-input field-input--pin" v-model="settings.laser.enablePin" placeholder="e.g. PB0" />
+              <label class="test-pin-label" :class="{ active: isTestPin(settings.laser.enablePin) }">
+                <input type="checkbox" :checked="isTestPin(settings.laser.enablePin)"
+                  @change="settings.laser.enablePin = toggleTestPin(settings.laser.enablePin)" />
+                Test
+              </label>
+              <span class="section-note" style="margin:0">TH / WP line on LPS — optional</span>
+            </div>
+
+            <div class="item-row">
+              <span class="field-label" style="width:130px">Air Assist Pin</span>
+              <input class="field-input field-input--pin" v-model="settings.laser.airAssistPin" placeholder="e.g. PC5" />
+              <label class="test-pin-label" :class="{ active: isTestPin(settings.laser.airAssistPin) }">
+                <input type="checkbox" :checked="isTestPin(settings.laser.airAssistPin)"
+                  @change="settings.laser.airAssistPin = toggleTestPin(settings.laser.airAssistPin)" />
+                Test
+              </label>
+              <span class="section-note" style="margin:0">Relay to compressor — optional</span>
+            </div>
+
+          </div>
+
+          <div class="item-list" style="margin-top:20px">
+            <div class="section-title" style="margin-bottom:10px">PWM & Bed</div>
+
+            <div class="field-row">
+              <label class="field-label">PWM Freq (Hz)</label>
+              <input class="field-input" type="number" v-model.number="settings.laser.pwmFrequency"
+                     min="100" max="5000" style="width:100px;flex:none" />
+              <span class="section-note" style="margin:0">Typical CO2 LPS: 1 000–5 000 Hz</span>
+            </div>
+
+            <div class="field-row">
+              <label class="field-label">Max Power (%)</label>
+              <input class="field-input" type="number" v-model.number="settings.laser.maxPower"
+                     min="1" max="100" style="width:80px;flex:none" />
+              <span class="section-note" style="margin:0">Hard ceiling applied in macros</span>
+            </div>
+
+            <div class="field-row">
+              <label class="field-label">Bed Width (mm)</label>
+              <input class="field-input" type="number" v-model.number="settings.laser.bedWidth"
+                     min="1" style="width:100px;flex:none" />
+            </div>
+
+            <div class="field-row">
+              <label class="field-label">Bed Height (mm)</label>
+              <input class="field-input" type="number" v-model.number="settings.laser.bedHeight"
+                     min="1" style="width:100px;flex:none" />
+            </div>
+
+            <div class="field-row">
+              <label class="field-label">SVG Origin</label>
+              <select class="field-select" v-model="settings.laser.originCorner" style="width:160px;flex:none">
+                <option value="bottom-left">Bottom-left (machine home)</option>
+                <option value="top-left">Top-left (SVG default)</option>
+                <option value="center">Center of bed</option>
+              </select>
             </div>
           </div>
         </template>
@@ -623,19 +711,30 @@ async function doRevert() {
   } finally { reverting.value = false }
 }
 
-const sections = [
-  { id: 'device',       label: 'Device' },
-  { id: 'zones',        label: 'Heater Zones' },
-  { id: 'tc',           label: 'Thermocouples' },
-  { id: 'fans',         label: 'Fans' },
-  { id: 'vacuum',       label: 'Vacuum' },
-  { id: 'illumination', label: 'Illumination' },
-  { id: 'cameras',      label: 'Cameras' },
-  { id: 'steppers',     label: 'Stepper Slots' },
-  { id: 'movement',     label: 'Movement' },
-  { id: 'current',      label: 'View Current Config' },
-  { id: 'config',       label: 'Write Config' },
-]
+const sections = computed(() => {
+  const isLaser = settings.deviceType === 'laser_plotter'
+  const base = [
+    { id: 'device',       label: 'Device' },
+    ...(!isLaser ? [
+      { id: 'zones',        label: 'Heater Zones' },
+      { id: 'tc',           label: 'Thermocouples' },
+    ] : []),
+    ...(isLaser ? [
+      { id: 'laser',        label: 'Laser' },
+    ] : []),
+    { id: 'fans',         label: 'Fans' },
+    ...(!isLaser ? [
+      { id: 'vacuum',       label: 'Vacuum' },
+      { id: 'illumination', label: 'Illumination' },
+    ] : []),
+    { id: 'cameras',      label: 'Cameras' },
+    { id: 'steppers',     label: 'Stepper Slots' },
+    { id: 'movement',     label: 'Movement' },
+    { id: 'current',      label: 'View Current Config' },
+    { id: 'config',       label: 'Write Config' },
+  ]
+  return base
+})
 
 const configPreview = computed(() => generateBakesailCfg(settings.$state))
 

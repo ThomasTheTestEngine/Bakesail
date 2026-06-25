@@ -1,5 +1,7 @@
 <template>
-  <div class="dashboard">
+  <!-- Route to laser dashboard when device type is laser_plotter -->
+  <LaserDashboard v-if="settings.deviceType === 'laser_plotter'" />
+  <div v-else class="dashboard">
 
     <!-- ── Overtemp alarm ────────────────────────────────────────── -->
     <div v-if="store.isOvertemp && !store.overtempAck" class="overtemp-banner">
@@ -415,7 +417,7 @@
       </div>
     </div>
 
-  </div>
+  </div><!-- end v-else thermal dashboard -->
 </template>
 
 <script setup>
@@ -423,6 +425,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useDeviceStore } from '../stores/device.js'
 import { useSettingsStore } from '../stores/settings.js'
 import { useMoonraker } from '../composables/useMoonraker.js'
+import LaserDashboard from './LaserDashboard.vue'
 
 const store    = useDeviceStore()
 const settings = useSettingsStore()

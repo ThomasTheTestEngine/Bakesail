@@ -23,8 +23,21 @@ export const ZONE_TYPES = [
 export function defaultSettings() {
   return {
     // Device identity
+    // deviceType: 'oven' | 'ir_rework' | 'hot_air' | 'hot_plate' | 'laser_plotter'
     deviceType:   'oven',
     machineClass: 'manual',
+
+    // Laser plotter config (only used when deviceType === 'laser_plotter')
+    laser: {
+      pwmPin:          '',       // output_pin laser_pwm
+      enablePin:       '',       // output_pin laser_enable (interlock/TH line)
+      pwmFrequency:    1000,     // Hz — typical CO2 LPS accepts 1–5 kHz
+      maxPower:        100,      // % ceiling enforced in macros
+      bedWidth:        400,      // mm
+      bedHeight:       400,      // mm
+      originCorner:    'bottom-left', // how SVG Y is flipped
+      airAssistPin:    '',       // optional relay for air assist compressor
+    },
 
     // Heater zones (up to 8)
     // type: see ZONE_TYPES above
