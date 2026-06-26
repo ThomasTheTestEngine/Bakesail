@@ -23,7 +23,7 @@ export const ZONE_TYPES = [
 export function defaultSettings() {
   return {
     // Device identity
-    // deviceType: 'oven' | 'ir_rework' | 'hot_air' | 'hot_plate' | 'laser_plotter'
+    // deviceType: 'oven' | 'ir_rework' | 'hot_air' | 'hot_plate' | 'laser_plotter' | '3d_printer'
     deviceType:   'oven',
     machineClass: 'manual',
 

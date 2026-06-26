@@ -2,8 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useDeviceStore } from '../stores/device.js'
 import { useSettingsStore } from '../stores/settings.js'
 
-import Dashboard       from '../views/Dashboard.vue'
-import LaserDashboard  from '../views/LaserDashboard.vue'
+import DashboardRouter from '../views/DashboardRouter.vue'
 import SetupWizard     from '../views/wizard/SetupWizard.vue'
 import ProfileManager  from '../views/ProfileManager.vue'
 import Cameras         from '../views/Cameras.vue'
@@ -27,8 +26,7 @@ export const ALL_TABS = [
     name: 'dashboard',
     label: 'Dashboard',
     icon: '◈',
-    // Dashboard always visible; component is swapped in App.vue based on device type
-    component: Dashboard,
+    component: DashboardRouter,
   },
   {
     path: '/profiles',
@@ -74,7 +72,7 @@ export const ALL_TABS = [
     label: 'Alignment',
     icon: '⊕',
     component: Alignment,
-    hiddenFor: ['hot_plate', 'laser_plotter'],
+    hiddenFor: ['hot_plate', 'laser_plotter', '3d_printer'],
     meta: { requiresSemiAuto: true },
   },
   {
