@@ -69,6 +69,18 @@
           </label>
         </div>
 
+        <!-- Camera selector (only for camera widgets) -->
+        <div v-if="widget.type === 'camera' && availableCameras.length > 0" class="ws-fields-section">
+          <div class="ws-fields-title">Camera</div>
+          <select class="ws-field-input" style="width:100%;flex:none"
+                  v-model="widget.config.cameraId">
+            <option :value="null">First available</option>
+            <option v-for="cam in availableCameras" :key="cam.id" :value="cam.id">
+              {{ cam.name || cam.type }}{{ cam.test ? ' (TEST)' : '' }}
+            </option>
+          </select>
+        </div>
+
         <button class="ws-revert-btn" @click="revertConfig">↺ Revert widget to defaults</button>
       </div>
     </template>
@@ -84,6 +96,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useSettingsStore } from '../stores/settings.js'
 
 const props = defineProps({
   widget:        { type: Object,  required: true },
@@ -94,6 +107,9 @@ const props = defineProps({
 })
 
 defineEmits(['startDrag','startResize','remove','toggleSettings','closeSettings'])
+
+const _settings = useSettingsStore()
+const availableCameras = computed(() => Array.isArray(_settings.cameras) ? _settings.cameras : [])
 
 const shellStyle = computed(() => {
   const s = {

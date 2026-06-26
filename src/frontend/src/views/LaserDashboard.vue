@@ -154,6 +154,17 @@
           </div>
         </template>
 
+        <!-- ── CAMERA widget ─────────────────────────────── -->
+        <template v-else-if="w.type === 'camera'">
+          <div class="w-camera">
+            <div class="wc-cam-title" v-if="cameraForWidget(w)">{{ camDisplayName(cameraForWidget(w)) }}</div>
+            <div class="wc-cam-feed">
+              <CameraFeed :cam="cameraForWidget(w)" :showLabel="!w.config.hiddenFields?.includes('label')" />
+            </div>
+            <div v-if="!cameraForWidget(w)" class="wc-cam-empty">No camera assigned — use widget settings ⚙ to select one.</div>
+          </div>
+        </template>
+
       </WidgetShell>
     </div>
 
@@ -187,6 +198,7 @@ import { useSettingsStore } from '../stores/settings.js'
 import { useMoonraker } from '../composables/useMoonraker.js'
 import { useDashboardLayout } from '../composables/useDashboardLayout.js'
 import WidgetShell from '../components/WidgetShell.vue'
+import CameraFeed from '../components/CameraFeed.vue'
 
 const settings = useSettingsStore()
 const { klippyState, sendGcode, subscribeToStatus, connect } = useMoonraker()
@@ -241,6 +253,7 @@ const WIDGET_DEFS = [
   { type: 'laser',    label: 'Laser Status',    defaultW: 220, defaultH: 180, defaultConfig: {}, fields: [{ key: 'speed', label: 'Speed readout' }, { key: 'interlock', label: 'Interlock status' }] },
   { type: 'job',      label: 'Job Progress',    defaultW: 280, defaultH: 160, defaultConfig: {}, fields: [{ key: 'eta', label: 'ETA' }] },
   { type: 'controls', label: 'Job Controls',    defaultW: 480, defaultH: 80,  defaultConfig: {}, fields: [] },
+  { type: 'camera',   label: 'Camera Feed',     defaultW: 320, defaultH: 260, defaultConfig: { cameraId: null }, fields: [{ key: 'label', label: 'Show camera name label' }] },
 ]
 
 function widgetFields(type)  { return WIDGET_DEFS.find(d => d.type === type)?.fields || [] }
@@ -264,10 +277,20 @@ const canvasStyle = computed(() => {
 
 const availableToAdd = computed(() => {
   const onCanvas = new Set(layout.widgets.value.map(w => w.type))
-  return WIDGET_DEFS.filter(d => !onCanvas.has(d.type))
+  return WIDGET_DEFS.filter(d => d.type === 'camera' || !onCanvas.has(d.type))
 })
 
 // ── Actions ────────────────────────────────────────────────────
+// ── Camera helpers ─────────────────────────────────────────────
+const CAM_TYPE_LABELS = { bga_grid: 'BGA Grid', alignment_chip: 'Alignment - Chip', alignment_board: 'Alignment - Board', custom: 'Custom' }
+function cameraForWidget(w) {
+  const cams = settings.cameras
+  if (!Array.isArray(cams) || cams.length === 0) return null
+  if (w.config.cameraId) return cams.find(c => c.id === w.config.cameraId) || cams[0]
+  return cams[0]
+}
+function camDisplayName(cam) { return cam.name || CAM_TYPE_LABELS[cam.type] || 'Camera' }
+
 async function homeAxes()     { await sendGcode('G28') }
 async function goOrigin()     { await sendGcode('G0 X0 Y0 F3000') }
 async function startJob()     { if (jobName.value) await sendGcode(`SDCARD_PRINT_FILE FILENAME="${jobName.value}"`) }
@@ -371,6 +394,12 @@ onUnmounted(() => { if (unsubscribe) unsubscribe() })
 
 .w-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; height: 100%; }
 .wctl-sep { flex: 1; }
+
+/* Camera */
+.w-camera { display: flex; flex-direction: column; gap: 6px; height: 100%; }
+.wc-cam-title { font-size: 10px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: var(--text-muted); flex-shrink: 0; }
+.wc-cam-feed { flex: 1; border-radius: var(--radius); overflow: hidden; min-height: 0; }
+.wc-cam-empty { font-size: 11px; color: var(--text-muted); font-style: italic; }
 
 .btn-sm { padding: 6px 12px; font-size: 12px; }
 </style>

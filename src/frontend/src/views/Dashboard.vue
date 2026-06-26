@@ -242,6 +242,24 @@
           <div v-else class="w-error-idle">No active faults.</div>
         </template>
 
+        <!-- ── CAMERA widget ─────────────────────────────── -->
+        <template v-else-if="w.type === 'camera'">
+          <div class="w-camera">
+            <div class="wc-cam-title" v-if="cameraForWidget(w)">
+              {{ camDisplayName(cameraForWidget(w)) }}
+            </div>
+            <div class="wc-cam-feed">
+              <CameraFeed
+                :cam="cameraForWidget(w)"
+                :showLabel="!w.config.hiddenFields?.includes('label')"
+              />
+            </div>
+            <div v-if="!cameraForWidget(w)" class="wc-cam-empty">
+              No camera assigned — use widget settings ⚙ to select one.
+            </div>
+          </div>
+        </template>
+
       </WidgetShell>
     </div>
 
@@ -294,6 +312,7 @@ import { useSettingsStore } from '../stores/settings.js'
 import { useMoonraker } from '../composables/useMoonraker.js'
 import { useDashboardLayout } from '../composables/useDashboardLayout.js'
 import WidgetShell from '../components/WidgetShell.vue'
+import CameraFeed from '../components/CameraFeed.vue'
 import LaserDashboard from './LaserDashboard.vue'
 
 const store    = useDeviceStore()
@@ -356,6 +375,12 @@ const WIDGET_DEFS = [
     defaultConfig: {},
     fields: [],
   },
+  {
+    type: 'camera', label: 'Camera Feed',
+    defaultW: 320, defaultH: 260,
+    defaultConfig: { cameraId: null },
+    fields: [{ key: 'label', label: 'Show camera name label' }],
+  },
 ]
 
 function widgetFields(type)   { return WIDGET_DEFS.find(d => d.type === type)?.fields || [] }
@@ -398,9 +423,20 @@ const canvasStyle = computed(() => {
 // Available widget types not already on canvas
 const availableToAdd = computed(() => {
   const onCanvas = new Set(layout.widgets.value.map(w => w.type))
-  // Zone can be multi, others singular
-  return WIDGET_DEFS.filter(d => d.type === 'zone' || !onCanvas.has(d.type))
+  // zone and camera can appear multiple times; all others are singular
+  return WIDGET_DEFS.filter(d => d.type === 'zone' || d.type === 'camera' || !onCanvas.has(d.type))
 })
+
+// ── Camera helpers ─────────────────────────────────────────────
+function cameraForWidget(w) {
+  const cams = settings.cameras
+  if (!Array.isArray(cams) || cams.length === 0) return null
+  // If a specific cameraId is set in config, use it; otherwise first camera
+  if (w.config.cameraId) return cams.find(c => c.id === w.config.cameraId) || cams[0]
+  return cams[0]
+}
+const CAM_TYPE_LABELS = { bga_grid: 'BGA Grid', alignment_chip: 'Alignment - Chip', alignment_board: 'Alignment - Board', custom: 'Custom' }
+function camDisplayName(cam) { return cam.name || CAM_TYPE_LABELS[cam.type] || 'Camera' }
 
 // ── Zone helpers ───────────────────────────────────────────────
 function zoneLabel(z)    { return z?.label || `Zone ${z?.index ?? '?'}` }
@@ -739,6 +775,12 @@ onMounted(async () => {
 .w-error-idle { font-size: 12px; color: var(--text-muted); }
 .we-label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--red); }
 .we-msg { font-family: var(--font-mono); font-size: 13px; color: var(--text-dim); }
+
+/* Camera */
+.w-camera { display: flex; flex-direction: column; gap: 6px; height: 100%; }
+.wc-cam-title { font-size: 10px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: var(--text-muted); flex-shrink: 0; }
+.wc-cam-feed { flex: 1; border-radius: var(--radius); overflow: hidden; min-height: 0; }
+.wc-cam-empty { font-size: 11px; color: var(--text-muted); font-style: italic; }
 
 /* ── Modals ───────────────────────────────────────────────────── */
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 300; }
