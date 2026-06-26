@@ -27,6 +27,7 @@
               <option value="hot_air">Hot Air Station</option>
               <option value="hot_plate">Hot Plate</option>
               <option value="laser_plotter">Laser Plotter / Cutter</option>
+              <option value="3d_printer">3D Printer</option>
             </select>
           </div>
           <div class="field-row">
