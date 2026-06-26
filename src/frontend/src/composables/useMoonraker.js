@@ -5,8 +5,15 @@
  * and Klipper state notifications.
  *
  * Usage:
- *   const { connected, klippyState, send } = useMoonraker()
+ *   const { connected, klippyState, send, runGcode, sendGcode, subscribeToStatus } = useMoonraker()
  *   // Call connect() once at app startup (App.vue onMounted)
+ *
+ * subscribeToStatus(callback) — register a handler for raw status diffs.
+ *   The callback receives the status object for every notify_status_update.
+ *   Returns an unsubscribe function. Use in onMounted/onUnmounted:
+ *
+ *   const unsub = subscribeToStatus(data => { ... })
+ *   onUnmounted(() => unsub())
  */
 
 import { ref, readonly } from 'vue'
@@ -18,12 +25,36 @@ let reconnectTimer = null
 let msgId = 0
 const pendingRequests = new Map()
 
-const connected  = ref(false)
+const connected   = ref(false)
 const klippyState = ref('disconnected') // disconnected | startup | ready | shutdown | error
 
-// Objects to subscribe to — add more here as the frontend grows
+// ── Status subscribers ────────────────────────────────────────────────────────
+// Dashboards register callbacks here via subscribeToStatus().
+// Every notify_status_update is forwarded to all registered handlers.
+const statusSubscribers = new Set()
+
+function subscribeToStatus(callback) {
+  statusSubscribers.add(callback)
+  return () => statusSubscribers.delete(callback)
+}
+
+// Objects to subscribe to on the Moonraker websocket.
+// All device types share one subscription; unused fields are simply ignored
+// by dashboards that don't need them. null = subscribe to all fields.
 const SUBSCRIBED_OBJECTS = {
+  // Bakesail rework/oven state (bakesail.py extra)
   bakesail: null,
+
+  // 3D printer / laser objects (standard Klipper — present when configured)
+  extruder:        ['temperature', 'target', 'power'],
+  heater_bed:      ['temperature', 'target', 'power'],
+  fan:             ['speed'],
+  print_stats:     ['filename', 'state', 'print_duration', 'filament_used', 'info'],
+  display_status:  ['progress', 'message'],
+  virtual_sdcard:  ['progress', 'is_active', 'file_position', 'file_size'],
+  toolhead:        ['position', 'homed_axes', 'max_velocity', 'max_accel', 'speed'],
+  gcode_move:      ['speed_factor', 'extrude_factor'],
+  idle_timeout:    ['state'],
 }
 
 // ── JSON-RPC helpers ──────────────────────────────────────────────────────────
@@ -44,6 +75,11 @@ function send(method, params = {}) {
   })
 }
 
+// Convenience alias used by LaserDashboard and PrinterDashboard
+function sendGcode(script) {
+  return send('printer.gcode.script', { script })
+}
+
 // ── Subscription ─────────────────────────────────────────────────────────────
 
 async function subscribe() {
@@ -51,7 +87,7 @@ async function subscribe() {
     const result = await send('printer.objects.subscribe', {
       objects: SUBSCRIBED_OBJECTS,
     })
-    // Initial state is in result.status
+    // Initial state snapshot — feed to both the device store and subscribers
     if (result?.status) {
       applyStatusUpdate(result.status)
     }
@@ -61,9 +97,21 @@ async function subscribe() {
 }
 
 function applyStatusUpdate(status) {
+  // Always update the device store with bakesail-specific fields
   const store = useDeviceStore()
   if (status.bakesail) {
     store.updateBakesail(status.bakesail)
+  }
+
+  // Fan updates (rework station fans come through bakesail, but printer fan
+  // comes through the standard 'fan' object)
+  if (status.fan !== undefined) {
+    // Let subscribers handle it — PrinterDashboard reads fan.speed directly
+  }
+
+  // Broadcast the full diff to any registered dashboard subscribers
+  for (const cb of statusSubscribers) {
+    try { cb(status) } catch (e) { console.warn('[bakesail] subscriber error:', e) }
   }
 }
 
@@ -110,7 +158,7 @@ function handleMessage(event) {
       useDeviceStore().setKlippyOffline()
       startKlippyPoll()
       break
-    // Ignore other notifications for now
+    // Ignore other notifications
   }
 }
 
@@ -162,16 +210,14 @@ function connect() {
   ws.onmessage = handleMessage
 
   ws.onclose = () => {
-    connected.value  = false
+    connected.value   = false
     klippyState.value = 'disconnected'
     useDeviceStore().setKlippyOffline()
-    // Reconnect with a fixed 3s delay
     clearTimeout(reconnectTimer)
     reconnectTimer = setTimeout(connect, 3000)
   }
 
   ws.onerror = () => {
-    // onclose fires after onerror, reconnect happens there
     ws.close()
   }
 }
@@ -214,11 +260,13 @@ function stopKlippyPoll() {
 
 export function useMoonraker() {
   return {
-    connected:   readonly(connected),
-    klippyState: readonly(klippyState),
+    connected:         readonly(connected),
+    klippyState:       readonly(klippyState),
     connect,
     send,
     runGcode,
+    sendGcode,            // alias — same as runGcode, matches LaserDashboard usage
+    subscribeToStatus,    // (callback) => unsubscribeFn
     startKlippyPoll,
   }
 }
