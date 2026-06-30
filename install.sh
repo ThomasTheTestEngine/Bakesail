@@ -149,9 +149,14 @@ install_klipper_extra() {
     section "Installing Klipper extra"
 
     # bakesail.py is only needed for thermal/rework device types.
-    # If a printer.cfg already exists this is a 3D printer install — skip it.
+    # If a printer.cfg already exists this is a 3D printer install — skip it
+    # and remove any previously installed copy so Klipper doesn't load it.
     if [[ -f "${PRINTER_CONFIG_DIR}/printer.cfg" ]]; then
         info "3D printer install detected — skipping bakesail.py (not needed)."
+        if [[ -f "${KLIPPER_EXTRAS_DIR}/bakesail.py" ]]; then
+            rm "${KLIPPER_EXTRAS_DIR}/bakesail.py"
+            info "Removed existing bakesail.py from Klipper extras."
+        fi
         return
     fi
 
