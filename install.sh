@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # =============================================================================
 # Bakesail Installer
-# Installs the Bakesail BGA rework station frontend on top of MainsailOS.
-# Run as the default 'pi' user (or equivalent) — not as root.
+# Installs the Bakesail frontend on top of MainsailOS.
+# Run as your normal user (not root) — the script uses sudo internally.
 #
 # Usage:
 #   curl -sSL https://raw.githubusercontent.com/ThomasTheTestEngine/Bakesail/main/install.sh | bash
@@ -10,9 +10,6 @@
 
 set -euo pipefail
 
-# -----------------------------------------------------------------------------
-# Colour helpers
-# -----------------------------------------------------------------------------
 RED='\033[0;31m'
 GRN='\033[0;32m'
 YLW='\033[1;33m'
@@ -29,7 +26,7 @@ die()     { error "$*"; exit 1; }
 section() { echo -e "\n${CYN}${BLD}>>> $* ${RST}"; }
 
 # -----------------------------------------------------------------------------
-# Configuration
+# Configuration — all paths derived from HOME, no hardcoded usernames
 # -----------------------------------------------------------------------------
 BAKESAIL_REPO="https://github.com/ThomasTheTestEngine/Bakesail.git"
 BAKESAIL_BRANCH="main"
@@ -44,11 +41,11 @@ MOONRAKER_CONF="${PRINTER_CONFIG_DIR}/moonraker.conf"
 NGINX_AVAIL="/etc/nginx/sites-available"
 NGINX_ENABLED="/etc/nginx/sites-enabled"
 NGINX_MAINSAIL_CONF="${NGINX_AVAIL}/mainsail"
+NGINX_MAINSAIL_8080_CONF="${NGINX_AVAIL}/mainsail-8080"
 NGINX_BAKESAIL_CONF="${NGINX_AVAIL}/bakesail"
 NGINX_BACKUP_DIR="${BAKESAIL_DIR}/.nginx_backup"
 
-FIRST_RUN_FLAG="${BAKESAIL_DIR}/.first_run"
-
+MAINSAIL_PORT=8080
 NODE_MIN_MAJOR=18
 
 # -----------------------------------------------------------------------------
@@ -57,30 +54,19 @@ NODE_MIN_MAJOR=18
 preflight_checks() {
     section "Pre-flight checks"
 
-    # Must not run as root
-    [[ "${EUID}" -ne 0 ]] || die "Do not run this script as root. Run as your normal user (e.g. pi)."
-
-    # sudo must be available and work without password (standard on MainsailOS)
+    [[ "${EUID}" -ne 0 ]] || die "Do not run this script as root. Run as your normal user."
     sudo -n true 2>/dev/null || die "This script requires passwordless sudo. On MainsailOS this should be the default."
-
-    # We expect to be on a Debian/Ubuntu-based system
     command -v apt-get &>/dev/null || die "apt-get not found. This installer targets Debian-based systems (MainsailOS)."
-
-    # Klipper must already be installed
     [[ -d "${HOME}/klipper" ]] || die "Klipper directory not found at ~/klipper. Please install MainsailOS first."
     [[ -d "${KLIPPER_EXTRAS_DIR}" ]] || die "Klipper extras directory not found at ${KLIPPER_EXTRAS_DIR}."
-
-    # Moonraker must already be present
     [[ -f "${MOONRAKER_CONF}" ]] || die "moonraker.conf not found at ${MOONRAKER_CONF}. Please install MainsailOS first."
-
-    # Printer data dir must exist
     [[ -d "${PRINTER_CONFIG_DIR}" ]] || die "printer_data/config not found at ${PRINTER_CONFIG_DIR}."
 
     success "Pre-flight checks passed."
 }
 
 # -----------------------------------------------------------------------------
-# Dependency installation
+# Dependencies
 # -----------------------------------------------------------------------------
 install_dependencies() {
     section "Installing system dependencies"
@@ -88,10 +74,9 @@ install_dependencies() {
     sudo apt-get update -qq
 
     local pkgs=()
-
-    command -v git &>/dev/null  || pkgs+=(git)
+    command -v git  &>/dev/null || pkgs+=(git)
     command -v curl &>/dev/null || pkgs+=(curl)
-    command -v jq &>/dev/null   || pkgs+=(jq)
+    command -v jq   &>/dev/null || pkgs+=(jq)
 
     if [[ ${#pkgs[@]} -gt 0 ]]; then
         info "Installing: ${pkgs[*]}"
@@ -100,13 +85,11 @@ install_dependencies() {
         info "System dependencies already satisfied."
     fi
 
-    # Node.js — check version, install/upgrade via NodeSource if needed
     install_node
 }
 
 install_node() {
     local current_major=0
-
     if command -v node &>/dev/null; then
         current_major=$(node --version | sed 's/v\([0-9]*\).*/\1/')
     fi
@@ -123,7 +106,7 @@ install_node() {
 }
 
 # -----------------------------------------------------------------------------
-# Clone or update the Bakesail repo
+# Clone / update repo
 # -----------------------------------------------------------------------------
 clone_repo() {
     section "Fetching Bakesail source"
@@ -142,13 +125,12 @@ clone_repo() {
 }
 
 # -----------------------------------------------------------------------------
-# Build the Vue frontend
+# Build frontend
 # -----------------------------------------------------------------------------
 build_frontend() {
     section "Building Bakesail frontend"
 
     local frontend_dir="${BAKESAIL_DIR}/src/frontend"
-
     [[ -d "${frontend_dir}" ]] || die "Frontend source not found at ${frontend_dir}."
 
     info "Installing npm dependencies..."
@@ -161,38 +143,30 @@ build_frontend() {
 }
 
 # -----------------------------------------------------------------------------
-# Install the Klipper extra
+# Install Klipper extra
 # -----------------------------------------------------------------------------
 install_klipper_extra() {
     section "Installing Klipper extra"
 
     local src="${BAKESAIL_DIR}/src/klipper/bakesail.py"
     local dst="${KLIPPER_EXTRAS_DIR}/bakesail.py"
-
     [[ -f "${src}" ]] || die "bakesail.py not found at ${src}."
-
     cp "${src}" "${dst}"
-    success "bakesail.py installed to ${dst}."
+    success "bakesail.py installed."
 }
 
 # -----------------------------------------------------------------------------
-# Install config fragments (macros, example profile)
+# Install config fragments
 # -----------------------------------------------------------------------------
 install_config() {
     section "Installing config files"
 
-    # Bakesail macros include (test-pin macro etc.)
     local macros_src="${BAKESAIL_DIR}/config/bakesail_macros.cfg"
-    local macros_dst="${PRINTER_CONFIG_DIR}/bakesail_macros.cfg"
-
     if [[ -f "${macros_src}" ]]; then
-        cp "${macros_src}" "${macros_dst}"
+        cp "${macros_src}" "${PRINTER_CONFIG_DIR}/bakesail_macros.cfg"
         info "bakesail_macros.cfg installed."
-    else
-        warn "bakesail_macros.cfg not found in repo — skipping."
     fi
 
-    # Profile directory
     mkdir -p "${PROFILES_DIR}"
     local example_profile="${BAKESAIL_DIR}/config/profiles/lead_free_standard.json"
     if [[ -f "${example_profile}" ]]; then
@@ -204,19 +178,18 @@ install_config() {
 }
 
 # -----------------------------------------------------------------------------
-# Register Bakesail with Moonraker's update manager
+# Register with Moonraker update manager
 # -----------------------------------------------------------------------------
 register_moonraker() {
     section "Registering with Moonraker update manager"
 
     local marker="[update_manager bakesail]"
-
     if grep -qF "${marker}" "${MOONRAKER_CONF}"; then
         info "Moonraker update manager entry already present — skipping."
         return
     fi
 
-    cat >> "${MOONRAKER_CONF}" << EOF
+    cat >> "${MOONRAKER_CONF}" << MCEOF
 
 # --- Bakesail (added by installer) ---
 [update_manager bakesail]
@@ -225,56 +198,66 @@ path: ${BAKESAIL_DIR}
 origin: ${BAKESAIL_REPO}
 primary_branch: ${BAKESAIL_BRANCH}
 is_system_service: False
-EOF
+MCEOF
 
     success "Moonraker update manager entry added."
 }
 
 # -----------------------------------------------------------------------------
-# Configure nginx — back up Mainsail config, install Bakesail config
+# Configure nginx
+#   - Back up the original Mainsail config
+#   - Move Mainsail to port 8080 (new config written alongside original)
+#   - Install Bakesail on port 80
 # -----------------------------------------------------------------------------
 configure_nginx() {
     section "Configuring nginx"
 
-    # Back up Mainsail nginx config if not already backed up
-    if [[ -f "${NGINX_MAINSAIL_CONF}" ]]; then
-        mkdir -p "${NGINX_BACKUP_DIR}"
-        if [[ ! -f "${NGINX_BACKUP_DIR}/mainsail.bak" ]]; then
-            sudo cp "${NGINX_MAINSAIL_CONF}" "${NGINX_BACKUP_DIR}/mainsail.bak"
-            info "Mainsail nginx config backed up to ${NGINX_BACKUP_DIR}/mainsail.bak"
-        else
-            info "Mainsail nginx config backup already exists — skipping backup."
-        fi
+    mkdir -p "${NGINX_BACKUP_DIR}"
+
+    # ── Back up original Mainsail config ──────────────────────────────────────
+    if [[ -f "${NGINX_MAINSAIL_CONF}" ]] && [[ ! -f "${NGINX_BACKUP_DIR}/mainsail.bak" ]]; then
+        sudo cp "${NGINX_MAINSAIL_CONF}" "${NGINX_BACKUP_DIR}/mainsail.bak"
+        info "Original Mainsail nginx config backed up."
     fi
 
-    # Disable Mainsail nginx site
+    # ── Write Mainsail-on-8080 config ─────────────────────────────────────────
+    # Take the original config and swap port 80 → 8080. We write it as a
+    # separate file so the original is never modified.
+    if [[ -f "${NGINX_BACKUP_DIR}/mainsail.bak" ]]; then
+        sed 's/listen 80\b/listen '"${MAINSAIL_PORT}"'/g; s/listen \[::\]:80\b/listen [::]:'"${MAINSAIL_PORT}"'/g' \
+            "${NGINX_BACKUP_DIR}/mainsail.bak" | sudo tee "${NGINX_MAINSAIL_8080_CONF}" > /dev/null
+        info "Mainsail-on-${MAINSAIL_PORT} config written."
+    fi
+
+    # ── Disable Mainsail on port 80, enable it on 8080 ────────────────────────
     if [[ -L "${NGINX_ENABLED}/mainsail" ]]; then
         sudo rm "${NGINX_ENABLED}/mainsail"
-        info "Mainsail nginx site disabled."
+        info "Mainsail port-80 site disabled."
+    fi
+    if [[ ! -L "${NGINX_ENABLED}/mainsail-8080" ]]; then
+        sudo ln -s "${NGINX_MAINSAIL_8080_CONF}" "${NGINX_ENABLED}/mainsail-8080"
+        info "Mainsail port-${MAINSAIL_PORT} site enabled."
     fi
 
-    # Install Bakesail nginx config, substituting actual home directory
+    # ── Install Bakesail on port 80 ───────────────────────────────────────────
+    # Substitute the actual home directory so no username is hardcoded
     local nginx_src="${BAKESAIL_DIR}/config/nginx/bakesail.nginx.conf"
     [[ -f "${nginx_src}" ]] || die "Bakesail nginx config not found at ${nginx_src}."
 
-    sed "s|/home/pi/|${HOME}/|g" "${nginx_src}" | sudo tee "${NGINX_BAKESAIL_CONF}" > /dev/null
+    sed "s|BAKESAIL_DIST_PATH|${BAKESAIL_DIR}/src/frontend/dist|g" \
+        "${nginx_src}" | sudo tee "${NGINX_BAKESAIL_CONF}" > /dev/null
 
-    # Enable Bakesail nginx site
     if [[ ! -L "${NGINX_ENABLED}/bakesail" ]]; then
         sudo ln -s "${NGINX_BAKESAIL_CONF}" "${NGINX_ENABLED}/bakesail"
     fi
 
-    # Test and reload nginx
-    sudo nginx -t -q || die "nginx config test failed. Check ${NGINX_BAKESAIL_CONF}."
+    sudo nginx -t -q || die "nginx config test failed."
     sudo systemctl reload nginx
-    success "nginx configured and reloaded."
+    success "nginx configured — Bakesail on :80, Mainsail on :${MAINSAIL_PORT}."
 }
 
 # -----------------------------------------------------------------------------
-# Auto-detect existing printer.cfg and skip the wizard for 3D printer installs
-# If printer.cfg already exists we assume this is a 3D printer, write a
-# bakesail.cfg stub and a bakesail_settings.json so the frontend skips the
-# setup wizard entirely and opens directly on the printer dashboard.
+# Auto-detect existing printer.cfg — skip wizard and set device type
 # -----------------------------------------------------------------------------
 maybe_skip_wizard() {
     local printer_cfg="${PRINTER_CONFIG_DIR}/printer.cfg"
@@ -286,26 +269,20 @@ maybe_skip_wizard() {
         return
     fi
 
-    info "Existing printer.cfg detected — configuring as 3D printer and skipping wizard."
+    info "Existing printer.cfg detected — configuring as 3D printer, skipping wizard."
 
-    # Write a minimal bakesail.cfg stub so the frontend's firstRun check passes.
-    # The 3d_printer device type does not use bakesail.py, so no [bakesail] section
-    # is needed here. This file exists only to signal "wizard already completed".
     if [[ ! -f "${bakesail_cfg}" ]]; then
         cat > "${bakesail_cfg}" << 'CFGEOF'
 # bakesail.cfg — auto-generated by Bakesail installer
 # Device type: 3d_printer
 # This file signals that first-run setup is complete.
-# For thermal/rework device types this file contains heater zone definitions.
-# It is safe to delete and re-run the setup wizard if you need to reconfigure.
+# Delete it to re-run the setup wizard.
 CFGEOF
         info "bakesail.cfg stub written."
     fi
 
-    # Write bakesail_settings.json with deviceType set to 3d_printer.
-    # Only write if it doesn't already exist — don't overwrite a user's config.
     if [[ ! -f "${bakesail_settings}" ]]; then
-        cat > "${bakesail_settings}" << 'JSONEOF'
+        cat > "${bakesail_settings}" << JSONEOF
 {
   "deviceType": "3d_printer",
   "machineClass": "manual",
@@ -319,37 +296,27 @@ JSONEOF
         info "bakesail_settings.json written with deviceType: 3d_printer."
     fi
 
-    success "3D printer auto-configuration complete — wizard will be skipped."
+    success "3D printer auto-configuration complete."
 }
 
 # -----------------------------------------------------------------------------
-# Mark first-run so the wizard launches on first browser visit
-# -----------------------------------------------------------------------------
-set_first_run_flag() {
-    touch "${FIRST_RUN_FLAG}"
-    info "First-run wizard flag set."
-}
-
-# -----------------------------------------------------------------------------
-# Restart Klipper / Moonraker to pick up new extra and config
+# Restart services
 # -----------------------------------------------------------------------------
 restart_services() {
     section "Restarting services"
 
-    # Restart Moonraker first so it re-reads its config
     if systemctl is-active --quiet moonraker; then
         sudo systemctl restart moonraker
         info "Moonraker restarted."
     else
-        warn "Moonraker service not active — skipping restart."
+        warn "Moonraker not active — skipping."
     fi
 
-    # Restart Klipper so it loads bakesail.py
     if systemctl is-active --quiet klipper; then
         sudo systemctl restart klipper
         info "Klipper restarted."
     else
-        warn "Klipper service not active — skipping restart."
+        warn "Klipper not active — skipping."
     fi
 
     success "Services restarted."
@@ -361,7 +328,6 @@ restart_services() {
 print_done() {
     local ip
     ip=$(hostname -I | awk '{print $1}' 2>/dev/null || echo "<your-pi-ip>")
-
     local printer_cfg="${PRINTER_CONFIG_DIR}/printer.cfg"
 
     echo
@@ -369,15 +335,17 @@ print_done() {
     echo -e "${GRN}${BLD}  Bakesail installation complete!${RST}"
     echo -e "${GRN}${BLD}============================================${RST}"
     echo
-    echo -e "  Open ${BLD}http://${ip}${RST} in your browser."
+    echo -e "  Bakesail  →  ${BLD}http://${ip}${RST}"
+    echo -e "  Mainsail  →  ${BLD}http://${ip}:${MAINSAIL_PORT}${RST}"
+    echo
     if [[ -f "${printer_cfg}" ]]; then
         echo -e "  Existing printer.cfg detected — opening as ${BLD}3D Printer${RST}."
         echo -e "  Change device type any time in ${BLD}Settings${RST}."
     else
-        echo -e "  The setup wizard will run on first visit."
+        echo -e "  Setup wizard will run on first visit."
     fi
     echo
-    echo -e "  To restore Mainsail later, run:"
+    echo -e "  To restore Mainsail to port 80:"
     echo -e "  ${BLD}${BAKESAIL_DIR}/scripts/uninstall.sh${RST}"
     echo
 }
@@ -398,7 +366,6 @@ main() {
     register_moonraker
     configure_nginx
     maybe_skip_wizard
-    set_first_run_flag
     restart_services
     print_done
 }

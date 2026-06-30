@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # Bakesail Uninstaller
-# Removes Bakesail and restores Mainsail nginx config.
+# Removes Bakesail and restores Mainsail to port 80.
 # Does NOT remove printer.cfg, profiles, or Klipper itself.
 # =============================================================================
 
@@ -33,7 +33,7 @@ NGINX_BACKUP_DIR="${BAKESAIL_DIR}/.nginx_backup"
 sudo -n true 2>/dev/null || die "Requires passwordless sudo."
 
 echo -e "\n${CYN}${BLD}  Bakesail Uninstaller${RST}\n"
-warn "This will remove Bakesail and restore Mainsail."
+warn "This will remove Bakesail and restore Mainsail to port 80."
 read -r -p "Continue? [y/N] " confirm
 [[ "${confirm}" =~ ^[Yy]$ ]] || { info "Aborted."; exit 0; }
 
@@ -47,14 +47,24 @@ if [[ -f "${NGINX_AVAIL}/bakesail" ]]; then
     info "Bakesail nginx config removed."
 fi
 
-section "Restoring Mainsail nginx config"
+section "Removing Mainsail port-8080 site"
+if [[ -L "${NGINX_ENABLED}/mainsail-8080" ]]; then
+    sudo rm "${NGINX_ENABLED}/mainsail-8080"
+    info "Mainsail port-8080 site disabled."
+fi
+if [[ -f "${NGINX_AVAIL}/mainsail-8080" ]]; then
+    sudo rm "${NGINX_AVAIL}/mainsail-8080"
+    info "Mainsail port-8080 config removed."
+fi
+
+section "Restoring Mainsail to port 80"
 if [[ -f "${NGINX_BACKUP_DIR}/mainsail.bak" ]]; then
     sudo cp "${NGINX_BACKUP_DIR}/mainsail.bak" "${NGINX_AVAIL}/mainsail"
     if [[ ! -L "${NGINX_ENABLED}/mainsail" ]]; then
         sudo ln -s "${NGINX_AVAIL}/mainsail" "${NGINX_ENABLED}/mainsail"
     fi
     sudo nginx -t -q && sudo systemctl reload nginx
-    success "Mainsail nginx config restored."
+    success "Mainsail restored to port 80."
 else
     warn "No Mainsail nginx backup found at ${NGINX_BACKUP_DIR}/mainsail.bak — restore manually."
 fi
@@ -67,18 +77,17 @@ fi
 
 section "Removing Moonraker update manager entry"
 if grep -qF "[update_manager bakesail]" "${MOONRAKER_CONF}" 2>/dev/null; then
-    # Remove the bakesail block (marker comment through end of block)
     sed -i '/# --- Bakesail/,/^$/d' "${MOONRAKER_CONF}"
     success "Moonraker entry removed."
 fi
 
 section "Restarting services"
-sudo systemctl restart moonraker 2>/dev/null && info "Moonraker restarted." || warn "Moonraker restart failed or not running."
-sudo systemctl restart klipper  2>/dev/null && info "Klipper restarted."    || warn "Klipper restart failed or not running."
+sudo systemctl restart moonraker 2>/dev/null && info "Moonraker restarted." || warn "Moonraker restart failed."
+sudo systemctl restart klipper   2>/dev/null && info "Klipper restarted."   || warn "Klipper restart failed."
 
 echo
-echo -e "${GRN}${BLD}Bakesail removed. Mainsail should be accessible again.${RST}"
+echo -e "${GRN}${BLD}Bakesail removed. Mainsail is back on port 80.${RST}"
 echo
-echo "  Note: Your printer.cfg, profiles, and bakesail_macros.cfg were"
-echo "  left in place. Remove ${HOME}/bakesail manually if desired."
+echo "  Note: printer.cfg, profiles, and bakesail_macros.cfg were left in place."
+echo "  Remove ${HOME}/bakesail manually if desired."
 echo
