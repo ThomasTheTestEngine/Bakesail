@@ -26,10 +26,7 @@
       </nav>
 
       <div class="sidebar-footer">
-        <!-- Mainsail link -->
-        <a class="mainsail-btn" :href="`http://${host}:8080`" target="_blank" rel="noopener">
-          ⊞ Mainsail ↗
-        </a>
+        <!-- Mainsail link removed — Mainsail ran on port 80 which Bakesail now occupies -->
         <!-- Connection status + theme toggle -->
         <div class="conn-row">
           <div style="display:flex;align-items:center;gap:7px">
