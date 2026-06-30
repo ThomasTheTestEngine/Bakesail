@@ -69,7 +69,12 @@ else
     warn "No Mainsail nginx backup found at ${NGINX_BACKUP_DIR}/mainsail.bak — restore manually."
 fi
 
-section "Removing Klipper extra"
+section "Removing Bakesail config files"
+BAKESAIL_CFG="${HOME}/printer_data/config/bakesail.cfg"
+if [[ -f "${BAKESAIL_CFG}" ]]; then
+    rm "${BAKESAIL_CFG}"
+    success "bakesail.cfg removed."
+fi
 if [[ -f "${KLIPPER_EXTRAS_DIR}/bakesail.py" ]]; then
     rm "${KLIPPER_EXTRAS_DIR}/bakesail.py"
     success "bakesail.py removed."
