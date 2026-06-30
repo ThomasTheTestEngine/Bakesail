@@ -152,7 +152,7 @@ build_frontend() {
     [[ -d "${frontend_dir}" ]] || die "Frontend source not found at ${frontend_dir}."
 
     info "Installing npm dependencies..."
-    npm --prefix "${frontend_dir}" ci --silent
+    npm --prefix "${frontend_dir}" install --silent
 
     info "Building production bundle..."
     npm --prefix "${frontend_dir}" run build --silent
