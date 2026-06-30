@@ -253,11 +253,11 @@ configure_nginx() {
         info "Mainsail nginx site disabled."
     fi
 
-    # Install Bakesail nginx config
+    # Install Bakesail nginx config, substituting actual home directory
     local nginx_src="${BAKESAIL_DIR}/config/nginx/bakesail.nginx.conf"
     [[ -f "${nginx_src}" ]] || die "Bakesail nginx config not found at ${nginx_src}."
 
-    sudo cp "${nginx_src}" "${NGINX_BAKESAIL_CONF}"
+    sed "s|/home/pi/|${HOME}/|g" "${nginx_src}" | sudo tee "${NGINX_BAKESAIL_CONF}" > /dev/null
 
     # Enable Bakesail nginx site
     if [[ ! -L "${NGINX_ENABLED}/bakesail" ]]; then
