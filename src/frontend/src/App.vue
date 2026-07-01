@@ -339,12 +339,8 @@ function cbarSetTerminal(val) {
       cbarTermOutput.value += cbarAnsiToHtml(e.data)
       if (cbarAutoScroll.value) nextTick(cbarScrollBottom)
     }
-    cbarTermWs.onclose = () => { cbarTermOutput.value += '
-<span style="color:#f0d87a">[disconnected]</span>
-' }
-    cbarTermWs.onerror = () => { cbarTermOutput.value += '
-<span style="color:#e05555">[error — is [machine] in moonraker.conf?]</span>
-' }
+    cbarTermWs.onclose = () => { cbarTermOutput.value += `<span style="color:#f0d87a">[disconnected]</span>` }
+    cbarTermWs.onerror = () => { cbarTermOutput.value += `<span style="color:#e05555">[error — is [machine] in moonraker.conf?]</span>` }
   } else {
     if (cbarTermWs) { cbarTermWs.close(); cbarTermWs = null }
     nextTick(cbarScrollBottom)
