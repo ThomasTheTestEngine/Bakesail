@@ -27,7 +27,7 @@
 
       <div class="sidebar-footer">
         <!-- Mainsail link -->
-        <a class="mainsail-btn" :href="`http://${host}:8080`" target="_blank" rel="noopener">
+        <a class="mainsail-btn" :href="`http://${host}:8888`" target="_blank" rel="noopener">
           ⊞ Mainsail ↗
         </a>
         <!-- Connection status + theme toggle -->

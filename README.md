@@ -27,7 +27,7 @@ curl -sSL https://raw.githubusercontent.com/ThomasTheTestEngine/Bakesail/main/in
 
 Open a browser to your Pi's IP address. The setup wizard runs on first visit and walks you through pin assignment, hardware testing, and config generation.
 
-Mainsail remains accessible at port 8080 and is linked from the sidebar.
+Mainsail remains accessible at port 8888 and is linked from the sidebar.
 
 ## Uninstall / Restore Mainsail
 
