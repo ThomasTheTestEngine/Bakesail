@@ -160,6 +160,10 @@
             </button>
             <button class="cbar-btn" @click="cbarClear" title="Clear"><i class="mdi mdi-delete-sweep-outline"></i></button>
             <button class="cbar-btn cbar-send" @click="cbarSubmit" title="Send"><i class="mdi mdi-send"></i></button>
+            <div class="cbar-divider-v"></div>
+            <button class="cbar-btn" @click="cbarCollapse()" title="Minimize console">
+              <i class="mdi mdi-chevron-up"></i>
+            </button>
           </div>
 
           <!-- Log output -->
@@ -176,13 +180,9 @@
           </div>
 
           <!-- Bottom bar: drag handle (customize mode) + minimize -->
-          <div class="cbar-footer" @mousedown="cbarDragStart">
-            <span class="cbar-drag-hint" v-if="isCustomizing">
-              <i class="mdi mdi-drag-horizontal"></i>
-            </span>
-            <button class="cbar-minimize-btn" @click.stop="cbarCollapse()" title="Minimize">
-              <i class="mdi mdi-chevron-up"></i>
-            </button>
+          <!-- Drag-resize handle — always active on the bottom edge -->
+          <div class="cbar-resize-handle" @mousedown.prevent="cbarDragStart">
+            <i class="mdi mdi-drag-horizontal cbar-drag-icon"></i>
           </div>
         </template>
 
@@ -314,12 +314,12 @@ function cbarCollapse() {
 
 // Drag-to-resize the console (bottom footer bar)
 function cbarDragStart(e) {
-  if (!isCustomizing.value) return
   cbarDragY = e.clientY
   const startH = cbarHeight.value
   function onMove(ev) {
-    const delta = cbarDragY - ev.clientY   // dragging up = taller
+    const delta = ev.clientY - cbarDragY   // drag bottom edge down = taller
     cbarHeight.value = Math.max(120, Math.min(window.innerHeight * 0.8, startH + delta))
+    cbarDragY = ev.clientY  // update reference point each frame
   }
   function onUp() {
     cbarDragY = null
@@ -1171,41 +1171,33 @@ a { color: inherit; text-decoration: none; }
 }
 .cbar-mode-text-btn:hover { color: var(--text); border-color: var(--teal); }
 
-.cbar-footer {
-  height: 10px;
+.cbar-resize-handle {
+  height: 8px;
   flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 0 4px;
-  border-top: 1px solid var(--border);
-  position: relative;
-}
-
-.cbar-drag-hint {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  color: var(--text-muted);
-  font-size: 12px;
   cursor: ns-resize;
-  opacity: 0.5;
-}
-
-.cbar-minimize-btn {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 16px;
-  cursor: pointer;
-  padding: 0 4px;
-  line-height: 1;
   display: flex;
   align-items: center;
-  border-radius: var(--radius);
-  transition: color 0.1s;
+  justify-content: center;
+  border-top: 1px solid var(--border);
+  color: var(--border-2);
+  font-size: 14px;
+  transition: color 0.1s, background 0.1s;
+  user-select: none;
 }
-.cbar-minimize-btn:hover { color: var(--text); }
+.cbar-resize-handle:hover {
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+
+.cbar-drag-icon { pointer-events: none; }
+
+.cbar-divider-v {
+  width: 1px;
+  height: 18px;
+  background: var(--border-2);
+  flex-shrink: 0;
+  margin: 0 2px;
+}
 
 .cbar-line {
   display: flex;
