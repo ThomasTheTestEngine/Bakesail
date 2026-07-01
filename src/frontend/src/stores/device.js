@@ -51,6 +51,13 @@ export const useDeviceStore = defineStore('device', {
     homedAxes:      '',         // toolhead.homed_axes
     motorsEnabled:  true,
 
+    // ── System loads (fed from Klipper status subscription) ───────
+    // systemStats: { sysload, memavail, cputime }
+    // mcus: [{ name, version, freq, load, awake, temp }]
+    systemStats: null,
+    mcus: [],
+    hostInfo: null,   // from /machine/system_info — OS, distro, mem total, network
+
     // ── Machine capabilities (set by settings store) ───────────────
     hasVacuumPen:    false,
     hasNozzleVacuum: false,
@@ -161,6 +168,18 @@ export const useDeviceStore = defineStore('device', {
 
     acknowledgeOvertemp() {
       this.overtempAck = true
+    },
+
+    updateSystemStats(stats) {
+      this.systemStats = stats
+    },
+
+    updateHostInfo(info) {
+      this.hostInfo = info
+    },
+
+    updateMcus(mcus) {
+      this.mcus = mcus
     },
 
     updatePrinter({ printerState, idleState, homedAxes, motorsEnabled }) {

@@ -55,6 +55,7 @@ const SUBSCRIBED_OBJECTS = {
   toolhead:        ['position', 'homed_axes', 'max_velocity', 'max_accel', 'square_corner_velocity'],
   gcode_move:      ['speed_factor', 'extrude_factor', 'homing_origin', 'speed'],
   idle_timeout:    ['state'],
+  system_stats:    ['cputime', 'memavail', 'sysload'],
 }
 
 // ── JSON-RPC helpers ──────────────────────────────────────────────────────────
@@ -84,8 +85,19 @@ function sendGcode(script) {
 
 async function subscribe() {
   try {
+    // Discover all printer objects so we can subscribe to mcu * dynamically
+    const listResult = await send('printer.objects.list', {})
+    const mcuObjects = {}
+    if (listResult?.objects) {
+      for (const name of listResult.objects) {
+        if (name === 'mcu' || name.startsWith('mcu ')) {
+          mcuObjects[name] = ['last_stats', 'mcu_version', 'mcu_build_versions']
+        }
+      }
+    }
+
     const result = await send('printer.objects.subscribe', {
-      objects: SUBSCRIBED_OBJECTS,
+      objects: { ...SUBSCRIBED_OBJECTS, ...mcuObjects },
     })
     // Initial state snapshot — feed to both the device store and subscribers
     if (result?.status) {
@@ -107,6 +119,34 @@ function applyStatusUpdate(status) {
   // comes through the standard 'fan' object)
   if (status.fan !== undefined) {
     // Let subscribers handle it — PrinterDashboard reads fan.speed directly
+  }
+
+  // System stats
+  if (status.system_stats) {
+    store.updateSystemStats(status.system_stats)
+  }
+
+  // MCU stats — any key matching 'mcu' or 'mcu *'
+  const mcuKeys = Object.keys(status).filter(k => k === 'mcu' || k.startsWith('mcu '))
+  if (mcuKeys.length > 0) {
+    // Merge diffs into existing mcus array
+    const existing = store.mcus.slice()
+    for (const key of mcuKeys) {
+      const raw = status[key]
+      const ls  = raw.last_stats ?? {}
+      const idx = existing.findIndex(m => m.name === key)
+      const parsed = {
+        name:    key,
+        version: raw.mcu_version ?? existing[idx]?.version ?? '',
+        freq:    ls.freq     != null ? Math.round(ls.freq / 1e6) : (existing[idx]?.freq ?? null),
+        load:    ls.mcu_task_avg != null ? ls.mcu_task_avg.toFixed(3) : (existing[idx]?.load ?? null),
+        awake:   ls.mcu_awake   != null ? ls.mcu_awake.toFixed(3)    : (existing[idx]?.awake ?? null),
+        temp:    ls.temp        != null ? Math.round(ls.temp)         : (existing[idx]?.temp ?? null),
+      }
+      if (idx >= 0) existing[idx] = parsed
+      else existing.push(parsed)
+    }
+    store.updateMcus(existing)
   }
 
   // Broadcast the full diff to any registered dashboard subscribers
