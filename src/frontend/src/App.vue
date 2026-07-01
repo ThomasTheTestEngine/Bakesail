@@ -132,36 +132,19 @@
       </header>
 
       <!-- ── Console bar ─────────────────────────────────────────── -->
-      <div class="cbar" :class="{ 'cbar--expanded': cbarRows > 1 }" :style="{ '--cbar-rows': cbarRows }">
+      <div class="cbar" :style="cbarRows > 1 ? { height: (cbarRows * 22 + 28 + 34 + 32) + 'px' } : {}">
 
-        <!-- Single-line summary row (always visible) -->
-        <div class="cbar-summary">
+        <!-- Always-visible single line: prompt icon | last line | collapse/expand -->
+        <div class="cbar-summary" @click="cbarRows === 1 && cbarExpand()">
           <i class="mdi mdi-code-greater-than cbar-prompt-icon"></i>
-          <span class="cbar-last-line" @click="cbarRows > 1 ? null : cbarExpand()">{{ cbarLastLine || '…' }}</span>
-          <div class="cbar-summary-actions">
-            <!-- Expand/collapse -->
-            <button class="cbar-btn" @click="cbarRows > 1 ? cbarCollapse() : cbarExpand()" :title="cbarRows > 1 ? 'Collapse' : 'Expand'">
-              <i :class="cbarRows > 1 ? 'mdi mdi-chevron-up' : 'mdi mdi-chevron-down'"></i>
-            </button>
-          </div>
+          <span class="cbar-last-line">{{ cbarLastLine || '…' }}</span>
+          <button class="cbar-btn" @click.stop="cbarRows > 1 ? cbarCollapse() : cbarExpand()" :title="cbarRows > 1 ? 'Collapse' : 'Expand'">
+            <i :class="cbarRows > 1 ? 'mdi mdi-chevron-up' : 'mdi mdi-chevron-down'"></i>
+          </button>
         </div>
 
-        <!-- Expanded area -->
+        <!-- Expanded area: log + input, shown below the summary line -->
         <template v-if="cbarRows > 1">
-          <!-- Mode toggle + controls -->
-          <div class="cbar-controls">
-            <div class="cbar-mode-toggle">
-              <button :class="['cbar-mode-btn', !cbarTerminal ? 'cbar-mode-btn--active' : '']" @click="cbarTerminal = false">
-                <i class="mdi mdi-code-greater-than"></i> Klipper
-              </button>
-              <button :class="['cbar-mode-btn', cbarTerminal ? 'cbar-mode-btn--active' : '']" @click="cbarSetTerminal(true)">
-                <i class="mdi mdi-console"></i> Terminal
-              </button>
-            </div>
-            <button class="cbar-btn" @click="cbarClear" title="Clear"><i class="mdi mdi-delete-sweep-outline"></i></button>
-            <button class="cbar-btn" @click="cbarRows = Math.max(2, cbarRows - 1)" title="Less"><i class="mdi mdi-minus"></i></button>
-            <button class="cbar-btn" @click="cbarRows = Math.min(20, cbarRows + 1)" title="More"><i class="mdi mdi-plus"></i></button>
-          </div>
 
           <!-- Log output -->
           <div class="cbar-output" ref="cbarOutputEl" @scroll="cbarOnScroll">
@@ -176,7 +159,7 @@
             </template>
           </div>
 
-          <!-- Input -->
+          <!-- Input row + controls -->
           <div class="cbar-input-row">
             <i :class="cbarTerminal ? 'mdi mdi-bash' : 'mdi mdi-chevron-right'" class="cbar-prompt-icon"></i>
             <input ref="cbarInputEl" class="cbar-input" v-model="cbarInput"
@@ -185,8 +168,22 @@
                    @keydown.up.prevent="cbarHistoryUp"
                    @keydown.down.prevent="cbarHistoryDown"
                    spellcheck="false" autocomplete="off" autocapitalize="off" />
+            <!-- Size controls -->
+            <button class="cbar-btn" @click="cbarRows = Math.max(2, cbarRows - 1)" title="Fewer lines"><i class="mdi mdi-minus"></i></button>
+            <button class="cbar-btn" @click="cbarRows = Math.min(20, cbarRows + 1)" title="More lines"><i class="mdi mdi-plus"></i></button>
+            <!-- Mode toggle -->
+            <div class="cbar-mode-toggle">
+              <button :class="['cbar-mode-btn', !cbarTerminal ? 'cbar-mode-btn--active' : '']" @click="cbarTerminal = false; nextTick(cbarScrollBottom)">
+                <i class="mdi mdi-code-greater-than"></i>
+              </button>
+              <button :class="['cbar-mode-btn', cbarTerminal ? 'cbar-mode-btn--active' : '']" @click="cbarSetTerminal(true)">
+                <i class="mdi mdi-console"></i>
+              </button>
+            </div>
+            <button class="cbar-btn" @click="cbarClear" title="Clear"><i class="mdi mdi-delete-sweep-outline"></i></button>
             <button class="cbar-btn cbar-send" @click="cbarSubmit"><i class="mdi mdi-send"></i></button>
           </div>
+
         </template>
 
       </div>
@@ -999,18 +996,20 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: none;
 }
 
+/* Collapsed: just the summary line (28px) */
 .cbar-summary {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 10px;
+  padding: 0 8px;
   height: 28px;
   flex-shrink: 0;
-  cursor: default;
+  cursor: pointer;
+  user-select: none;
 }
+.cbar-summary:hover .cbar-last-line { color: var(--text); }
 
 .cbar-prompt-icon {
   color: var(--teal);
@@ -1026,22 +1025,36 @@ a { color: inherit; text-decoration: none; }
   white-space: nowrap;
   color: var(--text-dim);
   font-size: 11px;
+  transition: color 0.1s;
 }
 
-.cbar-summary-actions {
+.cbar-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 15px;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: var(--radius);
+  line-height: 1;
+  transition: color 0.1s;
   display: flex;
   align-items: center;
-  gap: 4px;
   flex-shrink: 0;
 }
+.cbar-btn:hover { color: var(--text); }
+.cbar-send { color: var(--teal); }
+.cbar-send:hover { color: var(--text); }
 
-.cbar-controls {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+/* Expanded: log output takes remaining space */
+.cbar-output {
+  flex: 1;
+  overflow-y: auto;
   padding: 4px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
   border-top: 1px solid var(--border);
-  flex-shrink: 0;
 }
 
 .cbar-mode-toggle {
@@ -1055,47 +1068,15 @@ a { color: inherit; text-decoration: none; }
 .cbar-mode-btn {
   background: none;
   border: none;
-  padding: 2px 8px;
-  font-size: 10px;
-  font-weight: 600;
+  padding: 2px 7px;
+  font-size: 13px;
   color: var(--text-muted);
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 3px;
-  white-space: nowrap;
   transition: background 0.1s, color 0.1s;
 }
-.cbar-mode-btn--active { background: var(--surface-2); color: var(--text); }
-
-.cbar-btn {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 15px;
-  cursor: pointer;
-  padding: 2px 4px;
-  border-radius: var(--radius);
-  line-height: 1;
-  transition: color 0.1s;
-  display: flex;
-  align-items: center;
-}
-.cbar-btn:hover { color: var(--text); }
-.cbar-send { color: var(--teal); font-size: 14px; }
-.cbar-send:hover { color: var(--text); }
-
-.cbar-output {
-  flex: 1;
-  overflow-y: auto;
-  padding: 4px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  /* height driven by --cbar-rows: each row ~20px */
-  min-height: calc(var(--cbar-rows, 6) * 20px - 28px - 32px - 32px);
-  max-height: calc(var(--cbar-rows, 6) * 20px - 28px - 32px - 32px);
-}
+.cbar-mode-btn--active { background: var(--surface-2); color: var(--teal); }
 
 .cbar-line {
   display: flex;
