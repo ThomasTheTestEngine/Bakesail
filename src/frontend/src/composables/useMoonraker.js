@@ -133,6 +133,10 @@ async function subscribe() {
     if (result?.status) {
       applyStatusUpdate(result.status)
     }
+
+    // Subscribe to gcode console feed — Moonraker only pushes
+    // notify_gcode_response after this explicit subscription
+    await send('server.subscribe_gcode_feed', {}).catch(() => {})
   } catch (e) {
     console.warn('[bakesail] subscribe failed:', e)
   }
