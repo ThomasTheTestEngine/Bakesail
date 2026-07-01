@@ -239,6 +239,7 @@
         <template v-else-if="w.type === 'camera'">
           <div class="w-camera">
             <div v-if="!isFieldHidden(w,'label')" class="wc-cam-title">{{ cameraLabel(w.config?.cameraId) }}</div>
+            <pre style="font-size:9px;color:lime;position:absolute;top:0;left:0;z-index:99;background:#000;padding:2px">id={{ w.config?.cameraId }} cams={{ settings.cameras.length }} dev={{ settings.cameras.find(c=>c.id===w.config?.cameraId)?.device || settings.cameras[0]?.device || 'null' }}</pre>
             <div class="wc-cam-feed"><CameraFeed :camera-id="w.config?.cameraId" /></div>
           </div>
         </template>
