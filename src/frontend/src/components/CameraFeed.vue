@@ -6,11 +6,11 @@
 -->
 <template>
   <div class="cam-feed" :style="{ background: bgColor }">
-    <template v-if="!cam || cam.test || !camDevice">
+    <template v-if="!resolvedCam || resolvedCam.test || !camDevice">
       <div class="cam-placeholder">
         <span class="cam-placeholder-icon">⊡</span>
         <span class="cam-placeholder-text">VIDEO HERE</span>
-        <span class="cam-placeholder-sub" v-if="cam">{{ displayName }}</span>
+        <span class="cam-placeholder-sub" v-if="resolvedCam">{{ displayName }}</span>
       </div>
     </template>
     <template v-else>
@@ -26,31 +26,44 @@
         <span class="cam-placeholder-sub">{{ camDevice }}</span>
       </div>
     </template>
-    <div class="cam-label" v-if="showLabel && cam">{{ displayName }}</div>
+    <div class="cam-label" v-if="showLabel && resolvedCam">{{ displayName }}</div>
   </div>
 </template>
 
 <script setup>
 import { computed, ref } from 'vue'
+import { useSettingsStore } from '../stores/settings.js'
 
 const props = defineProps({
-  cam:       { type: Object,  default: null },   // camera entry from settings.cameras
+  cam:       { type: Object,  default: null },   // full camera object (takes priority)
+  cameraId:  { type: String,  default: null },   // resolved from store if cam not passed
   showLabel: { type: Boolean, default: true },
   bgColor:   { type: String,  default: null },
+})
+
+const settings = useSettingsStore()
+
+// Explicit cam prop wins; otherwise resolve by id; otherwise first camera
+const resolvedCam = computed(() => {
+  if (props.cam) return props.cam
+  if (props.cameraId) return settings.cameras.find(c => c.id === props.cameraId) || null
+  return settings.cameras[0] || null
 })
 
 const streamError = ref(false)
 
 const camDevice = computed(() => {
-  if (!props.cam) return ''
-  return props.cam.device === '__manual__' ? (props.cam.deviceManual || '') : (props.cam.device || '')
+  const cam = resolvedCam.value
+  if (!cam) return ''
+  return cam.device === '__manual__' ? (cam.deviceManual || '') : (cam.device || '')
 })
 
 const displayName = computed(() => {
-  if (!props.cam) return 'Camera'
-  if (props.cam.name) return props.cam.name
+  const cam = resolvedCam.value
+  if (!cam) return 'Camera'
+  if (cam.name) return cam.name
   const labels = { bga_grid: 'BGA Grid', alignment_chip: 'Alignment - Chip', alignment_board: 'Alignment - Board', custom: 'Camera' }
-  return labels[props.cam.type] || 'Camera'
+  return labels[cam.type] || 'Camera'
 })
 
 // Build mjpeg stream URL proxied through nginx → Crowsnest/ustreamer.
