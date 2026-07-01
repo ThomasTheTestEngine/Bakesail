@@ -1100,7 +1100,8 @@ function drawCharts() {
 // ── Customize helpers ──────────────────────────────────────────
 const showLoadMenu = ref(false)
 function exitCustomize() {
-  setCustomizing(false) layout.exitCustomize(); showLoadMenu.value = false }
+  setCustomizing(false)
+  layout.exitCustomize(); showLoadMenu.value = false }
 async function toggleLoadMenu() { showLoadMenu.value = !showLoadMenu.value; if (showLoadMenu.value) await layout.fetchAvailableLayouts() }
 async function doLoadLayout(f) { await layout.loadLayout(f.replace(/^.*\//, '')); showLoadMenu.value = false }
 function promptSaveAs() { const name = prompt('Save layout as:', 'my_printer_layout'); if (name) layout.saveLayout(name) }
