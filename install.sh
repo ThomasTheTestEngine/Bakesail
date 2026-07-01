@@ -45,7 +45,7 @@ NGINX_MAINSAIL_8080_CONF="${NGINX_AVAIL}/mainsail-8080"
 NGINX_BAKESAIL_CONF="${NGINX_AVAIL}/bakesail"
 NGINX_BACKUP_DIR="${BAKESAIL_DIR}/.nginx_backup"
 
-MAINSAIL_PORT=8080
+MAINSAIL_PORT=8888
 NODE_MIN_MAJOR=18
 
 # -----------------------------------------------------------------------------
