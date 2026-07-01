@@ -247,6 +247,10 @@ export function generateTestPinCfg(pin) {
 // ── Save helpers ──────────────────────────────────────────────────────────────
 
 export async function saveBakesailCfg(settings) {
+  // 3d_printer uses standard Klipper objects — no bakesail.cfg config needed.
+  // The file exists only as a stub to signal first-run is complete.
+  if (settings.deviceType === '3d_printer') return true
+
   const content = generateBakesailCfg(settings)
   return _uploadConfig('bakesail.cfg', content)
 }
@@ -269,7 +273,12 @@ async function _uploadConfig(filename, content) {
 
 // ── Patch printer.cfg to include bakesail.cfg ────────────────────────────────
 
-export async function ensurePrinterCfgInclude() {
+export async function ensurePrinterCfgInclude(deviceType) {
+  // 3d_printer installs must NOT have [include bakesail.cfg] in printer.cfg —
+  // bakesail.cfg contains no Klipper config for this device type and including
+  // it causes parse errors.
+  if (deviceType === '3d_printer') return true
+
   try {
     const res = await fetch('/server/files/config/printer.cfg')
     if (!res.ok) throw new Error('Could not read printer.cfg')

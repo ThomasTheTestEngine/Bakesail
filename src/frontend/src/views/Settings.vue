@@ -817,7 +817,7 @@ async function writeConfig() {
   try {
     await saveBakesailCfg(settings.$state)
     await settings.save()
-    await ensurePrinterCfgInclude()
+    await ensurePrinterCfgInclude(settings.deviceType)
     await runGcode('FIRMWARE_RESTART')
   } catch (e) {
     saveError.value = e.message
@@ -843,7 +843,7 @@ async function applyConfig() {
       await saveBakesailCfg(settings.$state)
     }
     await settings.save()
-    await ensurePrinterCfgInclude()
+    await ensurePrinterCfgInclude(settings.deviceType)
     await runGcode('FIRMWARE_RESTART')
     editMode.value     = false
     applySuccess.value = true

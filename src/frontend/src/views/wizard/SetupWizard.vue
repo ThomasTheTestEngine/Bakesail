@@ -487,7 +487,7 @@ async function writeConfig() {
   try {
     await saveBakesailCfg(settings.$state)
     await settings.save()
-    await ensurePrinterCfgInclude()
+    await ensurePrinterCfgInclude(settings.deviceType)
     settings.wizardComplete = true
     await settings.save()
     await runGcode('FIRMWARE_RESTART')
