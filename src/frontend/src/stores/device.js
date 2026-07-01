@@ -57,6 +57,7 @@ export const useDeviceStore = defineStore('device', {
     systemStats: null,
     mcus: [],
     hostInfo: null,   // from /machine/system_info — OS, distro, mem total, network
+    dynamicObjects: {}, // heater_fan *, temperature_sensor *, neopixel *, etc.
 
     // ── Machine capabilities (set by settings store) ───────────────
     hasVacuumPen:    false,
@@ -176,6 +177,10 @@ export const useDeviceStore = defineStore('device', {
 
     updateHostInfo(info) {
       this.hostInfo = info
+    },
+
+    updateDynamicObjects(objs) {
+      this.dynamicObjects = objs
     },
 
     updateMcus(mcus) {

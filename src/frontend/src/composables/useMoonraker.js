@@ -83,23 +83,39 @@ function sendGcode(script) {
 
 // ── Subscription ─────────────────────────────────────────────────────────────
 
+// Prefixes we discover dynamically from printer.objects.list
+const DYNAMIC_PREFIXES = {
+  'mcu':              () => ['last_stats', 'mcu_version'],
+  'mcu ':             () => ['last_stats', 'mcu_version'],
+  'heater_fan ':      () => ['speed', 'rpm'],
+  'fan_generic ':     () => ['speed', 'rpm'],
+  'temperature_fan ': () => ['temperature', 'target', 'speed'],
+  'temperature_sensor ': () => ['temperature', 'measured_min_temp', 'measured_max_temp'],
+  'neopixel ':        () => null,   // all fields
+  'led ':             () => null,
+  'output_pin ':      () => ['value'],
+  'stepper_':         () => ['mcu_position'],
+}
+
 async function subscribe() {
   try {
-    // Discover all printer objects so we can subscribe to mcu * dynamically
+    // Discover all printer objects for dynamic subscription
     const listResult = await send('printer.objects.list', {})
-    const mcuObjects = {}
+    const dynamicObjects = {}
     if (listResult?.objects) {
       for (const name of listResult.objects) {
-        if (name === 'mcu' || name.startsWith('mcu ')) {
-          mcuObjects[name] = ['last_stats', 'mcu_version', 'mcu_build_versions']
+        for (const [prefix, fields] of Object.entries(DYNAMIC_PREFIXES)) {
+          if (name === prefix.trimEnd() || name.startsWith(prefix)) {
+            dynamicObjects[name] = fields()
+            break
+          }
         }
       }
     }
 
     const result = await send('printer.objects.subscribe', {
-      objects: { ...SUBSCRIBED_OBJECTS, ...mcuObjects },
+      objects: { ...SUBSCRIBED_OBJECTS, ...dynamicObjects },
     })
-    // Initial state snapshot — feed to both the device store and subscribers
     if (result?.status) {
       applyStatusUpdate(result.status)
     }
@@ -129,7 +145,6 @@ function applyStatusUpdate(status) {
   // MCU stats — any key matching 'mcu' or 'mcu *'
   const mcuKeys = Object.keys(status).filter(k => k === 'mcu' || k.startsWith('mcu '))
   if (mcuKeys.length > 0) {
-    // Merge diffs into existing mcus array
     const existing = store.mcus.slice()
     for (const key of mcuKeys) {
       const raw = status[key]
@@ -138,15 +153,37 @@ function applyStatusUpdate(status) {
       const parsed = {
         name:    key,
         version: raw.mcu_version ?? existing[idx]?.version ?? '',
-        freq:    ls.freq     != null ? Math.round(ls.freq / 1e6) : (existing[idx]?.freq ?? null),
-        load:    ls.mcu_task_avg != null ? ls.mcu_task_avg.toFixed(3) : (existing[idx]?.load ?? null),
-        awake:   ls.mcu_awake   != null ? ls.mcu_awake.toFixed(3)    : (existing[idx]?.awake ?? null),
-        temp:    ls.temp        != null ? Math.round(ls.temp)         : (existing[idx]?.temp ?? null),
+        freq:    ls.freq         != null ? Math.round(ls.freq / 1e6)    : (existing[idx]?.freq  ?? null),
+        load:    ls.mcu_task_avg != null ? ls.mcu_task_avg.toFixed(3)   : (existing[idx]?.load  ?? null),
+        awake:   ls.mcu_awake   != null ? ls.mcu_awake.toFixed(3)      : (existing[idx]?.awake ?? null),
+        temp:    ls.temp        != null ? Math.round(ls.temp)           : (existing[idx]?.temp  ?? null),
       }
       if (idx >= 0) existing[idx] = parsed
       else existing.push(parsed)
     }
     store.updateMcus(existing)
+  }
+
+  // Dynamic sensor/fan/LED objects — merge diffs into store.dynamicObjects map
+  const dynamicKeys = Object.keys(status).filter(k => {
+    if (k === 'mcu' || k.startsWith('mcu ')) return false
+    return (
+      k.startsWith('heater_fan ')      ||
+      k.startsWith('fan_generic ')     ||
+      k.startsWith('temperature_fan ') ||
+      k.startsWith('temperature_sensor ') ||
+      k.startsWith('neopixel ')        ||
+      k.startsWith('led ')             ||
+      k.startsWith('output_pin ')      ||
+      k.startsWith('stepper_')
+    )
+  })
+  if (dynamicKeys.length > 0) {
+    const existing = { ...store.dynamicObjects }
+    for (const key of dynamicKeys) {
+      existing[key] = { ...(existing[key] ?? {}), ...status[key] }
+    }
+    store.updateDynamicObjects(existing)
   }
 
   // Broadcast the full diff to any registered dashboard subscribers

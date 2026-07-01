@@ -146,16 +146,73 @@
               <canvas :ref="el => { if (el) chartCanvases[w.id] = el }" class="wch-canvas"></canvas>
             </template>
 
-            <!-- MCU / Host system loads -->
+            <!-- Temperatures -->
+            <template v-if="!isFieldHidden(w,'temps')">
+              <div class="wmon-section-title" style="margin-top:8px">TEMPERATURES</div>
+              <div class="wmon-sensor-grid">
+                <!-- Extruder -->
+                <div class="wmon-sensor-row">
+                  <span class="wmon-sensor-name">Extruder</span>
+                  <span class="wmon-sensor-val">{{ printer.hotendTemp?.toFixed(1) ?? '—' }}°C</span>
+                  <span class="wmon-sensor-target" v-if="printer.hotendTarget > 0">→ {{ printer.hotendTarget.toFixed(0) }}°</span>
+                </div>
+                <!-- Bed -->
+                <div class="wmon-sensor-row">
+                  <span class="wmon-sensor-name">Bed</span>
+                  <span class="wmon-sensor-val">{{ printer.bedTemp?.toFixed(1) ?? '—' }}°C</span>
+                  <span class="wmon-sensor-target" v-if="printer.bedTarget > 0">→ {{ printer.bedTarget.toFixed(0) }}°</span>
+                </div>
+                <!-- Dynamic temperature_sensor * -->
+                <div class="wmon-sensor-row" v-for="(obj, name) in tempSensors" :key="name">
+                  <span class="wmon-sensor-name">{{ name.replace('temperature_sensor ','') }}</span>
+                  <span class="wmon-sensor-val">{{ obj.temperature?.toFixed(1) ?? '—' }}°C</span>
+                  <span class="wmon-sensor-target" v-if="obj.target != null && obj.target > 0">→ {{ obj.target.toFixed(0) }}°</span>
+                </div>
+              </div>
+            </template>
+
+            <!-- Fans -->
+            <template v-if="!isFieldHidden(w,'fans')">
+              <div class="wmon-section-title" style="margin-top:8px">FANS</div>
+              <div class="wmon-sensor-grid">
+                <div class="wmon-sensor-row">
+                  <span class="wmon-sensor-name">Part Fan</span>
+                  <span class="wmon-sensor-val">{{ printer.fanSpeed != null ? (printer.fanSpeed*100).toFixed(0)+'%' : '—' }}</span>
+                </div>
+                <div class="wmon-sensor-row" v-for="(obj, name) in allFans" :key="name">
+                  <span class="wmon-sensor-name">{{ name.replace(/^(heater_fan |fan_generic |temperature_fan )/,'') }}</span>
+                  <span class="wmon-sensor-val">{{ obj.speed != null ? (obj.speed*100).toFixed(0)+'%' : '—' }}</span>
+                  <span class="wmon-sensor-target" v-if="obj.rpm != null">{{ Math.round(obj.rpm) }} RPM</span>
+                </div>
+              </div>
+            </template>
+
+            <!-- Lighting / LEDs -->
+            <template v-if="!isFieldHidden(w,'lighting') && ledObjects.length > 0">
+              <div class="wmon-section-title" style="margin-top:8px">LIGHTING</div>
+              <div class="wmon-sensor-grid">
+                <div class="wmon-sensor-row" v-for="(obj, name) in ledObjects" :key="name">
+                  <span class="wmon-sensor-name">{{ name.replace(/^(neopixel |led )/,'') }}</span>
+                  <div class="wmon-led-swatches">
+                    <div v-for="(color, i) in (obj.color_data ?? [])" :key="i" class="wmon-led-swatch"
+                         :style="{ background: `rgb(${Math.round(color[0]*255)},${Math.round(color[1]*255)},${Math.round(color[2]*255)})` }">
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <!-- System loads -->
             <template v-if="!isFieldHidden(w,'sysloads')">
               <div class="wmon-section-title" style="margin-top:8px">SYSTEM LOADS</div>
               <div class="wmon-loads">
-
-                <!-- MCUs -->
                 <div class="wmon-load-row" v-for="mcu in deviceStore.mcus" :key="mcu.name">
                   <div class="wmon-load-left">
                     <div class="wmon-load-name">
-                      <span class="wmon-load-bold">{{ mcu.name === 'mcu' ? 'mcu' : mcu.name }}</span>
+                      <span class="wmon-load-bold">{{ mcu.name }}</span>
+                      <span class="wmon-load-chip" v-if="deviceStore.hostInfo?.mcu_info?.[mcu.name]?.chip">
+                        ({{ deviceStore.hostInfo.mcu_info[mcu.name].chip }})
+                      </span>
                     </div>
                     <div class="wmon-load-detail" v-if="mcu.version">Version: {{ mcu.version }}</div>
                     <div class="wmon-load-detail">
@@ -170,17 +227,16 @@
                       <circle cx="24" cy="24" r="20" fill="none" stroke="var(--border-2)" stroke-width="4"/>
                       <circle cx="24" cy="24" r="20" fill="none" stroke="var(--teal)" stroke-width="4"
                               stroke-dasharray="125.66"
-                              :stroke-dashoffset="125.66 * (1 - Math.min(parseFloat(mcu.load),1))"
-                              stroke-linecap="round"
-                              transform="rotate(-90 24 24)"/>
+                              :stroke-dashoffset="125.66 * (1 - Math.min(parseFloat(mcu.load), 1))"
+                              stroke-linecap="round" transform="rotate(-90 24 24)"/>
                       <text x="24" y="29" text-anchor="middle" font-size="12" fill="var(--teal)" font-family="var(--font-mono)">
-                        {{ Math.round(parseFloat(mcu.load)*100) }}
+                        {{ Math.round(parseFloat(mcu.load) * 100) }}
                       </text>
                     </svg>
                   </div>
                 </div>
 
-                <!-- Host -->
+                <!-- Host row -->
                 <div class="wmon-load-row" v-if="deviceStore.systemStats">
                   <div class="wmon-load-left">
                     <div class="wmon-load-name">
@@ -195,26 +251,25 @@
                     <div class="wmon-load-detail" v-if="deviceStore.hostInfo?.distribution">
                       OS: {{ deviceStore.hostInfo.distribution.name }} {{ deviceStore.hostInfo.distribution.version_parts?.major ?? '' }}
                       ({{ deviceStore.hostInfo.distribution.codename }})
-                      — Distro: {{ deviceStore.hostInfo.distribution.like ?? '—' }}
+                      · Distro: {{ deviceStore.hostInfo.distribution.like ?? '—' }}
                     </div>
                     <div class="wmon-load-detail">
                       Load: {{ deviceStore.systemStats.sysload?.toFixed(2) ?? '—' }}
                       <template v-if="deviceStore.systemStats.memavail != null && deviceStore.hostInfo?.cpu_info?.total_memory">
                         , Mem: {{ Math.round((deviceStore.hostInfo.cpu_info.total_memory - deviceStore.systemStats.memavail) / 1024) }} MB
-                        / {{ Math.round(deviceStore.hostInfo.cpu_info.total_memory / 1024) }} GB
+                        / {{ (deviceStore.hostInfo.cpu_info.total_memory / 1024 / 1024).toFixed(1) }} GB
                       </template>
                     </div>
-                    <!-- Network interfaces -->
                     <template v-if="deviceStore.hostInfo?.network">
-                      <div class="wmon-load-detail" v-for="(iface, name) in deviceStore.hostInfo.network" :key="name"
-                           v-if="iface.bandwidth">
-                        {{ name }}: Bandwidth: {{ (iface.bandwidth / 1024).toFixed(1) }} kB/s,
-                        Received: {{ (iface.rx_bytes / 1048576).toFixed(1) }} MB,
-                        Transmitted: {{ (iface.tx_bytes / 1048576).toFixed(1) }} MB
+                      <div class="wmon-load-detail" v-for="(iface, name) in deviceStore.hostInfo.network" :key="name">
+                        {{ name }}
+                        <template v-if="iface.ip_addresses?.[0]?.address"> ({{ iface.ip_addresses[0].address }})</template>
+                        : Bandwidth: {{ ((iface.bandwidth ?? 0) / 1024).toFixed(1) }} kB/s,
+                        Received: {{ ((iface.rx_bytes ?? 0) / 1048576).toFixed(1) }} MB,
+                        Transmitted: {{ ((iface.tx_bytes ?? 0) / 1048576).toFixed(1) }} MB
                       </div>
                     </template>
                   </div>
-                  <!-- CPU + MEM gauges -->
                   <div class="wmon-gauge-pair">
                     <div class="wmon-gauge-wrap" v-if="deviceStore.systemStats.sysload != null">
                       <svg viewBox="0 0 48 48" class="wmon-gauge-svg">
@@ -244,7 +299,6 @@
                     </div>
                   </div>
                 </div>
-
               </div>
             </template>
 
@@ -627,7 +681,13 @@ function handleStatus(data) {
   }
   if (data.toolhead) {
     if (data.toolhead.position   != null) { printer.posX = data.toolhead.position[0]; printer.posY = data.toolhead.position[1]; printer.posZ = data.toolhead.position[2] }
-    if (data.toolhead.homed_axes != null) printer.homedAxes = data.toolhead.homed_axes
+    if (data.toolhead.homed_axes != null) {
+      printer.homedAxes = data.toolhead.homed_axes
+      // Homing always re-enables steppers
+      if (data.toolhead.homed_axes.length > 0) {
+        printer.motorsEnabled = true
+      }
+    }
   }
   // Keep device store in sync so topbar can read printer state from anywhere
   deviceStore.updatePrinter({
@@ -655,6 +715,31 @@ const STATE_META = {
 }
 const stateLabel  = computed(() => STATE_META[printer.state]?.label  ?? printer.state)
 const stateColour = computed(() => STATE_META[printer.state]?.colour ?? 'var(--text-muted)')
+
+// ── Dynamic object filters (for monitor widget) ───────────────
+const tempSensors = computed(() => {
+  const out = {}
+  for (const [k, v] of Object.entries(deviceStore.dynamicObjects)) {
+    if (k.startsWith('temperature_sensor ')) out[k] = v
+  }
+  return out
+})
+
+const allFans = computed(() => {
+  const out = {}
+  for (const [k, v] of Object.entries(deviceStore.dynamicObjects)) {
+    if (k.startsWith('heater_fan ') || k.startsWith('fan_generic ') || k.startsWith('temperature_fan ')) out[k] = v
+  }
+  return out
+})
+
+const ledObjects = computed(() => {
+  const out = {}
+  for (const [k, v] of Object.entries(deviceStore.dynamicObjects)) {
+    if (k.startsWith('neopixel ') || k.startsWith('led ')) out[k] = v
+  }
+  return out
+})
 
 // ── Speed / flow helpers ──────────────────────────────────────
 function setSpeed(pct) {
@@ -694,8 +779,11 @@ const WIDGET_DEFS = [
   { type: 'state',     label: 'State Header',       defaultW: 700, defaultH: 80,  defaultConfig: {}, fields: [{ key: 'filename', label: 'Filename' }, { key: 'layer', label: 'Layer counter' }] },
   { type: 'hotend',    label: 'Hotend Temp',         defaultW: 180, defaultH: 160, defaultConfig: { label: 'Hotend' }, fields: [{ key: 'power', label: 'Heater power bar' }] },
   { type: 'bed',       label: 'Bed Temp',            defaultW: 180, defaultH: 160, defaultConfig: { label: 'Bed' },    fields: [{ key: 'power', label: 'Heater power bar' }] },
-  { type: 'chart',     label: 'Monitor',             defaultW: 560, defaultH: 400, defaultConfig: {}, fields: [
+  { type: 'chart',     label: 'Monitor',             defaultW: 560, defaultH: 500, defaultConfig: {}, fields: [
     { key: 'tempchart', label: 'Temperature chart' },
+    { key: 'temps',     label: 'Temperatures' },
+    { key: 'fans',      label: 'Fans' },
+    { key: 'lighting',  label: 'Lighting' },
     { key: 'sysloads',  label: 'System loads' },
   ] },
   { type: 'progress',  label: 'Print Progress',      defaultW: 520, defaultH: 120, defaultConfig: {}, fields: [{ key: 'time', label: 'Print time' }, { key: 'eta', label: 'ETA' }, { key: 'filament', label: 'Filament used' }] },
@@ -720,10 +808,8 @@ function isFieldHidden(w, key) { return w.config?.hiddenFields?.includes(key) }
 function buildDefaultLayout() {
   const hasCam = settings.cameras.length > 0
   return [
-    { id: 'bed',       type: 'bed',       x: 0,   y: 0,   w: 180, h: 160, config: {} },
-    { id: 'fan',       type: 'fan',       x: 190, y: 0,   w: 180, h: 160, config: {} },
-    { id: 'progress',  type: 'progress',  x: 0,   y: 170, w: 370, h: 120, config: {} },
-    { id: 'chart',     type: 'chart',     x: 0,   y: 300, w: 370, h: 400, config: {} },
+    { id: 'progress',  type: 'progress',  x: 0,   y: 0,   w: 380, h: 120, config: {} },
+    { id: 'chart',     type: 'chart',     x: 0,   y: 130, w: 380, h: 500, config: {} },
     { id: 'toolhead',  type: 'toolhead',  x: 380, y: 0,   w: 400, h: 460, config: {} },
     { id: 'speedflow', type: 'speedflow', x: 380, y: 470, w: 400, h: 380, config: {} },
     ...(hasCam ? [{ id: 'camera', type: 'camera', x: 790, y: 0, w: 360, h: 320, config: {} }] : []),
@@ -933,6 +1019,17 @@ onUnmounted(() => {
 .wmon-gauge-pair { display: flex; gap: 8px; flex-shrink: 0; align-items: flex-start; }
 .wmon-gauge-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .wmon-gauge-label { font-size: 10px; color: var(--text-muted); font-weight: 600; letter-spacing: 0.06em; }
+
+.wmon-sensor-grid { display: flex; flex-direction: column; gap: 0; }
+.wmon-sensor-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); }
+.wmon-sensor-row:last-child { border-bottom: none; }
+.wmon-sensor-name { font-size: 12px; font-weight: 600; flex: 1; }
+.wmon-sensor-val  { font-size: 13px; font-family: var(--font-mono); font-weight: 700; color: var(--teal); }
+.wmon-sensor-target { font-size: 11px; color: var(--text-muted); }
+
+.wmon-led-swatches { display: flex; gap: 3px; flex-wrap: wrap; }
+.wmon-led-swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border-2); }
+
 .w-chart { display: flex; flex-direction: column; height: 100%; gap: 4px; }
 .wch-label  { font-size: 10px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: var(--text-muted); flex-shrink: 0; }
 .wch-canvas { flex: 1; width: 100%; min-height: 0; }
