@@ -79,21 +79,20 @@ function send(method, params = {}) {
 
 // Convenience alias used by LaserDashboard and PrinterDashboard
 function sendGcode(script) {
-  // On connect, request gcode console history
-  async function fetchConsoleHistory() {
-    try {
-      const r = await send('server.gcode_store', { count: 200 })
-      if (r?.gcode_store) {
-        for (const entry of r.gcode_store) {
-          for (const cb of consoleSubscribers) {
-            try { cb(entry.message) } catch {}
-          }
+  return send('printer.gcode.script', { script })
+}
+
+async function fetchConsoleHistory() {
+  try {
+    const r = await send('server.gcode_store', { count: 200 })
+    if (r?.gcode_store) {
+      for (const entry of r.gcode_store) {
+        for (const cb of consoleSubscribers) {
+          try { cb(entry.message) } catch {}
         }
       }
-    } catch {}
-  }
-
-  return send('printer.gcode.script', { script })
+    }
+  } catch {}
 }
 
 // ── Subscription ─────────────────────────────────────────────────────────────
