@@ -368,10 +368,9 @@ function cbarSetTerminal(val) {
     nextTick(cbarScrollBottom)
   }
   ws.onmessage = e => {
-    // ttyd sends text frames: first char = type ('0'=output, '1'=ping, '2'=title, '3'=prefs)
-    // and also binary frames in some versions
-    let raw
+    // Log raw message for debugging
     if (typeof e.data === 'string') {
+      console.log('[ttyd] text frame, len:', e.data.length, 'first char code:', e.data.charCodeAt(0), 'preview:', JSON.stringify(e.data.slice(0,30)))
       const type = e.data[0]
       if (type === '0') {
         cbarTermOutput.value += cbarAnsiToHtml(e.data.slice(1))
@@ -379,13 +378,15 @@ function cbarSetTerminal(val) {
       }
     } else if (e.data instanceof ArrayBuffer) {
       const buf = new Uint8Array(e.data)
-      // binary: first byte is type (0x02=output in some versions)
+      console.log('[ttyd] binary frame, len:', buf.length, 'first bytes:', Array.from(buf.slice(0,4)))
       const type = buf[0]
       if (type === 0 || type === 2) {
         const text = new TextDecoder().decode(buf.slice(1))
         cbarTermOutput.value += cbarAnsiToHtml(text)
         if (cbarAutoScroll.value) nextTick(cbarScrollBottom)
       }
+    } else {
+      console.log('[ttyd] unknown frame type:', typeof e.data, e.data)
     }
   }
   ws.onclose = () => {
