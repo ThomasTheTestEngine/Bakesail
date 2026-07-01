@@ -131,6 +131,66 @@
         </div>
       </header>
 
+      <!-- ── Console bar ─────────────────────────────────────────── -->
+      <div class="cbar" :class="{ 'cbar--expanded': cbarRows > 1 }" :style="{ '--cbar-rows': cbarRows }">
+
+        <!-- Single-line summary row (always visible) -->
+        <div class="cbar-summary">
+          <i class="mdi mdi-code-greater-than cbar-prompt-icon"></i>
+          <span class="cbar-last-line" @click="cbarRows > 1 ? null : cbarExpand()">{{ cbarLastLine || '…' }}</span>
+          <div class="cbar-summary-actions">
+            <!-- Expand/collapse -->
+            <button class="cbar-btn" @click="cbarRows > 1 ? cbarCollapse() : cbarExpand()" :title="cbarRows > 1 ? 'Collapse' : 'Expand'">
+              <i :class="cbarRows > 1 ? 'mdi mdi-chevron-up' : 'mdi mdi-chevron-down'"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Expanded area -->
+        <template v-if="cbarRows > 1">
+          <!-- Mode toggle + controls -->
+          <div class="cbar-controls">
+            <div class="cbar-mode-toggle">
+              <button :class="['cbar-mode-btn', !cbarTerminal ? 'cbar-mode-btn--active' : '']" @click="cbarTerminal = false">
+                <i class="mdi mdi-code-greater-than"></i> Klipper
+              </button>
+              <button :class="['cbar-mode-btn', cbarTerminal ? 'cbar-mode-btn--active' : '']" @click="cbarSetTerminal(true)">
+                <i class="mdi mdi-console"></i> Terminal
+              </button>
+            </div>
+            <button class="cbar-btn" @click="cbarClear" title="Clear"><i class="mdi mdi-delete-sweep-outline"></i></button>
+            <button class="cbar-btn" @click="cbarRows = Math.max(2, cbarRows - 1)" title="Less"><i class="mdi mdi-minus"></i></button>
+            <button class="cbar-btn" @click="cbarRows = Math.min(20, cbarRows + 1)" title="More"><i class="mdi mdi-plus"></i></button>
+          </div>
+
+          <!-- Log output -->
+          <div class="cbar-output" ref="cbarOutputEl" @scroll="cbarOnScroll">
+            <template v-if="!cbarTerminal">
+              <div v-for="(line, i) in cbarLines" :key="i" class="cbar-line" :class="cbarLineClass(line)">
+                <span class="cbar-line-time">{{ line.time }}</span>
+                <span class="cbar-line-text" v-html="cbarColourize(line.text)"></span>
+              </div>
+            </template>
+            <template v-else>
+              <div class="cbar-term-output" v-html="cbarTermOutput"></div>
+            </template>
+          </div>
+
+          <!-- Input -->
+          <div class="cbar-input-row">
+            <i :class="cbarTerminal ? 'mdi mdi-bash' : 'mdi mdi-chevron-right'" class="cbar-prompt-icon"></i>
+            <input ref="cbarInputEl" class="cbar-input" v-model="cbarInput"
+                   :placeholder="cbarTerminal ? 'Shell command…' : 'Klipper command…'"
+                   @keydown.enter="cbarSubmit"
+                   @keydown.up.prevent="cbarHistoryUp"
+                   @keydown.down.prevent="cbarHistoryDown"
+                   spellcheck="false" autocomplete="off" autocapitalize="off" />
+            <button class="cbar-btn cbar-send" @click="cbarSubmit"><i class="mdi mdi-send"></i></button>
+          </div>
+        </template>
+
+      </div>
+
       <main class="content">
         <RouterView />
       </main>
@@ -161,7 +221,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { tabsForDevice } from './router/index.js'
 import { useMoonraker } from './composables/useMoonraker.js'
@@ -172,7 +232,164 @@ const route    = useRoute()
 const router   = useRouter()
 const store    = useDeviceStore()
 const settings = useSettingsStore()
-const { connected, klippyState, connect, sendGcode } = useMoonraker()
+const { connected, klippyState, connect, sendGcode, subscribeToConsole, fetchConsoleHistory } = useMoonraker()
+
+// ── Console bar ────────────────────────────────────────────────
+const cbarRows      = ref(1)          // 1 = collapsed, >1 = expanded
+const cbarLines     = ref([])         // { text, type, time }
+const cbarLastLine  = ref('')
+const cbarInput     = ref('')
+const cbarTerminal  = ref(false)
+const cbarOutputEl  = ref(null)
+const cbarInputEl   = ref(null)
+const cbarAutoScroll = ref(true)
+const cbarTermOutput = ref('')
+const cbarHistory   = ref([])
+const cbarHistIdx   = ref(-1)
+let   cbarTermWs    = null
+const CBAR_MAX      = 500
+
+const CBAR_COLOURS = {
+  30:'#555',31:'#e05555',32:'#4caf7d',33:'#f0d87a',
+  34:'#80b4e0',35:'#c678dd',36:'#56b6c2',37:'#e8e8e8',
+  90:'#888',91:'#e06c75',92:'#98c379',93:'#e5c07b',
+  94:'#61afef',95:'#c678dd',96:'#56b6c2',97:'#fff',
+}
+
+function cbarLineClass(line) {
+  if (line.type === 'cmd')   return 'cbar-line--cmd'
+  if (line.type === 'error') return 'cbar-line--error'
+  if (line.type === 'warn')  return 'cbar-line--warn'
+  return 'cbar-line--response'
+}
+
+function cbarColourize(text) {
+  text = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  return text
+}
+
+function cbarParseLine(raw) {
+  const text = raw.trim()
+  if (!text) return null
+  let type = 'response'
+  if (text.startsWith('//') || text.startsWith('echo:'))  type = 'info'
+  if (text.startsWith('!!'))   type = 'error'
+  if (/^(?:echo:\s*)?warn/i.test(text)) type = 'warn'
+  if (text.startsWith('> '))   type = 'cmd'
+  const now = new Date()
+  const time = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`
+  return { text, type, time }
+}
+
+function cbarAddLine(raw) {
+  const line = cbarParseLine(raw)
+  if (!line) return
+  cbarLastLine.value = line.text
+  cbarLines.value.push(line)
+  if (cbarLines.value.length > CBAR_MAX) cbarLines.value.splice(0, cbarLines.value.length - CBAR_MAX)
+  if (cbarAutoScroll.value) nextTick(cbarScrollBottom)
+}
+
+function cbarScrollBottom() {
+  const el = cbarOutputEl.value
+  if (el) el.scrollTop = el.scrollHeight
+}
+
+function cbarOnScroll() {
+  const el = cbarOutputEl.value
+  if (!el) return
+  cbarAutoScroll.value = el.scrollTop + el.clientHeight >= el.scrollHeight - 40
+}
+
+function cbarExpand() {
+  cbarRows.value = 6
+  nextTick(() => { cbarScrollBottom(); cbarInputEl.value?.focus() })
+}
+
+function cbarCollapse() {
+  cbarRows.value = 1
+}
+
+function cbarClear() {
+  if (cbarTerminal.value) cbarTermOutput.value = ''
+  else cbarLines.value = []
+}
+
+function cbarAnsiToHtml(text) {
+  text = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  text = text.replace(/\[([0-9;]*)m/g, (_, codes) => {
+    const parts = codes.split(';').map(Number)
+    let span = ''
+    for (const code of parts) {
+      if (code === 0) span += '</span>'
+      else if (CBAR_COLOURS[code]) span += `<span style="color:${CBAR_COLOURS[code]}">`
+    }
+    return span
+  })
+  return text
+}
+
+function cbarSetTerminal(val) {
+  cbarTerminal.value = val
+  if (val) {
+    cbarTermOutput.value = ''
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+    cbarTermWs = new WebSocket(`${proto}://${location.host}/machine/terminal`)
+    cbarTermWs.onmessage = e => {
+      cbarTermOutput.value += cbarAnsiToHtml(e.data)
+      if (cbarAutoScroll.value) nextTick(cbarScrollBottom)
+    }
+    cbarTermWs.onclose = () => { cbarTermOutput.value += '
+<span style="color:#f0d87a">[disconnected]</span>
+' }
+    cbarTermWs.onerror = () => { cbarTermOutput.value += '
+<span style="color:#e05555">[error — is [machine] in moonraker.conf?]</span>
+' }
+  } else {
+    if (cbarTermWs) { cbarTermWs.close(); cbarTermWs = null }
+    nextTick(cbarScrollBottom)
+  }
+}
+
+async function cbarSubmit() {
+  const text = cbarInput.value.trim()
+  if (!text) return
+  cbarHistory.value.unshift(text)
+  if (cbarHistory.value.length > 100) cbarHistory.value.pop()
+  cbarHistIdx.value = -1
+  cbarInput.value = ''
+  if (cbarTerminal.value) {
+    if (cbarTermWs?.readyState === WebSocket.OPEN) cbarTermWs.send(text + '\n')
+  } else {
+    cbarAddLine('> ' + text)
+    sendGcode(text).catch(e => cbarAddLine('!! ' + (e.message ?? e)))
+  }
+}
+
+function cbarHistoryUp() {
+  if (!cbarHistory.value.length) return
+  cbarHistIdx.value = Math.min(cbarHistIdx.value + 1, cbarHistory.value.length - 1)
+  cbarInput.value = cbarHistory.value[cbarHistIdx.value]
+}
+function cbarHistoryDown() {
+  if (cbarHistIdx.value <= 0) { cbarHistIdx.value = -1; cbarInput.value = ''; return }
+  cbarHistIdx.value--
+  cbarInput.value = cbarHistory.value[cbarHistIdx.value]
+}
+
+// Subscribe to console feed
+let cbarUnsub = null
+onMounted(async () => {
+  cbarUnsub = subscribeToConsole(cbarAddLine)
+  if (klippyState.value === 'ready') {
+    await fetchConsoleHistory()
+    cbarScrollBottom()
+  }
+})
+onUnmounted(() => { if (cbarUnsub) cbarUnsub(); if (cbarTermWs) cbarTermWs.close() })
+watch(klippyState, async val => {
+  if (val === 'ready') { await fetchConsoleHistory(); cbarScrollBottom() }
+})
 const host = window.location.hostname
 
 const deviceStore = useDeviceStore()
@@ -775,6 +992,156 @@ a { color: inherit; text-decoration: none; }
   overflow-y: auto;
   padding: 24px 28px;
 }
+
+/* ── Console bar ────────────────────────────────────────────── */
+.cbar {
+  flex-shrink: 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: none;
+}
+
+.cbar-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  height: 28px;
+  flex-shrink: 0;
+  cursor: default;
+}
+
+.cbar-prompt-icon {
+  color: var(--teal);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.cbar-last-line {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.cbar-summary-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.cbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.cbar-mode-toggle {
+  display: flex;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.cbar-mode-btn {
+  background: none;
+  border: none;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+  transition: background 0.1s, color 0.1s;
+}
+.cbar-mode-btn--active { background: var(--surface-2); color: var(--text); }
+
+.cbar-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 15px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--radius);
+  line-height: 1;
+  transition: color 0.1s;
+  display: flex;
+  align-items: center;
+}
+.cbar-btn:hover { color: var(--text); }
+.cbar-send { color: var(--teal); font-size: 14px; }
+.cbar-send:hover { color: var(--text); }
+
+.cbar-output {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  /* height driven by --cbar-rows: each row ~20px */
+  min-height: calc(var(--cbar-rows, 6) * 20px - 28px - 32px - 32px);
+  max-height: calc(var(--cbar-rows, 6) * 20px - 28px - 32px - 32px);
+}
+
+.cbar-line {
+  display: flex;
+  gap: 8px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+.cbar-line-time { color: var(--text-muted); flex-shrink: 0; font-size: 10px; padding-top: 2px; }
+.cbar-line-text { flex: 1; }
+.cbar-line--response .cbar-line-text { color: var(--text-dim); }
+.cbar-line--cmd     .cbar-line-text { color: var(--teal); }
+.cbar-line--error   .cbar-line-text { color: var(--red); }
+.cbar-line--warn    .cbar-line-text { color: var(--yellow); }
+.cbar-line--info    .cbar-line-text { color: var(--text-muted); }
+
+.cbar-term-output {
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.cbar-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.cbar-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  min-width: 0;
+}
+.cbar-input::placeholder { color: var(--text-muted); }
 
 /* ── Topbar center: file + progress ─────────────────────────── */
 .topbar-center {
