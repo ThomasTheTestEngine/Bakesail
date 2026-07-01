@@ -338,9 +338,13 @@ let unsubConsole = null
 onMounted(async () => {
   // Subscribe to live gcode responses
   unsubConsole = subscribeToConsole(addLine)
-  // Fetch history on mount if klippy is ready
+  // Fetch history — retry a few times since WS may still be handshaking
   if (klippyState.value === 'ready') {
-    await fetchConsoleHistory()
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await new Promise(r => setTimeout(r, 300 * (attempt + 1)))
+      await fetchConsoleHistory()
+      if (lines.value.length > 0) break
+    }
     scrollToBottom()
   }
   nextTick(() => inputEl.value?.focus())
