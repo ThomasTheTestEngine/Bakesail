@@ -258,6 +258,9 @@ function setMode(terminal) {
     connectTerminal()
   } else {
     disconnectTerminal()
+    // Restore scroll position to bottom when returning to console
+    autoScroll.value = true
+    nextTick(scrollToBottom)
   }
   nextTick(() => inputEl.value?.focus())
 }
