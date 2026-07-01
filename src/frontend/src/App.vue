@@ -132,19 +132,20 @@
       </header>
 
       <!-- ── Console bar ─────────────────────────────────────────── -->
-      <div class="cbar" :style="cbarRows > 1 ? { height: (cbarRows * 22 + 38) + 'px' } : {}">
+      <div class="cbar" :style="cbarOpen ? { height: cbarHeight + 'px' } : {}" ref="cbarEl">
 
-        <!-- COLLAPSED: show last line -->
-        <div v-if="cbarRows === 1" class="cbar-collapsed" @click="cbarExpand()">
+        <!-- COLLAPSED: show last line + expand button -->
+        <div v-if="!cbarOpen" class="cbar-collapsed" @click="cbarExpand()">
           <i class="mdi mdi-code-greater-than cbar-prompt-icon"></i>
           <span class="cbar-last-line">{{ cbarLastLine || 'Console…' }}</span>
-          <button class="cbar-btn" @click.stop="cbarExpand()" title="Expand">
+          <button class="cbar-btn" @click.stop="cbarExpand()" title="Expand console">
             <i class="mdi mdi-chevron-down"></i>
           </button>
         </div>
 
-        <!-- EXPANDED: input row replaces the top bar -->
+        <!-- EXPANDED -->
         <template v-else>
+          <!-- Input row -->
           <div class="cbar-input-row">
             <i :class="cbarTerminal ? 'mdi mdi-bash' : 'mdi mdi-chevron-right'" class="cbar-prompt-icon"></i>
             <input ref="cbarInputEl" class="cbar-input" v-model="cbarInput"
@@ -153,21 +154,12 @@
                    @keydown.up.prevent="cbarHistoryUp"
                    @keydown.down.prevent="cbarHistoryDown"
                    spellcheck="false" autocomplete="off" autocapitalize="off" />
-            <button class="cbar-btn" @click="cbarRows = Math.max(2, cbarRows - 1)" title="Fewer lines"><i class="mdi mdi-minus"></i></button>
-            <button class="cbar-btn" @click="cbarRows = Math.min(20, cbarRows + 1)" title="More lines"><i class="mdi mdi-plus"></i></button>
-            <div class="cbar-mode-toggle">
-              <button :class="['cbar-mode-btn', !cbarTerminal ? 'cbar-mode-btn--active' : '']"
-                      @click="cbarTerminal = false; cbarScrollBottom()" title="Klipper console">
-                <i class="mdi mdi-code-greater-than"></i>
-              </button>
-              <button :class="['cbar-mode-btn', cbarTerminal ? 'cbar-mode-btn--active' : '']"
-                      @click="cbarSetTerminal(true)" title="Terminal">
-                <i class="mdi mdi-console"></i>
-              </button>
-            </div>
+            <!-- Mode button: text label, toggles on click -->
+            <button class="cbar-mode-text-btn" @click="cbarTerminal ? (cbarTerminal=false, cbarScrollBottom()) : cbarSetTerminal(true)">
+              {{ cbarTerminal ? 'Shell' : 'Console' }}
+            </button>
             <button class="cbar-btn" @click="cbarClear" title="Clear"><i class="mdi mdi-delete-sweep-outline"></i></button>
             <button class="cbar-btn cbar-send" @click="cbarSubmit" title="Send"><i class="mdi mdi-send"></i></button>
-            <button class="cbar-btn" @click="cbarCollapse()" title="Collapse"><i class="mdi mdi-chevron-up"></i></button>
           </div>
 
           <!-- Log output -->
@@ -179,10 +171,19 @@
               </div>
             </template>
             <template v-else>
-              <div class="cbar-term-output" v-html="cbarTermOutput"></div>
+              <div class="cbar-term-output" ref="cbarTermEl" v-html="cbarTermOutput"></div>
             </template>
           </div>
 
+          <!-- Bottom bar: drag handle (customize mode) + minimize -->
+          <div class="cbar-footer" @mousedown="cbarDragStart">
+            <span class="cbar-drag-hint" v-if="isCustomizing">
+              <i class="mdi mdi-drag-horizontal"></i>
+            </span>
+            <button class="cbar-minimize-btn" @click.stop="cbarCollapse()" title="Minimize">
+              <i class="mdi mdi-chevron-up"></i>
+            </button>
+          </div>
         </template>
 
       </div>
@@ -217,7 +218,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch, provide } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { tabsForDevice } from './router/index.js'
 import { useMoonraker } from './composables/useMoonraker.js'
@@ -231,19 +232,23 @@ const settings = useSettingsStore()
 const { connected, klippyState, connect, sendGcode, subscribeToConsole, fetchConsoleHistory } = useMoonraker()
 
 // ── Console bar ────────────────────────────────────────────────
-const cbarRows      = ref(1)          // 1 = collapsed, >1 = expanded
-const cbarLines     = ref([])         // { text, type, time }
-const cbarLastLine  = ref('')
-const cbarInput     = ref('')
-const cbarTerminal  = ref(false)
-const cbarOutputEl  = ref(null)
-const cbarInputEl   = ref(null)
+const cbarOpen       = ref(false)
+const cbarHeight     = ref(240)       // px when open
+const cbarLines      = ref([])
+const cbarLastLine   = ref('')
+const cbarInput      = ref('')
+const cbarTerminal   = ref(false)
+const cbarOutputEl   = ref(null)
+const cbarInputEl    = ref(null)
+const cbarTermEl     = ref(null)
+const cbarEl         = ref(null)
 const cbarAutoScroll = ref(true)
 const cbarTermOutput = ref('')
-const cbarHistory   = ref([])
-const cbarHistIdx   = ref(-1)
-let   cbarTermWs    = null
-const CBAR_MAX      = 500
+const cbarHistory    = ref([])
+const cbarHistIdx    = ref(-1)
+let   cbarTermWs     = null
+let   cbarDragY      = null
+const CBAR_MAX       = 500
 
 const CBAR_COLOURS = {
   30:'#555',31:'#e05555',32:'#4caf7d',33:'#f0d87a',
@@ -298,12 +303,31 @@ function cbarOnScroll() {
 }
 
 function cbarExpand() {
-  cbarRows.value = 6
+  cbarOpen.value = true
   nextTick(() => { cbarScrollBottom(); cbarInputEl.value?.focus() })
 }
 
 function cbarCollapse() {
-  cbarRows.value = 1
+  cbarOpen.value = false
+  if (cbarTermWs) { cbarTermWs.close(); cbarTermWs = null }
+}
+
+// Drag-to-resize the console (bottom footer bar)
+function cbarDragStart(e) {
+  if (!isCustomizing.value) return
+  cbarDragY = e.clientY
+  const startH = cbarHeight.value
+  function onMove(ev) {
+    const delta = cbarDragY - ev.clientY   // dragging up = taller
+    cbarHeight.value = Math.max(120, Math.min(window.innerHeight * 0.8, startH + delta))
+  }
+  function onUp() {
+    cbarDragY = null
+    window.removeEventListener('mousemove', onMove)
+    window.removeEventListener('mouseup', onUp)
+  }
+  window.addEventListener('mousemove', onMove)
+  window.addEventListener('mouseup', onUp)
 }
 
 function cbarClear() {
@@ -326,35 +350,57 @@ function cbarAnsiToHtml(text) {
 }
 
 function cbarSetTerminal(val) {
+  // Close existing terminal connection first
+  if (cbarTermWs) { cbarTermWs.close(); cbarTermWs = null }
   cbarTerminal.value = val
-  if (val) {
-    cbarTermOutput.value = ''
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    cbarTermWs = new WebSocket(`${proto}://${location.host}/machine/terminal`)
-    cbarTermWs.onmessage = e => {
-      cbarTermOutput.value += cbarAnsiToHtml(e.data)
-      if (cbarAutoScroll.value) nextTick(cbarScrollBottom)
-    }
-    cbarTermWs.onclose = () => { cbarTermOutput.value += `<span style="color:#f0d87a">[disconnected]</span>` }
-    cbarTermWs.onerror = () => { cbarTermOutput.value += `<span style="color:#e05555">[error — is [machine] in moonraker.conf?]</span>` }
-  } else {
-    if (cbarTermWs) { cbarTermWs.close(); cbarTermWs = null }
-    nextTick(cbarScrollBottom)
+  if (!val) { nextTick(cbarScrollBottom); return }
+
+  cbarTermOutput.value = ''
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+  const ws = new WebSocket(`${proto}://${location.host}/machine/terminal`)
+  ws.binaryType = 'arraybuffer'
+  ws.onopen = () => {
+    cbarTermOutput.value += `<span style="color:#4caf7d">Terminal connected</span>\n`
+    if (cbarAutoScroll.value) nextTick(cbarScrollBottom)
   }
+  ws.onmessage = e => {
+    let text
+    if (e.data instanceof ArrayBuffer) {
+      text = new TextDecoder().decode(e.data)
+    } else {
+      text = String(e.data)
+    }
+    cbarTermOutput.value += cbarAnsiToHtml(text)
+    if (cbarAutoScroll.value) nextTick(cbarScrollBottom)
+  }
+  ws.onclose = () => {
+    cbarTermOutput.value += `\n<span style="color:#f0d87a">[disconnected]</span>\n`
+    cbarTermWs = null
+  }
+  ws.onerror = () => {
+    cbarTermOutput.value += `\n<span style="color:#e05555">[connection failed — add [machine] to moonraker.conf and restart moonraker]</span>\n`
+  }
+  cbarTermWs = ws
 }
 
 async function cbarSubmit() {
-  const text = cbarInput.value.trim()
-  if (!text) return
-  cbarHistory.value.unshift(text)
+  const text = cbarInput.value
+  if (!text.trim()) return
+  cbarHistory.value.unshift(text.trim())
   if (cbarHistory.value.length > 100) cbarHistory.value.pop()
   cbarHistIdx.value = -1
   cbarInput.value = ''
   if (cbarTerminal.value) {
-    if (cbarTermWs?.readyState === WebSocket.OPEN) cbarTermWs.send(text + '\n')
+    if (cbarTermWs?.readyState === WebSocket.OPEN) {
+      // Send as UTF-8 bytes — Moonraker terminal expects raw PTY input
+      const encoded = new TextEncoder().encode(text + '\n')
+      cbarTermWs.send(encoded)
+    } else {
+      cbarTermOutput.value += `<span style="color:#e05555">[not connected — click Console/Shell to connect]</span>\n`
+    }
   } else {
-    cbarAddLine('> ' + text)
-    sendGcode(text).catch(e => cbarAddLine('!! ' + (e.message ?? e)))
+    cbarAddLine('> ' + text.trim())
+    sendGcode(text.trim()).catch(e => cbarAddLine('!! ' + (e.message ?? e)))
   }
 }
 
@@ -420,6 +466,12 @@ const topbarColour = computed(() => {
 })
 
 // ── Topbar actions ─────────────────────────────────────────────
+// Whether the dashboard is in customize mode (used to show drag handle)
+const isCustomizing = ref(false)
+// PrinterDashboard teleports a signal when customize mode is active
+// We expose a global setter via provide
+provide('setCustomizing', (val) => { isCustomizing.value = val })
+
 function topbarGcode(script) {
   sendGcode(script).catch(() => {})
 }
@@ -1097,6 +1149,58 @@ a { color: inherit; text-decoration: none; }
   transition: background 0.1s, color 0.1s;
 }
 .cbar-mode-btn--active { background: var(--surface-2); color: var(--teal); }
+
+.cbar-mode-text-btn {
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 3px 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.1s, border-color 0.1s;
+  white-space: nowrap;
+}
+.cbar-mode-text-btn:hover { color: var(--text); border-color: var(--teal); }
+
+.cbar-footer {
+  height: 10px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 4px;
+  border-top: 1px solid var(--border);
+  position: relative;
+}
+
+.cbar-drag-hint {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: ns-resize;
+  opacity: 0.5;
+}
+
+.cbar-minimize-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius);
+  transition: color 0.1s;
+}
+.cbar-minimize-btn:hover { color: var(--text); }
 
 .cbar-line {
   display: flex;

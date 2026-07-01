@@ -54,7 +54,7 @@
         class="topbar-customize-btn"
         :class="{ 'topbar-customize-btn--active': layout.customizeMode.value }"
         :title="layout.customizeMode.value ? 'Exit customize' : 'Customize dashboard'"
-        @click.stop="layout.customizeMode.value ? exitCustomize() : layout.enterCustomize()"
+        @click.stop="layout.customizeMode.value ? exitCustomize() : (layout.enterCustomize(), setCustomizing(true))"
       >⚙</button>
     </Teleport>
 
@@ -645,7 +645,7 @@
  *   3. Wire reactive data from handleStatus() into the `printer` object
  */
 
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, inject } from 'vue'
 import { useSettingsStore }   from '../stores/settings.js'
 import { useDeviceStore }     from '../stores/device.js'
 import { useMoonraker }       from '../composables/useMoonraker.js'
@@ -656,6 +656,7 @@ import ConsoleWidget  from '../components/ConsoleWidget.vue'
 
 const settings = useSettingsStore()
 const deviceStore = useDeviceStore()
+const setCustomizing = inject('setCustomizing', () => {})
 const { klippyState, sendGcode, subscribeToStatus } = useMoonraker()
 const _uid = Math.random().toString(36).slice(2, 7)
 
@@ -1098,7 +1099,8 @@ function drawCharts() {
 
 // ── Customize helpers ──────────────────────────────────────────
 const showLoadMenu = ref(false)
-function exitCustomize() { layout.exitCustomize(); showLoadMenu.value = false }
+function exitCustomize() {
+  setCustomizing(false) layout.exitCustomize(); showLoadMenu.value = false }
 async function toggleLoadMenu() { showLoadMenu.value = !showLoadMenu.value; if (showLoadMenu.value) await layout.fetchAvailableLayouts() }
 async function doLoadLayout(f) { await layout.loadLayout(f.replace(/^.*\//, '')); showLoadMenu.value = false }
 function promptSaveAs() { const name = prompt('Save layout as:', 'my_printer_layout'); if (name) layout.saveLayout(name) }
