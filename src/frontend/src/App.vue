@@ -48,14 +48,32 @@
 
       <!-- Topbar — visible on all tabs -->
       <header class="topbar">
-        <!-- Left: printer / klippy status -->
-        <div class="topbar-status">
+        <!-- Left: printer / klippy status + action buttons -->
+        <div class="topbar-left">
           <span class="topbar-status-dot" :style="{ background: topbarColour }"></span>
           <span class="topbar-status-label">{{ topbarLabel }}</span>
+
+          <!-- Quick actions: only meaningful when klippy is ready -->
+          <template v-if="klippyState === 'ready'">
+            <div class="topbar-divider"></div>
+            <button class="topbar-btn topbar-btn--action" @click="topbarGcode('G28')" title="Home All">⌂ Home</button>
+            <button class="topbar-btn topbar-btn--action" @click="topbarGcode('QUAD_GANTRY_LEVEL')" title="Quad Gantry Level">QGL</button>
+            <button class="topbar-btn topbar-btn--action"
+                    :class="{ 'topbar-btn--motors-off': !deviceStore.motorsEnabled }"
+                    @click="topbarToggleMotors" title="Enable/disable motors">⛌</button>
+          </template>
         </div>
 
-        <!-- Right: action buttons -->
+        <!-- Right: print controls + system buttons -->
         <div class="topbar-actions">
+          <!-- Pause/Resume + Cancel — shown when printing or paused -->
+          <template v-if="deviceStore.printerState === 'printing' || deviceStore.printerState === 'paused'">
+            <button class="topbar-btn"
+                    @click="topbarGcode(deviceStore.printerState === 'printing' ? 'PAUSE' : 'RESUME')">
+              {{ deviceStore.printerState === 'printing' ? '⏸ Pause' : '▶ Resume' }}
+            </button>
+            <button class="topbar-btn topbar-btn--danger" @click="topbarGcode('CANCEL_PRINT')">✕ Cancel</button>
+          </template>
           <!-- FW/Power dropdown -->
           <div class="topbar-dropdown-wrap" @click.stop>
             <button class="topbar-btn" @click="powerMenuOpen = !powerMenuOpen" title="System Controls">
@@ -140,6 +158,20 @@ const topbarColour = computed(() => {
 })
 
 // ── Topbar actions ─────────────────────────────────────────────
+function topbarGcode(script) {
+  sendGcode(script).catch(() => {})
+}
+
+function topbarToggleMotors() {
+  if (deviceStore.motorsEnabled) {
+    topbarGcode('M18')
+    deviceStore.updatePrinter({ motorsEnabled: false })
+  } else {
+    topbarGcode('M17')
+    deviceStore.updatePrinter({ motorsEnabled: true })
+  }
+}
+
 function emergencyStop() {
   sendGcode('FIRMWARE_RESTART').catch(() => {})
   // M112 is the real e-stop — send via raw moonraker endpoint
@@ -326,18 +358,47 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 12px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  gap: 12px;
+  gap: 8px;
 }
 
-.topbar-status {
+.topbar-left {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 1;
   min-width: 0;
+  overflow: hidden;
 }
+
+.topbar-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border-2);
+  flex-shrink: 0;
+}
+
+.topbar-btn--action {
+  font-size: 11px;
+  padding: 3px 10px;
+}
+
+.topbar-btn--motors-off {
+  color: var(--text-muted);
+  opacity: 0.45;
+}
+
+.topbar-btn--danger {
+  border-color: var(--red);
+  color: var(--red);
+}
+.topbar-btn--danger:hover {
+  background: var(--red-glow);
+}
+
+/* topbar-status merged into topbar-left */
 
 .topbar-status-dot {
   width: 8px;

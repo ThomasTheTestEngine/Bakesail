@@ -46,7 +46,7 @@ const SUBSCRIBED_OBJECTS = {
   bakesail: null,
 
   // 3D printer / laser objects (standard Klipper — present when configured)
-  extruder:        ['temperature', 'target', 'power'],
+  extruder:        ['temperature', 'target', 'power', 'pressure_advance', 'smooth_time'],
   heater_bed:      ['temperature', 'target', 'power'],
   fan:             ['speed'],
   print_stats:     ['filename', 'state', 'print_duration', 'filament_used', 'info'],

@@ -177,19 +177,108 @@
 
         <!-- ── Speed / Flow ───────────────────────────────────── -->
         <template v-else-if="w.type === 'speedflow'">
-          <div class="w-speedflow">
-            <div class="wsf-row">
-              <span class="wsf-label">Speed</span>
-              <span class="wsf-value">{{ (printer.speedFactor * 100).toFixed(0) }}%</span>
+          <div class="w-extruder">
+
+            <!-- Extrusion factor -->
+            <div class="wex-section">
+              <div class="wex-header">
+                <span class="wex-icon">⬇</span>
+                <span class="wex-label">Extrusion factor</span>
+                <span class="wex-pct">{{ Math.round(printer.extrudeFactor * 100) }} %</span>
+              </div>
+              <div class="wex-slider-row">
+                <button class="btn btn-ghost btn-xs wex-adj" @click="sendGcode(`M221 S${Math.max(10,Math.round(printer.extrudeFactor*100)-10)}`)">−</button>
+                <input type="range" class="wex-slider" min="10" max="200" step="1"
+                       :value="Math.round(printer.extrudeFactor * 100)"
+                       @input="sendGcode(`M221 S${$event.target.value}`)" />
+                <button class="btn btn-ghost btn-xs wex-adj" @click="sendGcode(`M221 S${Math.min(200,Math.round(printer.extrudeFactor*100)+10)}`)">+</button>
+              </div>
             </div>
-            <div class="wsf-row">
-              <span class="wsf-label">Flow</span>
-              <span class="wsf-value">{{ (printer.extrudeFactor * 100).toFixed(0) }}%</span>
+
+            <div class="wex-divider"></div>
+
+            <!-- Pressure Advance + Smooth Time -->
+            <div class="wex-two-col">
+              <div class="wex-field-wrap">
+                <div class="wex-field-label">Pressure Advance</div>
+                <div class="wex-field-row">
+                  <div class="wex-field-box">
+                    <input class="wex-input" type="number" step="0.001" min="0"
+                           v-model.number="printer.pressureAdvance"
+                           @change="setPressureAdvance" />
+                    <span class="wex-unit">s</span>
+                  </div>
+                  <div class="wex-steppers">
+                    <button class="wex-step" @click="printer.pressureAdvance = +(printer.pressureAdvance+0.005).toFixed(4); setPressureAdvance()">▲</button>
+                    <button class="wex-step" @click="printer.pressureAdvance = +(Math.max(0,printer.pressureAdvance-0.005)).toFixed(4); setPressureAdvance()">▼</button>
+                  </div>
+                </div>
+              </div>
+              <div class="wex-field-wrap">
+                <div class="wex-field-label">Smooth Time</div>
+                <div class="wex-field-row">
+                  <div class="wex-field-box">
+                    <input class="wex-input" type="number" step="0.001" min="0"
+                           v-model.number="printer.smoothTime"
+                           @change="setPressureAdvance" />
+                    <span class="wex-unit">s</span>
+                  </div>
+                  <div class="wex-steppers">
+                    <button class="wex-step" @click="printer.smoothTime = +(printer.smoothTime+0.005).toFixed(4); setPressureAdvance()">▲</button>
+                    <button class="wex-step" @click="printer.smoothTime = +(Math.max(0,printer.smoothTime-0.005)).toFixed(4); setPressureAdvance()">▼</button>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div class="wsf-btns">
-              <button class="btn btn-ghost btn-xs" @click="sendGcode('M220 S100')">Reset Speed</button>
-              <button class="btn btn-ghost btn-xs" @click="sendGcode('M221 S100')">Reset Flow</button>
+
+            <div class="wex-divider"></div>
+
+            <!-- Filament length + feedrate -->
+            <div class="wex-two-col">
+              <div class="wex-field-wrap">
+                <div class="wex-field-label">Filament Length</div>
+                <div class="wex-field-row">
+                  <div class="wex-field-box">
+                    <input class="wex-input" type="number" step="1" min="1" v-model.number="printer.extrudeLen" />
+                    <span class="wex-unit">mm</span>
+                  </div>
+                  <div class="wex-steppers">
+                    <button class="wex-step" @click="printer.extrudeLen = Math.min(500, printer.extrudeLen+1)">▲</button>
+                    <button class="wex-step" @click="printer.extrudeLen = Math.max(1,   printer.extrudeLen-1)">▼</button>
+                  </div>
+                </div>
+                <div class="wex-presets">
+                  <button v-for="v in [50,25,10,5,1]" :key="v" class="btn btn-ghost btn-xs"
+                          :class="{ 'wex-preset--active': printer.extrudeLen===v }"
+                          @click="printer.extrudeLen = v">{{ v }}</button>
+                </div>
+              </div>
+              <div class="wex-field-wrap">
+                <div class="wex-field-label">Extrusion Feedrate</div>
+                <div class="wex-field-row">
+                  <div class="wex-field-box">
+                    <input class="wex-input" type="number" step="1" min="1" v-model.number="printer.extrudeFeedrate" />
+                    <span class="wex-unit">mm/s</span>
+                  </div>
+                  <div class="wex-steppers">
+                    <button class="wex-step" @click="printer.extrudeFeedrate = Math.min(50, printer.extrudeFeedrate+1)">▲</button>
+                    <button class="wex-step" @click="printer.extrudeFeedrate = Math.max(1,  printer.extrudeFeedrate-1)">▼</button>
+                  </div>
+                </div>
+                <div class="wex-presets">
+                  <button v-for="v in [10,5,2,1]" :key="v" class="btn btn-ghost btn-xs"
+                          :class="{ 'wex-preset--active': printer.extrudeFeedrate===v }"
+                          @click="printer.extrudeFeedrate = v">{{ v }}</button>
+                </div>
+              </div>
             </div>
+
+            <!-- Retract / Extrude -->
+            <div class="wex-extrude-row">
+              <button class="btn wex-retract-btn" @click="doExtrude(true)">⬆ RETRACT</button>
+              <button class="btn wex-extrude-btn" @click="doExtrude(false)">⬇ EXTRUDE</button>
+            </div>
+
           </div>
         </template>
 
@@ -198,6 +287,7 @@
           <div class="w-toolhead">
 
             <!-- Position: absolute label -->
+            <template v-if="!isFieldHidden(w,'coords')">
             <div class="wth-pos-header">
               <span class="wth-pos-icon">⊙</span>
               <span class="wth-pos-label">Position: absolute</span>
@@ -215,19 +305,24 @@
               </div>
             </div>
 
+            </template>
+
             <!-- Home / QGL / Motor off buttons -->
-            <div class="wth-action-row">
+            <div class="wth-action-row" v-if="!isFieldHidden(w,'jog')">
               <button class="btn btn-primary btn-sm wth-home-btn" @click="sendGcode('G28')" title="Home All">
                 <span class="wth-home-icon">⌂</span> ALL
               </button>
               <button class="btn btn-sm wth-qgl-btn" @click="sendGcode('QUAD_GANTRY_LEVEL')" title="Quad Gantry Level">QGL</button>
-              <button class="btn btn-ghost btn-sm wth-motors-btn" @click="sendGcode('M18')" title="Disable motors">
+              <button class="btn btn-ghost btn-sm wth-motors-btn"
+                      :class="{ 'wth-motors-btn--off': !printer.motorsEnabled }"
+                      @click="toggleMotors"
+                      :title="printer.motorsEnabled ? 'Disable motors' : 'Enable motors'">
                 <span class="wth-motors-icon">⛌</span>
               </button>
             </div>
 
             <!-- XY jog grid -->
-            <div class="wth-jog-section">
+            <div class="wth-jog-section" v-if="!isFieldHidden(w,'jog')">
               <div class="wth-jog-row" v-for="(axis, ai) in ['X','Y']" :key="axis">
                 <button v-for="d in [-100,-10,-1]" :key="d" class="btn btn-ghost btn-xs wth-jog-btn"
                         @click="sendGcode(`G91\nG0 ${axis}${d} F3000\nG90`)">{{ d }}</button>
@@ -246,7 +341,7 @@
             </div>
 
             <!-- Z-Offset -->
-            <div class="wth-zoffset-section">
+            <div class="wth-zoffset-section" v-if="!isFieldHidden(w,'zoffset')">
               <div class="wth-zoffset-header">
                 <span class="wth-pos-icon">◈</span>
                 <span class="wth-pos-label">Z-Offset: {{ printer.zOffset.toFixed(3) }}</span>
@@ -264,7 +359,7 @@
             </div>
 
             <!-- Speed factor -->
-            <div class="wth-speed-section">
+            <div class="wth-speed-section" v-if="!isFieldHidden(w,'speed')">
               <div class="wth-speed-header">
                 <span class="wth-pos-icon">↻</span>
                 <span class="wth-pos-label">Speed factor</span>
@@ -382,8 +477,13 @@ const printer = reactive({
   extrudeFactor: 1.0,
   posX: null, posY: null, posZ: null,
   homedAxes: '',
-  zOffset:   0.0,
-  jogStep:   10,
+  zOffset:        0.0,
+  jogStep:        10,
+  motorsEnabled:  true,
+  pressureAdvance: 0.05,
+  smoothTime:      0.040,
+  extrudeLen:      50,
+  extrudeFeedrate: 5,
 })
 
 const HISTORY_LEN = 300
@@ -391,9 +491,11 @@ const tempHistory = reactive({ hotend: [], bed: [] })
 
 function handleStatus(data) {
   if (data.extruder) {
-    if (data.extruder.temperature != null) printer.hotendTemp   = data.extruder.temperature
-    if (data.extruder.target      != null) printer.hotendTarget = data.extruder.target
-    if (data.extruder.power       != null) printer.hotendPower  = data.extruder.power
+    if (data.extruder.temperature      != null) printer.hotendTemp      = data.extruder.temperature
+    if (data.extruder.target           != null) printer.hotendTarget    = data.extruder.target
+    if (data.extruder.power            != null) printer.hotendPower     = data.extruder.power
+    if (data.extruder.pressure_advance != null) printer.pressureAdvance = data.extruder.pressure_advance
+    if (data.extruder.smooth_time      != null) printer.smoothTime      = data.extruder.smooth_time
   }
   if (data.heater_bed) {
     if (data.heater_bed.temperature != null) printer.bedTemp   = data.heater_bed.temperature
@@ -422,9 +524,10 @@ function handleStatus(data) {
   }
   // Keep device store in sync so topbar can read printer state from anywhere
   deviceStore.updatePrinter({
-    printerState: printer.state,
-    idleState:    data.idle_timeout?.state ?? undefined,
-    homedAxes:    data.toolhead?.homed_axes ?? undefined,
+    printerState:  printer.state,
+    idleState:     data.idle_timeout?.state ?? undefined,
+    homedAxes:     data.toolhead?.homed_axes ?? undefined,
+    motorsEnabled: printer.motorsEnabled,
   })
 
   if (data.extruder?.temperature != null || data.heater_bed?.temperature != null) {
@@ -456,6 +559,29 @@ function adjustSpeed(delta) {
   setSpeed(Math.max(10, Math.min(200, current + delta)))
 }
 
+// ── Motor enable/disable ──────────────────────────────────────
+function toggleMotors() {
+  if (printer.motorsEnabled) {
+    sendGcode('M18')
+    printer.motorsEnabled = false
+  } else {
+    sendGcode('M17')
+    printer.motorsEnabled = true
+  }
+  deviceStore.updatePrinter({ motorsEnabled: printer.motorsEnabled })
+}
+
+// ── Extruder control ───────────────────────────────────────────
+function doExtrude(retract = false) {
+  const sign = retract ? -1 : 1
+  const feedMms = printer.extrudeFeedrate
+  sendGcode(`M83\nG1 E${sign * printer.extrudeLen} F${feedMms * 60}\nM82`)
+}
+
+function setPressureAdvance() {
+  sendGcode(`SET_PRESSURE_ADVANCE ADVANCE=${printer.pressureAdvance} SMOOTH_TIME=${printer.smoothTime}`)
+}
+
 // ── Widget definitions ─────────────────────────────────────────
 const WIDGET_DEFS = [
   { type: 'state',     label: 'State Header',       defaultW: 700, defaultH: 80,  defaultConfig: {}, fields: [{ key: 'filename', label: 'Filename' }, { key: 'layer', label: 'Layer counter' }] },
@@ -464,8 +590,13 @@ const WIDGET_DEFS = [
   { type: 'chart',     label: 'Temperature Chart',   defaultW: 560, defaultH: 200, defaultConfig: {}, fields: [] },
   { type: 'progress',  label: 'Print Progress',      defaultW: 520, defaultH: 120, defaultConfig: {}, fields: [{ key: 'time', label: 'Print time' }, { key: 'eta', label: 'ETA' }, { key: 'filament', label: 'Filament used' }] },
   { type: 'fan',       label: 'Part Fan',            defaultW: 180, defaultH: 140, defaultConfig: { label: 'Part Fan' }, fields: [] },
-  { type: 'speedflow', label: 'Speed / Flow',        defaultW: 220, defaultH: 140, defaultConfig: {}, fields: [] },
-  { type: 'toolhead',  label: 'Toolhead',            defaultW: 780, defaultH: 440, defaultConfig: {}, fields: [] },
+  { type: 'speedflow', label: 'Extruder',            defaultW: 400, defaultH: 380, defaultConfig: {}, fields: [] },
+  { type: 'toolhead',  label: 'Toolhead',            defaultW: 400, defaultH: 460, defaultConfig: {}, fields: [
+    { key: 'coords',  label: 'Position display' },
+    { key: 'jog',     label: 'Movement buttons' },
+    { key: 'zoffset', label: 'Z-Offset adjust' },
+    { key: 'speed',   label: 'Speed factor' },
+  ] },
   { type: 'controls',  label: 'Print Controls',      defaultW: 600, defaultH: 60,  defaultConfig: {}, fields: [] },
   { type: 'macros',    label: 'Macro Buttons',       defaultW: 400, defaultH: 100, defaultConfig: { macros: ['BED_MESH_CALIBRATE', 'LOAD_FILAMENT', 'UNLOAD_FILAMENT'] }, fields: [] },
   { type: 'camera',    label: 'Camera Feed',         defaultW: 320, defaultH: 260, defaultConfig: { cameraId: null }, fields: [{ key: 'label', label: 'Show camera name' }] },
@@ -477,15 +608,15 @@ function isFieldHidden(w, key) { return w.config?.hiddenFields?.includes(key) }
 
 // ── Default layout ─────────────────────────────────────────────
 function buildDefaultLayout() {
+  const hasCam = settings.cameras.length > 0
   return [
-    { id: 'state',     type: 'state',     x: 0,   y: 0,   w: 760, h: 80,  config: {} },
-    { id: 'bed',       type: 'bed',       x: 0,   y: 100, w: 180, h: 160, config: {} },
-    { id: 'fan',       type: 'fan',       x: 190, y: 100, w: 180, h: 160, config: {} },
-    { id: 'speedflow', type: 'speedflow', x: 380, y: 100, w: 200, h: 160, config: {} },
-    { id: 'progress',  type: 'progress',  x: 0,   y: 280, w: 580, h: 120, config: {} },
-    { id: 'controls',  type: 'controls',  x: 0,   y: 420, w: 580, h: 60,  config: {} },
-    { id: 'chart',     type: 'chart',     x: 0,   y: 500, w: 580, h: 200, config: {} },
-    { id: 'toolhead',  type: 'toolhead',  x: 590, y: 100, w: 400, h: 600, config: {} },
+    { id: 'bed',       type: 'bed',       x: 0,   y: 0,   w: 180, h: 160, config: {} },
+    { id: 'fan',       type: 'fan',       x: 190, y: 0,   w: 180, h: 160, config: {} },
+    { id: 'progress',  type: 'progress',  x: 0,   y: 170, w: 370, h: 120, config: {} },
+    { id: 'chart',     type: 'chart',     x: 0,   y: 300, w: 370, h: 200, config: {} },
+    { id: 'toolhead',  type: 'toolhead',  x: 380, y: 0,   w: 400, h: 460, config: {} },
+    { id: 'speedflow', type: 'speedflow', x: 380, y: 470, w: 400, h: 380, config: {} },
+    ...(hasCam ? [{ id: 'camera', type: 'camera', x: 790, y: 0, w: 360, h: 320, config: {} }] : []),
   ]
 }
 
@@ -686,9 +817,71 @@ onUnmounted(() => {
 .wf-bar-fill  { height: 100%; background: var(--teal); border-radius: 2px; transition: width 0.5s ease; }
 
 /* Speed/Flow */
-.w-speedflow { display: flex; flex-direction: column; gap: 10px; justify-content: center; height: 100%; }
-.wsf-row   { display: flex; align-items: baseline; justify-content: space-between; }
-.wsf-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+.w-extruder { display: flex; flex-direction: column; gap: 12px; height: 100%; overflow-y: auto; padding: 2px; }
+
+.wex-section { display: flex; flex-direction: column; gap: 6px; }
+.wex-header { display: flex; align-items: center; gap: 6px; }
+.wex-icon { font-size: 13px; color: var(--text-muted); }
+.wex-label { font-size: 12px; color: var(--text-dim); flex: 1; }
+.wex-pct { font-size: 13px; font-weight: 700; font-family: var(--font-mono); }
+.wex-slider-row { display: flex; align-items: center; gap: 8px; }
+.wex-slider { flex: 1; accent-color: var(--teal); cursor: pointer; }
+.wex-adj { font-size: 15px; width: 28px; padding: 2px; flex-shrink: 0; }
+
+.wex-divider { height: 1px; background: var(--border); }
+
+.wex-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.wex-field-wrap { display: flex; flex-direction: column; gap: 6px; }
+.wex-field-label { font-size: 11px; color: var(--text-muted); font-weight: 500; }
+.wex-field-row { display: flex; gap: 4px; align-items: center; }
+.wex-field-box {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  background: var(--surface-2);
+  gap: 6px;
+}
+.wex-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  width: 0;
+  min-width: 0;
+}
+.wex-unit { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.wex-steppers { display: flex; flex-direction: column; gap: 2px; }
+.wex-step {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 10px;
+  padding: 2px 5px;
+  cursor: pointer;
+  border-radius: 3px;
+  line-height: 1;
+  transition: background 0.1s;
+}
+.wex-step:hover { background: var(--surface); color: var(--text); }
+
+.wex-presets { display: flex; gap: 3px; flex-wrap: wrap; }
+.wex-preset--active { border-color: var(--teal); color: var(--teal); }
+
+.wex-extrude-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.wex-retract-btn { background: var(--surface-2); border-color: var(--border-2); color: var(--text-dim); font-size: 12px; font-weight: 700; letter-spacing: 0.06em; }
+.wex-retract-btn:hover { color: var(--text); border-color: var(--border-2); }
+.wex-extrude-btn { background: var(--surface-2); border-color: var(--border-2); color: var(--text-dim); font-size: 12px; font-weight: 700; letter-spacing: 0.06em; }
+.wex-extrude-btn:hover { color: var(--text); border-color: var(--border-2); }
+
+/* motor off state */
+.wth-motors-btn--off { opacity: 1; color: var(--text-muted) !important; }
 .wsf-value { font-size: 20px; font-weight: 700; font-family: var(--font-mono); }
 .wsf-btns  { display: flex; gap: 6px; flex-wrap: wrap; }
 

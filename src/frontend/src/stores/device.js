@@ -49,6 +49,7 @@ export const useDeviceStore = defineStore('device', {
     printerState:   'standby',  // print_stats.state
     idleState:      'Idle',     // idle_timeout.state
     homedAxes:      '',         // toolhead.homed_axes
+    motorsEnabled:  true,
 
     // ── Machine capabilities (set by settings store) ───────────────
     hasVacuumPen:    false,
@@ -162,10 +163,11 @@ export const useDeviceStore = defineStore('device', {
       this.overtempAck = true
     },
 
-    updatePrinter({ printerState, idleState, homedAxes }) {
-      if (printerState !== undefined) this.printerState = printerState
-      if (idleState    !== undefined) this.idleState    = idleState
-      if (homedAxes    !== undefined) this.homedAxes    = homedAxes
+    updatePrinter({ printerState, idleState, homedAxes, motorsEnabled }) {
+      if (printerState  !== undefined) this.printerState  = printerState
+      if (idleState     !== undefined) this.idleState     = idleState
+      if (homedAxes     !== undefined) this.homedAxes     = homedAxes
+      if (motorsEnabled !== undefined) this.motorsEnabled = motorsEnabled
     },
   },
 })
