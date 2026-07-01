@@ -370,7 +370,6 @@ function cbarSetTerminal(val) {
   ws.onmessage = e => {
     // Log raw message for debugging
     if (typeof e.data === 'string') {
-      console.log('[ttyd] text frame, len:', e.data.length, 'first char code:', e.data.charCodeAt(0), 'preview:', JSON.stringify(e.data.slice(0,30)))
       const type = e.data[0]
       if (type === '0') {
         cbarTermOutput.value += cbarAnsiToHtml(e.data.slice(1))
@@ -378,15 +377,14 @@ function cbarSetTerminal(val) {
       }
     } else if (e.data instanceof ArrayBuffer) {
       const buf = new Uint8Array(e.data)
-      console.log('[ttyd] binary frame, len:', buf.length, 'first bytes:', Array.from(buf.slice(0,4)))
-      const type = buf[0]
-      if (type === 0 || type === 2) {
+      const typeChar = String.fromCharCode(buf[0])
+      if (typeChar === '1') {
+        // Output data
         const text = new TextDecoder().decode(buf.slice(1))
         cbarTermOutput.value += cbarAnsiToHtml(text)
         if (cbarAutoScroll.value) nextTick(cbarScrollBottom)
       }
-    } else {
-      console.log('[ttyd] unknown frame type:', typeof e.data, e.data)
+      // typeChar '2' = window title, '3' = preferences — ignore
     }
   }
   ws.onclose = () => {
@@ -409,8 +407,12 @@ async function cbarSubmit() {
   cbarInput.value = ''
   if (cbarTerminal.value) {
     if (cbarTermWs?.readyState === WebSocket.OPEN) {
-      // ttyd input: '1' prefix + text (text frame)
-      cbarTermWs.send('1' + text + '\n')
+      // ttyd input: byte '0' + text as binary frame
+      const enc = new TextEncoder()
+      const inp = new Uint8Array(text.length + 2)
+      inp[0] = 48  // '0'
+      enc.encodeInto(text + '\n', inp.subarray(1))
+      cbarTermWs.send(inp.buffer)
     } else {
       cbarTermOutput.value += `<span style="color:#e05555">[not connected — click Console/Shell to connect]</span>\n`
     }
