@@ -239,7 +239,6 @@
         <template v-else-if="w.type === 'camera'">
           <div class="w-camera">
             <div v-if="!isFieldHidden(w,'label')" class="wc-cam-title">{{ cameraLabel(w.config?.cameraId) }}</div>
-            <pre style="font-size:9px;color:lime;position:absolute;top:0;left:0;z-index:99;background:#000;padding:2px">id={{ w.config?.cameraId }} cams={{ settings.cameras.length }} dev={{ settings.cameras.find(c=>c.id===w.config?.cameraId)?.device || settings.cameras[0]?.device || 'null' }}</pre>
             <div class="wc-cam-feed"><CameraFeed :camera-id="w.config?.cameraId" /></div>
           </div>
         </template>
@@ -279,12 +278,14 @@
 
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useSettingsStore }   from '../stores/settings.js'
+import { useDeviceStore }     from '../stores/device.js'
 import { useMoonraker }       from '../composables/useMoonraker.js'
 import { useDashboardLayout } from '../composables/useDashboardLayout.js'
 import WidgetShell from '../components/WidgetShell.vue'
 import CameraFeed  from '../components/CameraFeed.vue'
 
 const settings = useSettingsStore()
+const deviceStore = useDeviceStore()
 const { klippyState, sendGcode, subscribeToStatus } = useMoonraker()
 const _uid = Math.random().toString(36).slice(2, 7)
 
@@ -345,6 +346,13 @@ function handleStatus(data) {
     if (data.toolhead.position   != null) { printer.posX = data.toolhead.position[0]; printer.posY = data.toolhead.position[1]; printer.posZ = data.toolhead.position[2] }
     if (data.toolhead.homed_axes != null) printer.homedAxes = data.toolhead.homed_axes
   }
+  // Keep device store in sync so topbar can read printer state from anywhere
+  deviceStore.updatePrinter({
+    printerState: printer.state,
+    idleState:    data.idle_timeout?.state ?? undefined,
+    homedAxes:    data.toolhead?.homed_axes ?? undefined,
+  })
+
   if (data.extruder?.temperature != null || data.heater_bed?.temperature != null) {
     const t = Date.now()
     if (printer.hotendTemp != null) { tempHistory.hotend.push({ t, v: printer.hotendTemp }); if (tempHistory.hotend.length > HISTORY_LEN) tempHistory.hotend.shift() }

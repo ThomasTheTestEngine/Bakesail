@@ -43,10 +43,33 @@
       </div>
     </aside>
 
-    <!-- ── Content ────────────────────────────────────────────────── -->
-    <main class="content">
-      <RouterView />
-    </main>
+    <!-- ── Content column (topbar + page) ───────────────────────── -->
+    <div class="content-col">
+
+      <!-- Topbar — visible on all tabs -->
+      <header class="topbar">
+        <!-- Left: printer / klippy status -->
+        <div class="topbar-status">
+          <span class="topbar-status-dot" :style="{ background: topbarColour }"></span>
+          <span class="topbar-status-label">{{ topbarLabel }}</span>
+        </div>
+
+        <!-- Right: action buttons -->
+        <div class="topbar-actions">
+          <button class="topbar-btn topbar-btn--estop" @click="emergencyStop" title="Emergency Stop">
+            ⏹ E-Stop
+          </button>
+          <button class="topbar-btn" @click="firmwareRestart" title="Firmware Restart">
+            ↺ FW
+          </button>
+        </div>
+      </header>
+
+      <main class="content">
+        <RouterView />
+      </main>
+
+    </div>
 
   </div>
 </template>
@@ -63,10 +86,54 @@ const route    = useRoute()
 const router   = useRouter()
 const store    = useDeviceStore()
 const settings = useSettingsStore()
-const { connected, klippyState, connect } = useMoonraker()
+const { connected, klippyState, connect, sendGcode } = useMoonraker()
 const host = window.location.hostname
 
+const deviceStore = useDeviceStore()
 const visibleTabs = computed(() => tabsForDevice(settings.deviceType || 'oven'))
+
+// ── Topbar status ──────────────────────────────────────────────
+// Priority: klippy offline > klippy state > printer state > idle_timeout
+const PRINTER_STATE_META = {
+  standby:   { label: 'Standby',   colour: 'var(--text-muted)' },
+  printing:  { label: 'Printing',  colour: 'var(--amber)'      },
+  paused:    { label: 'Paused',    colour: 'var(--yellow)'     },
+  complete:  { label: 'Complete',  colour: 'var(--green)'      },
+  error:     { label: 'Error',     colour: 'var(--red)'        },
+  cancelled: { label: 'Cancelled', colour: 'var(--text-dim)'   },
+}
+
+const topbarLabel = computed(() => {
+  if (!connected.value)                    return 'Disconnected'
+  if (klippyState.value === 'shutdown')    return 'Klipper Shutdown'
+  if (klippyState.value === 'startup')     return 'Klipper Starting…'
+  if (klippyState.value !== 'ready')       return 'Connecting…'
+  const ps = deviceStore.printerState
+  const meta = PRINTER_STATE_META[ps]
+  // If standby but Klipper is executing gcode (homing, QGL, etc.) → Busy
+  if (ps === 'standby' && deviceStore.idleState === 'Printing') return 'Busy'
+  return meta?.label ?? ps
+})
+
+const topbarColour = computed(() => {
+  if (!connected.value)                    return 'var(--text-muted)'
+  if (klippyState.value === 'shutdown')    return 'var(--red)'
+  if (klippyState.value !== 'ready')       return 'var(--yellow)'
+  const ps = deviceStore.printerState
+  if (ps === 'standby' && deviceStore.idleState === 'Printing') return 'var(--teal)'
+  return PRINTER_STATE_META[ps]?.colour ?? 'var(--text-muted)'
+})
+
+// ── Topbar actions ─────────────────────────────────────────────
+function emergencyStop() {
+  sendGcode('FIRMWARE_RESTART').catch(() => {})
+  // M112 is the real e-stop — send via raw moonraker endpoint
+  fetch('/printer/emergency_stop', { method: 'POST' }).catch(() => {})
+}
+
+function firmwareRestart() {
+  sendGcode('FIRMWARE_RESTART').catch(() => {})
+}
 
 // ── Theme ─────────────────────────────────────────────────────────
 const isDark = ref(true)
@@ -207,6 +274,89 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   height: 100vh;
   overflow: hidden;
+}
+
+/* ── Content column (topbar + scrollable page) ───────────────── */
+.content-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Topbar ─────────────────────────────────────────────────── */
+.topbar {
+  flex-shrink: 0;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+}
+
+.topbar-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.topbar-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+
+.topbar-status-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.topbar-btn {
+  padding: 4px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-2);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+  white-space: nowrap;
+}
+
+.topbar-btn:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.topbar-btn--estop {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.topbar-btn--estop:hover {
+  background: var(--red-glow);
+  border-color: var(--red);
+  color: var(--red);
 }
 
 /* ── Sidebar ────────────────────────────────────────────────── */

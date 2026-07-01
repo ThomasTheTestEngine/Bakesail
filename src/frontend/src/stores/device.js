@@ -45,6 +45,11 @@ export const useDeviceStore = defineStore('device', {
     vacuumPenOn:    false,
     nozzleVacuumOn: false,
 
+    // ── 3D printer state (fed by PrinterDashboard via updatePrinter) ──
+    printerState:   'standby',  // print_stats.state
+    idleState:      'Idle',     // idle_timeout.state
+    homedAxes:      '',         // toolhead.homed_axes
+
     // ── Machine capabilities (set by settings store) ───────────────
     hasVacuumPen:    false,
     hasNozzleVacuum: false,
@@ -155,6 +160,12 @@ export const useDeviceStore = defineStore('device', {
 
     acknowledgeOvertemp() {
       this.overtempAck = true
+    },
+
+    updatePrinter({ printerState, idleState, homedAxes }) {
+      if (printerState !== undefined) this.printerState = printerState
+      if (idleState    !== undefined) this.idleState    = idleState
+      if (homedAxes    !== undefined) this.homedAxes    = homedAxes
     },
   },
 })
