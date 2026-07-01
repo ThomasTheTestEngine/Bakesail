@@ -132,19 +132,43 @@
       </header>
 
       <!-- ── Console bar ─────────────────────────────────────────── -->
-      <div class="cbar" :style="cbarRows > 1 ? { height: (cbarRows * 22 + 28 + 34 + 32) + 'px' } : {}">
+      <div class="cbar" :style="cbarRows > 1 ? { height: (cbarRows * 22 + 38) + 'px' } : {}">
 
-        <!-- Always-visible single line: prompt icon | last line | collapse/expand -->
-        <div class="cbar-summary" @click="cbarRows === 1 && cbarExpand()">
+        <!-- COLLAPSED: show last line -->
+        <div v-if="cbarRows === 1" class="cbar-collapsed" @click="cbarExpand()">
           <i class="mdi mdi-code-greater-than cbar-prompt-icon"></i>
-          <span class="cbar-last-line">{{ cbarLastLine || '…' }}</span>
-          <button class="cbar-btn" @click.stop="cbarRows > 1 ? cbarCollapse() : cbarExpand()" :title="cbarRows > 1 ? 'Collapse' : 'Expand'">
-            <i :class="cbarRows > 1 ? 'mdi mdi-chevron-up' : 'mdi mdi-chevron-down'"></i>
+          <span class="cbar-last-line">{{ cbarLastLine || 'Console…' }}</span>
+          <button class="cbar-btn" @click.stop="cbarExpand()" title="Expand">
+            <i class="mdi mdi-chevron-down"></i>
           </button>
         </div>
 
-        <!-- Expanded area: log + input, shown below the summary line -->
-        <template v-if="cbarRows > 1">
+        <!-- EXPANDED: input row replaces the top bar -->
+        <template v-else>
+          <div class="cbar-input-row">
+            <i :class="cbarTerminal ? 'mdi mdi-bash' : 'mdi mdi-chevron-right'" class="cbar-prompt-icon"></i>
+            <input ref="cbarInputEl" class="cbar-input" v-model="cbarInput"
+                   :placeholder="cbarTerminal ? 'Shell command…' : 'Klipper command…'"
+                   @keydown.enter="cbarSubmit"
+                   @keydown.up.prevent="cbarHistoryUp"
+                   @keydown.down.prevent="cbarHistoryDown"
+                   spellcheck="false" autocomplete="off" autocapitalize="off" />
+            <button class="cbar-btn" @click="cbarRows = Math.max(2, cbarRows - 1)" title="Fewer lines"><i class="mdi mdi-minus"></i></button>
+            <button class="cbar-btn" @click="cbarRows = Math.min(20, cbarRows + 1)" title="More lines"><i class="mdi mdi-plus"></i></button>
+            <div class="cbar-mode-toggle">
+              <button :class="['cbar-mode-btn', !cbarTerminal ? 'cbar-mode-btn--active' : '']"
+                      @click="cbarTerminal = false; cbarScrollBottom()" title="Klipper console">
+                <i class="mdi mdi-code-greater-than"></i>
+              </button>
+              <button :class="['cbar-mode-btn', cbarTerminal ? 'cbar-mode-btn--active' : '']"
+                      @click="cbarSetTerminal(true)" title="Terminal">
+                <i class="mdi mdi-console"></i>
+              </button>
+            </div>
+            <button class="cbar-btn" @click="cbarClear" title="Clear"><i class="mdi mdi-delete-sweep-outline"></i></button>
+            <button class="cbar-btn cbar-send" @click="cbarSubmit" title="Send"><i class="mdi mdi-send"></i></button>
+            <button class="cbar-btn" @click="cbarCollapse()" title="Collapse"><i class="mdi mdi-chevron-up"></i></button>
+          </div>
 
           <!-- Log output -->
           <div class="cbar-output" ref="cbarOutputEl" @scroll="cbarOnScroll">
@@ -157,31 +181,6 @@
             <template v-else>
               <div class="cbar-term-output" v-html="cbarTermOutput"></div>
             </template>
-          </div>
-
-          <!-- Input row + controls -->
-          <div class="cbar-input-row">
-            <i :class="cbarTerminal ? 'mdi mdi-bash' : 'mdi mdi-chevron-right'" class="cbar-prompt-icon"></i>
-            <input ref="cbarInputEl" class="cbar-input" v-model="cbarInput"
-                   :placeholder="cbarTerminal ? 'Shell command…' : 'Klipper command…'"
-                   @keydown.enter="cbarSubmit"
-                   @keydown.up.prevent="cbarHistoryUp"
-                   @keydown.down.prevent="cbarHistoryDown"
-                   spellcheck="false" autocomplete="off" autocapitalize="off" />
-            <!-- Size controls -->
-            <button class="cbar-btn" @click="cbarRows = Math.max(2, cbarRows - 1)" title="Fewer lines"><i class="mdi mdi-minus"></i></button>
-            <button class="cbar-btn" @click="cbarRows = Math.min(20, cbarRows + 1)" title="More lines"><i class="mdi mdi-plus"></i></button>
-            <!-- Mode toggle -->
-            <div class="cbar-mode-toggle">
-              <button :class="['cbar-mode-btn', !cbarTerminal ? 'cbar-mode-btn--active' : '']" @click="cbarTerminal = false; nextTick(cbarScrollBottom)">
-                <i class="mdi mdi-code-greater-than"></i>
-              </button>
-              <button :class="['cbar-mode-btn', cbarTerminal ? 'cbar-mode-btn--active' : '']" @click="cbarSetTerminal(true)">
-                <i class="mdi mdi-console"></i>
-              </button>
-            </div>
-            <button class="cbar-btn" @click="cbarClear" title="Clear"><i class="mdi mdi-delete-sweep-outline"></i></button>
-            <button class="cbar-btn cbar-send" @click="cbarSubmit"><i class="mdi mdi-send"></i></button>
           </div>
 
         </template>
@@ -989,31 +988,30 @@ a { color: inherit; text-decoration: none; }
 /* ── Console bar ────────────────────────────────────────────── */
 .cbar {
   flex-shrink: 0;
-  background: var(--bg);
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-/* Collapsed: just the summary line (28px) */
-.cbar-summary {
+/* Collapsed state */
+.cbar-collapsed {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 8px;
-  height: 28px;
-  flex-shrink: 0;
+  gap: 10px;
+  padding: 0 12px;
+  height: 38px;
   cursor: pointer;
   user-select: none;
 }
-.cbar-summary:hover .cbar-last-line { color: var(--text); }
+.cbar-collapsed:hover .cbar-last-line { color: var(--text); }
 
 .cbar-prompt-icon {
   color: var(--teal);
-  font-size: 13px;
+  font-size: 16px;
   flex-shrink: 0;
 }
 
@@ -1024,17 +1022,40 @@ a { color: inherit; text-decoration: none; }
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-dim);
-  font-size: 11px;
+  font-size: 13px;
   transition: color 0.1s;
 }
+
+/* Expanded: input row at top */
+.cbar-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  height: 38px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.cbar-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  min-width: 0;
+}
+.cbar-input::placeholder { color: var(--text-muted); }
 
 .cbar-btn {
   background: none;
   border: none;
   color: var(--text-muted);
-  font-size: 15px;
+  font-size: 18px;
   cursor: pointer;
-  padding: 2px 5px;
+  padding: 3px 5px;
   border-radius: var(--radius);
   line-height: 1;
   transition: color 0.1s;
@@ -1046,15 +1067,14 @@ a { color: inherit; text-decoration: none; }
 .cbar-send { color: var(--teal); }
 .cbar-send:hover { color: var(--text); }
 
-/* Expanded: log output takes remaining space */
+/* Log output */
 .cbar-output {
   flex: 1;
   overflow-y: auto;
-  padding: 4px 10px;
+  padding: 4px 12px;
   display: flex;
   flex-direction: column;
   gap: 1px;
-  border-top: 1px solid var(--border);
 }
 
 .cbar-mode-toggle {
@@ -1068,8 +1088,8 @@ a { color: inherit; text-decoration: none; }
 .cbar-mode-btn {
   background: none;
   border: none;
-  padding: 2px 7px;
-  font-size: 13px;
+  padding: 4px 9px;
+  font-size: 16px;
   color: var(--text-muted);
   cursor: pointer;
   display: flex;
@@ -1080,11 +1100,12 @@ a { color: inherit; text-decoration: none; }
 
 .cbar-line {
   display: flex;
-  gap: 8px;
-  line-height: 1.5;
+  gap: 10px;
+  line-height: 1.6;
   word-break: break-all;
+  font-size: 13px;
 }
-.cbar-line-time { color: var(--text-muted); flex-shrink: 0; font-size: 10px; padding-top: 2px; }
+.cbar-line-time { color: var(--text-muted); flex-shrink: 0; font-size: 11px; padding-top: 2px; }
 .cbar-line-text { flex: 1; }
 .cbar-line--response .cbar-line-text { color: var(--text-dim); }
 .cbar-line--cmd     .cbar-line-text { color: var(--teal); }
