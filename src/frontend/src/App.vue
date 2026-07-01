@@ -69,8 +69,27 @@
           </template>
         </div>
 
+        <!-- Center: file + progress (shown when printing/paused/complete) -->
+        <div class="topbar-center" v-if="klippyState === 'ready' && deviceStore.printerState !== 'standby'">
+          <div class="topbar-file">
+            <span class="topbar-filename">{{ deviceStore.filename || 'No file' }}</span>
+            <span class="topbar-pct" v-if="deviceStore.progress > 0">{{ (deviceStore.progress * 100).toFixed(1) }}%</span>
+          </div>
+          <div class="topbar-progress-track" v-if="deviceStore.progress > 0">
+            <div class="topbar-progress-fill" :style="{ width: (deviceStore.progress * 100).toFixed(1) + '%' }"></div>
+          </div>
+          <span class="topbar-eta" v-if="deviceStore.progress > 0 && deviceStore.progress < 1 && deviceStore.printDuration > 0">
+            ETA {{ topbarEta }}
+          </span>
+        </div>
+
         <!-- Right: print controls + system buttons -->
         <div class="topbar-actions">
+          <!-- Load file button — always visible when klippy ready and not printing -->
+          <button v-if="klippyState === 'ready' && deviceStore.printerState === 'standby'"
+                  class="topbar-btn topbar-btn--lit" @click="openFileDialog" title="Load file">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-2px;margin-right:4px"><path d="M6 2c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6H6zm7 7V3.5L18.5 9H13z"/></svg>Load
+          </button>
           <!-- Pause/Resume + Cancel — shown when printing or paused -->
           <template v-if="deviceStore.printerState === 'printing' || deviceStore.printerState === 'paused'">
             <button class="topbar-btn"
@@ -107,6 +126,26 @@
         <RouterView />
       </main>
 
+    </div>
+
+    <!-- File load dialog -->
+    <div v-if="showFileDialog" class="file-dialog-backdrop" @click.self="showFileDialog = false">
+      <div class="file-dialog">
+        <div class="file-dialog-header">
+          <span class="file-dialog-title">Load File</span>
+          <button class="file-dialog-close" @click="showFileDialog = false">✕</button>
+        </div>
+        <div class="file-dialog-body">
+          <div v-if="fileLoading" class="file-dialog-empty">Loading…</div>
+          <div v-else-if="!fileList.length" class="file-dialog-empty">No files found</div>
+          <button v-else v-for="f in fileList" :key="f.path ?? f.filename"
+                  class="file-dialog-item"
+                  @click="loadFile(f.path ?? f.filename)">
+            <span class="file-dialog-name">{{ (f.path ?? f.filename).split('/').pop() }}</span>
+            <span class="file-dialog-meta">{{ f.size ? (f.size / 1024).toFixed(0) + ' KB' : '' }}</span>
+          </button>
+        </div>
+      </div>
     </div>
 
   </div>
@@ -184,6 +223,37 @@ function emergencyStop() {
 }
 
 const powerMenuOpen = ref(false)
+const showFileDialog = ref(false)
+const fileList       = ref([])
+const fileLoading    = ref(false)
+
+async function openFileDialog() {
+  showFileDialog.value = true
+  fileLoading.value = true
+  try {
+    const r = await fetch('/server/files/list?root=gcodes')
+    const d = await r.json()
+    fileList.value = (d.result ?? []).sort((a, b) => b.modified - a.modified)
+  } catch { fileList.value = [] }
+  fileLoading.value = false
+}
+
+async function loadFile(path) {
+  await fetch(`/printer/print/start?filename=${encodeURIComponent(path)}`, { method: 'POST' }).catch(() => {})
+  showFileDialog.value = false
+}
+
+function topbarFormatDuration(s) {
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60)
+  return h > 0 ? `${h}h ${m}m` : `${m}m`
+}
+
+const topbarEta = computed(() => {
+  const { progress, printDuration } = deviceStore
+  if (!progress || progress <= 0) return '—'
+  const remaining = (printDuration / progress) - printDuration
+  return topbarFormatDuration(remaining)
+})
 
 function klipperRestart() {
   fetch('/printer/restart', { method: 'POST' }).catch(() => {})
@@ -665,6 +735,162 @@ a { color: inherit; text-decoration: none; }
   flex: 1;
   overflow-y: auto;
   padding: 24px 28px;
+}
+
+/* ── Topbar center: file + progress ─────────────────────────── */
+.topbar-center {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0 12px;
+}
+
+.topbar-file {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.topbar-filename {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.topbar-pct {
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--amber);
+  flex-shrink: 0;
+}
+
+.topbar-eta {
+  font-size: 10px;
+  color: var(--teal);
+  font-family: var(--font-mono);
+}
+
+.topbar-progress-track {
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.topbar-progress-fill {
+  height: 100%;
+  background: var(--amber);
+  border-radius: 2px;
+  transition: width 1s ease;
+}
+
+/* ── File dialog ─────────────────────────────────────────────── */
+.file-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 80px;
+  z-index: 500;
+}
+
+.file-dialog {
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-lg);
+  width: 480px;
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+}
+
+.file-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.file-dialog-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.file-dialog-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--radius);
+  transition: color 0.1s;
+}
+.file-dialog-close:hover { color: var(--text); }
+
+.file-dialog-body {
+  overflow-y: auto;
+  flex: 1;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.file-dialog-empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.file-dialog-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+  width: 100%;
+}
+.file-dialog-item:hover { background: var(--surface-2); }
+
+.file-dialog-name {
+  font-size: 13px;
+  font-family: var(--font-mono);
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-dialog-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 /* ── Topbar customize gear (teleported from PrinterDashboard) ── */

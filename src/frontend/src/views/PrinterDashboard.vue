@@ -27,8 +27,7 @@
           </div>
         </template>
         <template v-else>
-          <span class="pd-state-label" :style="{ color: stateColour }">{{ stateLabel }}</span>
-          <span v-if="printer.filename" class="pd-filename">{{ printer.filename }}</span>
+          <!-- status/filename now in topbar -->
         </template>
       </div>
       <div class="dt-right">
@@ -142,8 +141,37 @@
 
             <!-- Temperature chart -->
             <template v-if="!isFieldHidden(w,'tempchart')">
-              <div class="wmon-section-title">TEMPERATURE HISTORY</div>
-              <canvas :ref="el => { if (el) chartCanvases[w.id] = el }" class="wch-canvas"></canvas>
+              <div class="wmon-chart-header">
+                <span class="wmon-section-title">TEMPERATURE HISTORY</span>
+                <div class="wmon-chart-controls">
+                  <button class="wmon-chart-btn" @click="decreaseTimeWindow(w.id)">−</button>
+                  <span class="wmon-chart-window">{{ chartWindowLabel(w.id) }}</span>
+                  <button class="wmon-chart-btn" @click="increaseTimeWindow(w.id)">+</button>
+                  <!-- Series toggle gear -->
+                  <div class="wmon-chart-gear-wrap" @click.stop>
+                    <button class="wmon-chart-btn wmon-chart-gear" @click="toggleSeriesMenu(w.id)" title="Toggle series">⚙</button>
+                    <div v-if="seriesMenuOpen === w.id" class="wmon-series-menu">
+                      <label v-for="s in chartSeries(w.id)" :key="s.key" class="wmon-series-item">
+                        <input type="checkbox" :checked="!hiddenSeries[w.id]?.[s.key]"
+                               @change="toggleSeries(w.id, s.key, $event.target.checked)" />
+                        <span class="wmon-series-dot" :style="{ background: s.colour }"></span>
+                        {{ s.label }}
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="wmon-chart-wrap"
+                   :style="{ height: (chartHeights[w.id] ?? 180) + 'px' }">
+                <canvas :ref="el => { if (el) chartCanvases[w.id] = el }" style="width:100%;height:100%;display:block"></canvas>
+              </div>
+              <!-- Height resize slider -->
+              <div class="wmon-chart-resize">
+                <input type="range" min="100" max="400" step="10"
+                       :value="chartHeights[w.id] ?? 180"
+                       @input="chartHeights[w.id] = parseInt($event.target.value)"
+                       class="wmon-chart-slider" title="Chart height" />
+              </div>
             </template>
 
             <!-- Temperatures -->
@@ -695,12 +723,27 @@ function handleStatus(data) {
     idleState:     data.idle_timeout?.state ?? undefined,
     homedAxes:     data.toolhead?.homed_axes ?? undefined,
     motorsEnabled: printer.motorsEnabled,
+    filename:      printer.filename,
+    progress:      printer.progress,
+    printDuration: printer.printDuration,
   })
 
-  if (data.extruder?.temperature != null || data.heater_bed?.temperature != null) {
-    const t = Date.now()
-    if (printer.hotendTemp != null) { tempHistory.hotend.push({ t, v: printer.hotendTemp }); if (tempHistory.hotend.length > HISTORY_LEN) tempHistory.hotend.shift() }
-    if (printer.bedTemp    != null) { tempHistory.bed.push({ t, v: printer.bedTemp });        if (tempHistory.bed.length    > HISTORY_LEN) tempHistory.bed.shift() }
+  const t = Date.now()
+  if (data.extruder?.temperature != null) {
+    tempHistory.hotend.push({ t, v: printer.hotendTemp })
+    if (tempHistory.hotend.length > HISTORY_LEN) tempHistory.hotend.shift()
+  }
+  if (data.heater_bed?.temperature != null) {
+    tempHistory.bed.push({ t, v: printer.bedTemp })
+    if (tempHistory.bed.length > HISTORY_LEN) tempHistory.bed.shift()
+  }
+  // Track temperature_sensor * objects
+  for (const [key, val] of Object.entries(data)) {
+    if (key.startsWith('temperature_sensor ') && val.temperature != null) {
+      if (!tempHistory[key]) tempHistory[key] = []
+      tempHistory[key].push({ t, v: val.temperature })
+      if (tempHistory[key].length > HISTORY_LEN) tempHistory[key].shift()
+    }
   }
 }
 
@@ -788,7 +831,7 @@ const WIDGET_DEFS = [
   ] },
   { type: 'progress',  label: 'Print Progress',      defaultW: 520, defaultH: 120, defaultConfig: {}, fields: [{ key: 'time', label: 'Print time' }, { key: 'eta', label: 'ETA' }, { key: 'filament', label: 'Filament used' }] },
   { type: 'fan',       label: 'Part Fan',            defaultW: 180, defaultH: 140, defaultConfig: { label: 'Part Fan' }, fields: [] },
-  { type: 'speedflow', label: 'Extruder',            defaultW: 400, defaultH: 380, defaultConfig: {}, fields: [] },
+  { type: 'speedflow', label: 'Extruder',            defaultW: 400, defaultH: 420, defaultConfig: {}, fields: [] },
   { type: 'toolhead',  label: 'Toolhead',            defaultW: 400, defaultH: 460, defaultConfig: {}, fields: [
     { key: 'coords',  label: 'Position display' },
     { key: 'jog',     label: 'Movement buttons' },
@@ -807,12 +850,15 @@ function isFieldHidden(w, key) { return w.config?.hiddenFields?.includes(key) }
 // ── Default layout ─────────────────────────────────────────────
 function buildDefaultLayout() {
   const hasCam = settings.cameras.length > 0
+  // Three-column layout: toolhead | camera (if present) | extruder, monitor below full-width
+  const colW  = hasCam ? 360 : 440
+  const camW  = hasCam ? 320 : 0
+  const rightX = colW + (hasCam ? camW + 20 : 0)
   return [
-    { id: 'progress',  type: 'progress',  x: 0,   y: 0,   w: 380, h: 120, config: {} },
-    { id: 'chart',     type: 'chart',     x: 0,   y: 130, w: 380, h: 500, config: {} },
-    { id: 'toolhead',  type: 'toolhead',  x: 380, y: 0,   w: 400, h: 460, config: {} },
-    { id: 'speedflow', type: 'speedflow', x: 380, y: 470, w: 400, h: 380, config: {} },
-    ...(hasCam ? [{ id: 'camera', type: 'camera', x: 790, y: 0, w: 360, h: 320, config: {} }] : []),
+    { id: 'toolhead',  type: 'toolhead',  x: 0,            y: 0,   w: colW, h: 460, config: {} },
+    ...(hasCam ? [{ id: 'camera', type: 'camera', x: colW + 10, y: 0, w: camW, h: 280, config: {} }] : []),
+    { id: 'speedflow', type: 'speedflow', x: rightX + 10,  y: 0,   w: colW, h: 460, config: {} },
+    { id: 'chart',     type: 'chart',     x: 0,            y: 470, w: rightX + 10 + colW, h: 520, config: {} },
   ]
 }
 
@@ -862,57 +908,140 @@ function confirmCancel() { showCancelConfirm.value = true }
 async function doCancel() { showCancelConfirm.value = false; await sendGcode('CANCEL_PRINT') }
 
 // ── Temperature chart ──────────────────────────────────────────
-const chartCanvases = ref({})
+const chartCanvases  = ref({})
+const chartWindows   = reactive({})   // widgetId → minutes (default 60)
+const chartHeights   = reactive({})   // widgetId → px height
+const hiddenSeries   = reactive({})   // widgetId → { seriesKey: bool }
+const seriesMenuOpen = ref(null)
 let chartTimer = null
+
+const TIME_WINDOWS = [5, 15, 30, 60, 120, 240, 480]
+
+function chartWindowMins(id) { return chartWindows[id] ?? 60 }
+function chartWindowLabel(id) {
+  const m = chartWindowMins(id)
+  return m >= 60 ? `${m/60}h` : `${m}m`
+}
+function increaseTimeWindow(id) {
+  const idx = TIME_WINDOWS.indexOf(chartWindowMins(id))
+  if (idx < TIME_WINDOWS.length - 1) chartWindows[id] = TIME_WINDOWS[idx + 1]
+}
+function decreaseTimeWindow(id) {
+  const idx = TIME_WINDOWS.indexOf(chartWindowMins(id))
+  if (idx > 0) chartWindows[id] = TIME_WINDOWS[idx - 1]
+}
+
+function chartSeries(id) {
+  const cs = getComputedStyle(document.documentElement)
+  const series = [
+    { key: 'hotend', label: 'Hotend', colour: cs.getPropertyValue('--amber').trim(), data: () => tempHistory.hotend },
+    { key: 'bed',    label: 'Bed',    colour: cs.getPropertyValue('--teal').trim(),  data: () => tempHistory.bed   },
+  ]
+  // Add dynamic temperature_sensor series
+  for (const [name, obj] of Object.entries(deviceStore.dynamicObjects)) {
+    if (name.startsWith('temperature_sensor ')) {
+      const label = name.replace('temperature_sensor ', '')
+      series.push({ key: name, label, colour: '#888', data: () => tempHistory[name] ?? [] })
+    }
+  }
+  return series
+}
+
+function toggleSeriesMenu(id) {
+  seriesMenuOpen.value = seriesMenuOpen.value === id ? null : id
+}
+
+function toggleSeries(id, key, checked) {
+  if (!hiddenSeries[id]) hiddenSeries[id] = {}
+  hiddenSeries[id][key] = !checked
+}
+
+// Close series menu on outside click
+if (typeof window !== 'undefined') {
+  window.addEventListener('click', () => { seriesMenuOpen.value = null })
+}
 
 function drawCharts() {
   for (const [id, canvas] of Object.entries(chartCanvases.value)) {
     if (!canvas) continue
-    const w = canvas.offsetWidth, h = canvas.offsetHeight
+    const w = canvas.offsetWidth || canvas.parentElement?.offsetWidth || 0
+    const h = canvas.offsetHeight || canvas.parentElement?.offsetHeight || 0
     if (!w || !h) continue
     canvas.width = w; canvas.height = h
     const ctx = canvas.getContext('2d')
     const cs  = getComputedStyle(document.documentElement)
-    const colH = cs.getPropertyValue('--amber').trim()
-    const colB = cs.getPropertyValue('--teal').trim()
     const colG = cs.getPropertyValue('--border').trim()
     const colT = cs.getPropertyValue('--text-muted').trim()
 
     ctx.clearRect(0, 0, w, h)
 
-    const all = [...tempHistory.hotend.map(p => p.v), ...tempHistory.bed.map(p => p.v)].filter(Boolean)
-    if (all.length < 2) {
+    // Build active series
+    const allSeries = chartSeries(id)
+    const activeSeries = allSeries.filter(s => !hiddenSeries[id]?.[s.key])
+
+    // Time window
+    const windowMs = chartWindowMins(id) * 60 * 1000
+    const now = Date.now()
+    const tMin = now - windowMs
+    const tMax = now
+
+    // Filter data to window
+    const seriesData = activeSeries.map(s => ({
+      ...s,
+      pts: s.data().filter(p => p.t >= tMin),
+    }))
+
+    const allVals = seriesData.flatMap(s => s.pts.map(p => p.v)).filter(v => v != null)
+    if (allVals.length < 2) {
       ctx.fillStyle = colT; ctx.font = '12px system-ui'; ctx.textAlign = 'center'
-      ctx.fillText('Temperature data will appear here', w / 2, h / 2)
+      ctx.fillText('Collecting temperature data…', w / 2, h / 2)
       continue
     }
 
-    const pad = { t: 8, r: 8, b: 28, l: 40 }
+    const pad = { t: 8, r: 8, b: 28, l: 38 }
     const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b
-    const minT = Math.min(...all) - 5, maxT = Math.max(...all) + 5
-    const allTs = [...tempHistory.hotend, ...tempHistory.bed].map(p => p.t)
-    const tMin = Math.min(...allTs), tRange = Math.max(...allTs) - tMin || 1
+    const rawMin = Math.min(...allVals), rawMax = Math.max(...allVals)
+    const spread = rawMax - rawMin || 10
+    const minT = rawMin - spread * 0.1
+    const maxT = rawMax + spread * 0.1
 
+    // Y grid lines
     ctx.strokeStyle = colG; ctx.lineWidth = 0.5
-    for (let i = 0; i <= 4; i++) {
-      const y = pad.t + (ph / 4) * i
+    const ySteps = 4
+    for (let i = 0; i <= ySteps; i++) {
+      const y = pad.t + (ph / ySteps) * i
       ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + pw, y); ctx.stroke()
       ctx.fillStyle = colT; ctx.font = '10px system-ui'; ctx.textAlign = 'right'
-      ctx.fillText((maxT - ((maxT - minT) / 4) * i).toFixed(0) + '°', pad.l - 3, y + 4)
+      ctx.fillText((maxT - ((maxT - minT) / ySteps) * i).toFixed(0) + '°', pad.l - 2, y + 4)
     }
 
-    for (const [data, colour, label, li] of [[tempHistory.hotend, colH, 'Hotend', 0],[tempHistory.bed, colB, 'Bed', 1]]) {
-      if (data.length < 2) continue
-      ctx.strokeStyle = colour; ctx.lineWidth = 1.5; ctx.beginPath()
-      data.forEach((p, i) => {
-        const x = pad.l + ((p.t - tMin) / tRange) * pw
+    // X time axis labels
+    const xSteps = 6
+    ctx.fillStyle = colT; ctx.font = '10px system-ui'; ctx.textAlign = 'center'
+    for (let i = 0; i <= xSteps; i++) {
+      const t = tMin + (windowMs / xSteps) * i
+      const x = pad.l + (pw / xSteps) * i
+      const ago = Math.round((now - t) / 60000)
+      ctx.fillText(ago === 0 ? 'now' : `-${ago}m`, x, h - 4)
+    }
+
+    // Draw each series
+    let li = 0
+    for (const s of seriesData) {
+      if (s.pts.length < 2) { li++; continue }
+      ctx.strokeStyle = s.colour; ctx.lineWidth = 1.5; ctx.beginPath()
+      s.pts.forEach((p, i) => {
+        const x = pad.l + ((p.t - tMin) / windowMs) * pw
         const y = pad.t + ph - ((p.v - minT) / (maxT - minT)) * ph
         i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
       })
       ctx.stroke()
-      ctx.fillStyle = colour; ctx.beginPath(); ctx.arc(pad.l + 8 + li * 68, h - 10, 4, 0, Math.PI * 2); ctx.fill()
+      // Legend dot
+      ctx.fillStyle = s.colour
+      ctx.beginPath(); ctx.arc(pad.l + 8 + li * 70, h - 20, 4, 0, Math.PI * 2); ctx.fill()
       ctx.fillStyle = colT; ctx.font = '10px system-ui'; ctx.textAlign = 'left'
-      ctx.fillText(label, pad.l + 16 + li * 68, h - 6)
+      ctx.fillText(s.label, pad.l + 16 + li * 70, h - 16)
+      li++
     }
   }
 }
@@ -1029,6 +1158,33 @@ onUnmounted(() => {
 
 .wmon-led-swatches { display: flex; gap: 3px; flex-wrap: wrap; }
 .wmon-led-swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border-2); }
+
+.wmon-chart-header { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.wmon-chart-controls { display: flex; align-items: center; gap: 4px; }
+.wmon-chart-btn {
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 3px;
+  color: var(--text-dim); font-size: 12px; cursor: pointer; padding: 1px 7px; line-height: 1.6;
+  transition: color 0.1s, background 0.1s;
+}
+.wmon-chart-btn:hover { color: var(--text); background: var(--border); }
+.wmon-chart-window { font-size: 11px; font-family: var(--font-mono); color: var(--text-dim); min-width: 28px; text-align: center; }
+.wmon-chart-gear { font-size: 13px; padding: 1px 5px; }
+.wmon-chart-gear-wrap { position: relative; }
+.wmon-series-menu {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 100;
+  background: var(--surface); border: 1px solid var(--border-2); border-radius: var(--radius);
+  padding: 6px 0; min-width: 160px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+}
+.wmon-series-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px; cursor: pointer; font-size: 12px;
+  transition: background 0.1s;
+}
+.wmon-series-item:hover { background: var(--surface-2); }
+.wmon-series-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.wmon-chart-wrap { flex-shrink: 0; width: 100%; }
+.wmon-chart-resize { padding: 2px 0; }
+.wmon-chart-slider { width: 100%; accent-color: var(--border-2); cursor: row-resize; height: 4px; }
 
 .w-chart { display: flex; flex-direction: column; height: 100%; gap: 4px; }
 .wch-label  { font-size: 10px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: var(--text-muted); flex-shrink: 0; }

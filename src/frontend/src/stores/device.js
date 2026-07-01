@@ -50,6 +50,9 @@ export const useDeviceStore = defineStore('device', {
     idleState:      'Idle',     // idle_timeout.state
     homedAxes:      '',         // toolhead.homed_axes
     motorsEnabled:  true,
+    filename:       '',
+    progress:       0,
+    printDuration:  0,
 
     // ── System loads (fed from Klipper status subscription) ───────
     // systemStats: { sysload, memavail, cputime }
@@ -187,11 +190,14 @@ export const useDeviceStore = defineStore('device', {
       this.mcus = mcus
     },
 
-    updatePrinter({ printerState, idleState, homedAxes, motorsEnabled }) {
+    updatePrinter({ printerState, idleState, homedAxes, motorsEnabled, filename, progress, printDuration }) {
       if (printerState  !== undefined) this.printerState  = printerState
       if (idleState     !== undefined) this.idleState     = idleState
       if (homedAxes     !== undefined) this.homedAxes     = homedAxes
       if (motorsEnabled !== undefined) this.motorsEnabled = motorsEnabled
+      if (filename      !== undefined) this.filename      = filename
+      if (progress      !== undefined) this.progress      = progress
+      if (printDuration !== undefined) this.printDuration = printDuration
     },
   },
 })
