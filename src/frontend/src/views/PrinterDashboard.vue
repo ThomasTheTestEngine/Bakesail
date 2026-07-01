@@ -144,13 +144,19 @@
               <div class="wmon-chart-header">
                 <span class="wmon-section-title">TEMPERATURE HISTORY</span>
                 <div class="wmon-chart-controls">
-                  <button class="wmon-chart-btn" @click="decreaseTimeWindow(w.id)">−</button>
-                  <span class="wmon-chart-window">{{ chartWindowLabel(w.id) }}</span>
-                  <button class="wmon-chart-btn" @click="increaseTimeWindow(w.id)">+</button>
-                  <!-- Series toggle gear -->
+                  <!-- Gear opens combined series + time scale menu -->
                   <div class="wmon-chart-gear-wrap" @click.stop>
-                    <button class="wmon-chart-btn wmon-chart-gear" @click="toggleSeriesMenu(w.id)" title="Toggle series">⚙</button>
+                    <button class="wmon-chart-btn wmon-chart-gear" @click="toggleSeriesMenu(w.id)" title="Chart settings">⚙</button>
                     <div v-if="seriesMenuOpen === w.id" class="wmon-series-menu">
+                      <!-- Time scale section -->
+                      <div class="wmon-series-section">TIME SCALE</div>
+                      <div class="wmon-timescale-row">
+                        <button class="wmon-chart-btn" @click.stop="decreaseTimeWindow(w.id)">−</button>
+                        <span class="wmon-chart-window">{{ chartWindowLabel(w.id) }}</span>
+                        <button class="wmon-chart-btn" @click.stop="increaseTimeWindow(w.id)">+</button>
+                      </div>
+                      <!-- Series section -->
+                      <div class="wmon-series-section">SERIES</div>
                       <label v-for="s in chartSeries(w.id)" :key="s.key" class="wmon-series-item">
                         <input type="checkbox" :checked="!hiddenSeries[w.id]?.[s.key]"
                                @change="toggleSeries(w.id, s.key, $event.target.checked)" />
@@ -162,16 +168,10 @@
                 </div>
               </div>
               <div class="wmon-chart-wrap"
-                   :style="{ height: (chartHeights[w.id] ?? 180) + 'px' }">
+                   :style="{ height: (w.config?.chartHeight ?? 180) + 'px' }">
                 <canvas :ref="el => { if (el) chartCanvases[w.id] = el }" style="width:100%;height:100%;display:block"></canvas>
               </div>
-              <!-- Height resize slider -->
-              <div class="wmon-chart-resize">
-                <input type="range" min="100" max="400" step="10"
-                       :value="chartHeights[w.id] ?? 180"
-                       @input="chartHeights[w.id] = parseInt($event.target.value)"
-                       class="wmon-chart-slider" title="Chart height" />
-              </div>
+
             </template>
 
             <!-- Temperatures -->
@@ -535,13 +535,17 @@
                 <span class="wth-pos-icon">◈</span>
                 <span class="wth-pos-label">Z-Offset: {{ printer.zOffset.toFixed(3) }}</span>
               </div>
+              <!-- Row 1: negative adjustments -->
               <div class="wth-zoffset-row">
                 <button v-for="d in [-0.05,-0.025,-0.01,-0.005]" :key="d" class="btn btn-ghost btn-xs wth-jog-btn"
                         @click="sendGcode(`SET_GCODE_OFFSET Z_ADJUST=${d} MOVE=1`)">{{ d }}</button>
+              </div>
+              <!-- Row 2: save buttons + positive adjustments -->
+              <div class="wth-zoffset-row">
                 <button class="btn btn-ghost btn-xs wth-save-btn"
-                        @click="sendGcode('Z_OFFSET_APPLY_PROBE')" title="Save to config">↓</button>
+                        @click="sendGcode('Z_OFFSET_APPLY_PROBE')" title="Save to config">↓ Save</button>
                 <button class="btn btn-ghost btn-xs wth-save-btn"
-                        @click="sendGcode('SAVE_CONFIG')" title="Apply & save">↑</button>
+                        @click="sendGcode('SAVE_CONFIG')" title="Apply & save">↑ Apply</button>
                 <button v-for="d in [0.005,0.01,0.025,0.05]" :key="d" class="btn btn-ghost btn-xs wth-jog-btn"
                         @click="sendGcode(`SET_GCODE_OFFSET Z_ADJUST=${d} MOVE=1`)">+{{ d }}</button>
               </div>
@@ -915,7 +919,7 @@ const hiddenSeries   = reactive({})   // widgetId → { seriesKey: bool }
 const seriesMenuOpen = ref(null)
 let chartTimer = null
 
-const TIME_WINDOWS = [5, 15, 30, 60, 120, 240, 480]
+const TIME_WINDOWS = [1, 2, 5, 15, 30, 60, 120, 240, 480]
 
 function chartWindowMins(id) { return chartWindows[id] ?? 60 }
 function chartWindowLabel(id) {
@@ -1015,14 +1019,16 @@ function drawCharts() {
       ctx.fillText((maxT - ((maxT - minT) / ySteps) * i).toFixed(0) + '°', pad.l - 2, y + 4)
     }
 
-    // X time axis labels
+    // X time axis labels — left=oldest, right=now
     const xSteps = 6
-    ctx.fillStyle = colT; ctx.font = '10px system-ui'; ctx.textAlign = 'center'
+    ctx.fillStyle = colT; ctx.font = '10px system-ui'
     for (let i = 0; i <= xSteps; i++) {
       const t = tMin + (windowMs / xSteps) * i
       const x = pad.l + (pw / xSteps) * i
       const ago = Math.round((now - t) / 60000)
-      ctx.fillText(ago === 0 ? 'now' : `-${ago}m`, x, h - 4)
+      const label = ago === 0 ? 'now' : `-${ago}m`
+      ctx.textAlign = i === 0 ? 'left' : i === xSteps ? 'right' : 'center'
+      ctx.fillText(label, x, h - 4)
     }
 
     // Draw each series
@@ -1181,6 +1187,20 @@ onUnmounted(() => {
   transition: background 0.1s;
 }
 .wmon-series-item:hover { background: var(--surface-2); }
+.wmon-series-section {
+  padding: 6px 12px 3px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.wmon-timescale-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 8px;
+}
 .wmon-series-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .wmon-chart-wrap { flex-shrink: 0; width: 100%; }
 .wmon-chart-resize { padding: 2px 0; }

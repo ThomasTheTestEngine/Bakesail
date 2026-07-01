@@ -81,6 +81,18 @@
           </select>
         </div>
 
+        <!-- Chart height slider (only for monitor/chart widgets) -->
+        <div v-if="widget.type === 'chart'" class="ws-fields-section">
+          <div class="ws-fields-title">Chart Height</div>
+          <div class="ws-slider-row">
+            <input type="range" min="100" max="500" step="10"
+                   :value="widget.config.chartHeight ?? 180"
+                   @input="widget.config.chartHeight = parseInt($event.target.value)"
+                   class="ws-field-input" style="flex:1;padding:0" />
+            <span class="ws-slider-val">{{ widget.config.chartHeight ?? 180 }}px</span>
+          </div>
+        </div>
+
         <button class="ws-revert-btn" @click="revertConfig">↺ Revert widget to defaults</button>
       </div>
     </template>
@@ -247,6 +259,8 @@ function revertConfig() {
 .ws-close-btn:hover { color: var(--text); }
 .ws-field-row { display: flex; align-items: center; gap: 8px; }
 .ws-field-label { font-size: 11px; color: var(--text-dim); flex: 1; }
+.ws-slider-row { display: flex; align-items: center; gap: 8px; }
+.ws-slider-val { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); flex-shrink: 0; }
 .ws-field-input {
   background: var(--surface-2); border: 1px solid var(--border);
   border-radius: 4px; padding: 4px 6px;
