@@ -53,14 +53,21 @@ const displayName = computed(() => {
   return labels[props.cam.type] || 'Camera'
 })
 
-// Moonraker can proxy mjpeg streams — construct URL from device path index
-// /dev/video0 → webcam index 0. Falls back to direct mjpeg URL if custom.
+// Build mjpeg stream URL proxied through nginx → Crowsnest/ustreamer.
+// ustreamer serves at /?action=stream (not /stream).
+// /dev/video0 → /webcam/?action=stream
+// /dev/video1 → /webcam2/?action=stream  (Crowsnest cam index = videoN + 1 for N>0)
+// Falls back to raw URL for IP cameras or manual entries.
 const streamUrl = computed(() => {
   const dev = camDevice.value
   if (!dev) return ''
   const match = dev.match(/\/dev\/video(\d+)/)
-  if (match) return `/webcam${match[1] === '0' ? '' : match[1]}/stream`
-  return dev  // allow full URL as device for IP cameras
+  if (match) {
+    const n = parseInt(match[1], 10)
+    const prefix = n === 0 ? '/webcam/' : `/webcam${n + 1}/`
+    return `${prefix}?action=stream`
+  }
+  return dev  // full URL passthrough for IP cameras
 })
 </script>
 
