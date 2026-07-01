@@ -56,9 +56,6 @@
 
         <!-- Right: action buttons -->
         <div class="topbar-actions">
-          <!-- Slot for page-specific topbar content (e.g. customize gear) -->
-          <div id="topbar-page-slot"></div>
-
           <!-- FW/Power dropdown -->
           <div class="topbar-dropdown-wrap" @click.stop>
             <button class="topbar-btn" @click="powerMenuOpen = !powerMenuOpen" title="System Controls">
@@ -77,6 +74,9 @@
           <button class="topbar-btn topbar-btn--estop" @click="emergencyStop" title="Emergency Stop">
             ⏹ E-Stop
           </button>
+
+          <!-- Slot for page-specific topbar content (e.g. customize gear) -->
+          <div id="topbar-page-slot"></div>
         </div>
       </header>
 

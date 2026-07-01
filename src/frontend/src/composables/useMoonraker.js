@@ -52,8 +52,8 @@ const SUBSCRIBED_OBJECTS = {
   print_stats:     ['filename', 'state', 'print_duration', 'filament_used', 'info'],
   display_status:  ['progress', 'message'],
   virtual_sdcard:  ['progress', 'is_active', 'file_position', 'file_size'],
-  toolhead:        ['position', 'homed_axes', 'max_velocity', 'max_accel', 'speed'],
-  gcode_move:      ['speed_factor', 'extrude_factor'],
+  toolhead:        ['position', 'homed_axes', 'max_velocity', 'max_accel', 'square_corner_velocity'],
+  gcode_move:      ['speed_factor', 'extrude_factor', 'homing_origin', 'speed'],
   idle_timeout:    ['state'],
 }
 

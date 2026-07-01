@@ -196,29 +196,98 @@
         <!-- ── Toolhead Position ──────────────────────────────── -->
         <template v-else-if="w.type === 'toolhead'">
           <div class="w-toolhead">
+
+            <!-- Position: absolute label -->
+            <div class="wth-pos-header">
+              <span class="wth-pos-icon">⊙</span>
+              <span class="wth-pos-label">Position: absolute</span>
+            </div>
+
+            <!-- XYZ position display -->
             <div class="wth-axes">
-              <div class="wth-axis" v-for="(val, axis) in { X: printer.posX, Y: printer.posY, Z: printer.posZ }" :key="axis">
-                <span class="wth-axis-label">{{ axis }}</span>
-                <span class="wth-axis-val" :class="{ 'wth-unhomed': !printer.homedAxes.includes(axis.toLowerCase()) }">
-                  {{ val != null ? val.toFixed(2) : '?' }}
-                </span>
+              <div class="wth-axis-card" v-for="(val, axis) in { X: printer.posX, Y: printer.posY, Z: printer.posZ }" :key="axis"
+                   :class="{ 'wth-unhomed': !printer.homedAxes.includes(axis.toLowerCase()) }">
+                <div class="wth-axis-top">
+                  <span class="wth-axis-label">{{ axis }}</span>
+                  <span class="wth-axis-limit">[{{ val != null ? val.toFixed(2) : '?' }}]</span>
+                </div>
+                <span class="wth-axis-val">{{ val != null ? val.toFixed(2) : '?' }}</span>
               </div>
             </div>
-            <div class="wth-btns" v-if="!isFieldHidden(w,'buttons')">
-              <button class="btn btn-ghost btn-xs" @click="sendGcode('G28')">Home All</button>
-              <button class="btn btn-ghost btn-xs" @click="sendGcode('G28 Z')">Home Z</button>
+
+            <!-- Home / QGL / Motor off buttons -->
+            <div class="wth-action-row">
+              <button class="btn btn-primary btn-sm wth-home-btn" @click="sendGcode('G28')" title="Home All">
+                <span class="wth-home-icon">⌂</span> ALL
+              </button>
+              <button class="btn btn-sm wth-qgl-btn" @click="sendGcode('QUAD_GANTRY_LEVEL')" title="Quad Gantry Level">QGL</button>
+              <button class="btn btn-ghost btn-sm wth-motors-btn" @click="sendGcode('M18')" title="Disable motors">
+                <span class="wth-motors-icon">⛌</span>
+              </button>
             </div>
+
+            <!-- XY jog grid -->
+            <div class="wth-jog-section">
+              <div class="wth-jog-row" v-for="(axis, ai) in ['X','Y']" :key="axis">
+                <button v-for="d in [-100,-10,-1]" :key="d" class="btn btn-ghost btn-xs wth-jog-btn"
+                        @click="sendGcode(`G91\nG0 ${axis}${d} F3000\nG90`)">{{ d }}</button>
+                <span class="wth-jog-axis-label" :style="{ color: axis==='X' ? 'var(--teal)' : 'var(--amber)' }">{{ axis }}</span>
+                <button v-for="d in [1,10,100]" :key="d" class="btn btn-ghost btn-xs wth-jog-btn"
+                        @click="sendGcode(`G91\nG0 ${axis}+${d} F3000\nG90`)">+{{ d }}</button>
+              </div>
+              <!-- Z row with different increments -->
+              <div class="wth-jog-row">
+                <button v-for="d in [-25,-1,-0.1]" :key="d" class="btn btn-ghost btn-xs wth-jog-btn"
+                        @click="sendGcode(`G91\nG0 Z${d} F600\nG90`)">{{ d }}</button>
+                <span class="wth-jog-axis-label" style="color:var(--yellow)">Z</span>
+                <button v-for="d in [0.1,1,25]" :key="d" class="btn btn-ghost btn-xs wth-jog-btn"
+                        @click="sendGcode(`G91\nG0 Z+${d} F600\nG90`)">+{{ d }}</button>
+              </div>
+            </div>
+
+            <!-- Z-Offset -->
+            <div class="wth-zoffset-section">
+              <div class="wth-zoffset-header">
+                <span class="wth-pos-icon">◈</span>
+                <span class="wth-pos-label">Z-Offset: {{ printer.zOffset.toFixed(3) }}</span>
+              </div>
+              <div class="wth-zoffset-row">
+                <button v-for="d in [-0.05,-0.025,-0.01,-0.005]" :key="d" class="btn btn-ghost btn-xs wth-jog-btn"
+                        @click="sendGcode(`SET_GCODE_OFFSET Z_ADJUST=${d} MOVE=1`)">{{ d }}</button>
+                <button class="btn btn-ghost btn-xs wth-save-btn"
+                        @click="sendGcode('Z_OFFSET_APPLY_PROBE')" title="Save to config">↓</button>
+                <button class="btn btn-ghost btn-xs wth-save-btn"
+                        @click="sendGcode('SAVE_CONFIG')" title="Apply & save">↑</button>
+                <button v-for="d in [0.005,0.01,0.025,0.05]" :key="d" class="btn btn-ghost btn-xs wth-jog-btn"
+                        @click="sendGcode(`SET_GCODE_OFFSET Z_ADJUST=${d} MOVE=1`)">+{{ d }}</button>
+              </div>
+            </div>
+
+            <!-- Speed factor -->
+            <div class="wth-speed-section">
+              <div class="wth-speed-header">
+                <span class="wth-pos-icon">↻</span>
+                <span class="wth-pos-label">Speed factor</span>
+                <span class="wth-speed-pct">{{ Math.round(printer.speedFactor * 100) }} %</span>
+              </div>
+              <div class="wth-speed-row">
+                <button class="btn btn-ghost btn-xs wth-speed-adj" @click="adjustSpeed(-10)">−</button>
+                <input type="range" class="wth-speed-slider" min="10" max="200" step="1"
+                       :value="Math.round(printer.speedFactor * 100)"
+                       @input="setSpeed($event.target.value)" />
+                <button class="btn btn-ghost btn-xs wth-speed-adj" @click="adjustSpeed(10)">+</button>
+              </div>
+            </div>
+
           </div>
         </template>
 
         <!-- ── Print Controls ─────────────────────────────────── -->
         <template v-else-if="w.type === 'controls'">
           <div class="w-controls">
-            <button class="btn btn-ghost" @click="sendGcode('PAUSE')"        :disabled="!printer.isPrinting">Pause</button>
-            <button class="btn btn-ghost" @click="sendGcode('RESUME')"       :disabled="!printer.isPaused">Resume</button>
-            <button class="btn btn-danger" @click="confirmCancel"            :disabled="!printer.isPrinting && !printer.isPaused">Cancel</button>
-            <button class="btn btn-ghost" @click="sendGcode('FIRMWARE_RESTART')" style="margin-left:auto">Restart FW</button>
-            <button class="btn btn-danger" @click="sendGcode('M112')" title="Emergency stop">⚡ E-Stop</button>
+            <button class="btn btn-ghost" @click="sendGcode('PAUSE')"   :disabled="!printer.isPrinting">Pause</button>
+            <button class="btn btn-ghost" @click="sendGcode('RESUME')" :disabled="!printer.isPaused">Resume</button>
+            <button class="btn btn-danger" @click="confirmCancel"      :disabled="!printer.isPrinting && !printer.isPaused">Cancel</button>
           </div>
         </template>
 
@@ -313,6 +382,8 @@ const printer = reactive({
   extrudeFactor: 1.0,
   posX: null, posY: null, posZ: null,
   homedAxes: '',
+  zOffset:   0.0,
+  jogStep:   10,
 })
 
 const HISTORY_LEN = 300
@@ -343,6 +414,7 @@ function handleStatus(data) {
   if (data.gcode_move) {
     if (data.gcode_move.speed_factor   != null) printer.speedFactor   = data.gcode_move.speed_factor
     if (data.gcode_move.extrude_factor != null) printer.extrudeFactor = data.gcode_move.extrude_factor
+    if (data.gcode_move.homing_origin  != null) printer.zOffset       = data.gcode_move.homing_origin[2]
   }
   if (data.toolhead) {
     if (data.toolhead.position   != null) { printer.posX = data.toolhead.position[0]; printer.posY = data.toolhead.position[1]; printer.posZ = data.toolhead.position[2] }
@@ -374,6 +446,16 @@ const STATE_META = {
 const stateLabel  = computed(() => STATE_META[printer.state]?.label  ?? printer.state)
 const stateColour = computed(() => STATE_META[printer.state]?.colour ?? 'var(--text-muted)')
 
+// ── Speed / flow helpers ──────────────────────────────────────
+function setSpeed(pct) {
+  const factor = Math.max(0.1, Math.min(2.0, parseInt(pct) / 100))
+  sendGcode(`M220 S${Math.round(factor * 100)}`)
+}
+function adjustSpeed(delta) {
+  const current = Math.round(printer.speedFactor * 100)
+  setSpeed(Math.max(10, Math.min(200, current + delta)))
+}
+
 // ── Widget definitions ─────────────────────────────────────────
 const WIDGET_DEFS = [
   { type: 'state',     label: 'State Header',       defaultW: 700, defaultH: 80,  defaultConfig: {}, fields: [{ key: 'filename', label: 'Filename' }, { key: 'layer', label: 'Layer counter' }] },
@@ -383,7 +465,7 @@ const WIDGET_DEFS = [
   { type: 'progress',  label: 'Print Progress',      defaultW: 520, defaultH: 120, defaultConfig: {}, fields: [{ key: 'time', label: 'Print time' }, { key: 'eta', label: 'ETA' }, { key: 'filament', label: 'Filament used' }] },
   { type: 'fan',       label: 'Part Fan',            defaultW: 180, defaultH: 140, defaultConfig: { label: 'Part Fan' }, fields: [] },
   { type: 'speedflow', label: 'Speed / Flow',        defaultW: 220, defaultH: 140, defaultConfig: {}, fields: [] },
-  { type: 'toolhead',  label: 'Toolhead Position',   defaultW: 260, defaultH: 160, defaultConfig: {}, fields: [{ key: 'buttons', label: 'Home buttons' }] },
+  { type: 'toolhead',  label: 'Toolhead',            defaultW: 780, defaultH: 440, defaultConfig: {}, fields: [] },
   { type: 'controls',  label: 'Print Controls',      defaultW: 600, defaultH: 60,  defaultConfig: {}, fields: [] },
   { type: 'macros',    label: 'Macro Buttons',       defaultW: 400, defaultH: 100, defaultConfig: { macros: ['BED_MESH_CALIBRATE', 'LOAD_FILAMENT', 'UNLOAD_FILAMENT'] }, fields: [] },
   { type: 'camera',    label: 'Camera Feed',         defaultW: 320, defaultH: 260, defaultConfig: { cameraId: null }, fields: [{ key: 'label', label: 'Show camera name' }] },
@@ -396,15 +478,14 @@ function isFieldHidden(w, key) { return w.config?.hiddenFields?.includes(key) }
 // ── Default layout ─────────────────────────────────────────────
 function buildDefaultLayout() {
   return [
-    { id: 'state',     type: 'state',     x: 0,   y: 0,   w: 740, h: 80,  config: {} },
-    { id: 'hotend',    type: 'hotend',    x: 0,   y: 100, w: 180, h: 160, config: {} },
-    { id: 'bed',       type: 'bed',       x: 190, y: 100, w: 180, h: 160, config: {} },
-    { id: 'fan',       type: 'fan',       x: 380, y: 100, w: 180, h: 160, config: {} },
-    { id: 'speedflow', type: 'speedflow', x: 570, y: 100, w: 220, h: 160, config: {} },
-    { id: 'progress',  type: 'progress',  x: 0,   y: 280, w: 560, h: 120, config: {} },
-    { id: 'toolhead',  type: 'toolhead',  x: 570, y: 280, w: 220, h: 160, config: {} },
-    { id: 'controls',  type: 'controls',  x: 0,   y: 420, w: 740, h: 60,  config: {} },
-    { id: 'chart',     type: 'chart',     x: 0,   y: 500, w: 740, h: 200, config: {} },
+    { id: 'state',     type: 'state',     x: 0,   y: 0,   w: 760, h: 80,  config: {} },
+    { id: 'bed',       type: 'bed',       x: 0,   y: 100, w: 180, h: 160, config: {} },
+    { id: 'fan',       type: 'fan',       x: 190, y: 100, w: 180, h: 160, config: {} },
+    { id: 'speedflow', type: 'speedflow', x: 380, y: 100, w: 200, h: 160, config: {} },
+    { id: 'progress',  type: 'progress',  x: 0,   y: 280, w: 580, h: 120, config: {} },
+    { id: 'controls',  type: 'controls',  x: 0,   y: 420, w: 580, h: 60,  config: {} },
+    { id: 'chart',     type: 'chart',     x: 0,   y: 500, w: 580, h: 200, config: {} },
+    { id: 'toolhead',  type: 'toolhead',  x: 590, y: 100, w: 400, h: 600, config: {} },
   ]
 }
 
@@ -612,13 +693,93 @@ onUnmounted(() => {
 .wsf-btns  { display: flex; gap: 6px; flex-wrap: wrap; }
 
 /* Toolhead */
-.w-toolhead { display: flex; flex-direction: column; gap: 10px; justify-content: center; height: 100%; }
-.wth-axes { display: flex; flex-direction: column; gap: 4px; }
-.wth-axis { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.wth-axis-label { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); width: 16px; }
-.wth-axis-val { font-size: 18px; font-weight: 700; font-family: var(--font-mono); }
-.wth-axis-val.wth-unhomed { color: var(--red); }
-.wth-btns { display: flex; gap: 6px; }
+.w-toolhead {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  padding: 4px 2px;
+  overflow-y: auto;
+}
+
+/* Position header */
+.wth-pos-header, .wth-zoffset-header, .wth-speed-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.wth-pos-icon { font-size: 14px; color: var(--text-muted); }
+.wth-pos-label { font-size: 12px; color: var(--text-dim); }
+.wth-speed-pct { margin-left: auto; font-size: 13px; font-weight: 700; font-family: var(--font-mono); }
+
+/* Axis cards */
+.wth-axes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.wth-axis-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.wth-axis-card.wth-unhomed { border-color: var(--red); }
+.wth-axis-top { display: flex; justify-content: space-between; align-items: baseline; }
+.wth-axis-label { font-size: 11px; font-weight: 700; color: var(--text-muted); }
+.wth-axis-limit { font-size: 10px; font-family: var(--font-mono); color: var(--text-muted); }
+.wth-axis-val { font-size: 20px; font-weight: 700; font-family: var(--font-mono); }
+.wth-axis-card.wth-unhomed .wth-axis-val { color: var(--red); }
+
+/* Action row */
+.wth-action-row { display: flex; gap: 8px; }
+.wth-home-btn { background: var(--teal); border-color: var(--teal); color: #fff; flex: 1; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; }
+.wth-home-btn:hover { opacity: 0.85; }
+.wth-qgl-btn { background: var(--amber); border-color: var(--amber); color: #fff; flex: 1; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; }
+.wth-qgl-btn:hover { opacity: 0.85; }
+.wth-motors-btn { flex-shrink: 0; opacity: 0.6; }
+.wth-motors-btn:hover { opacity: 1; }
+
+/* Jog grid */
+.wth-jog-section { display: flex; flex-direction: column; gap: 4px; }
+.wth-jog-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr) 24px repeat(3, 1fr);
+  gap: 3px;
+  align-items: center;
+}
+.wth-jog-axis-label {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.wth-jog-btn {
+  font-size: 11px;
+  padding: 4px 2px;
+  text-align: center;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+/* Z-offset */
+.wth-zoffset-section { display: flex; flex-direction: column; gap: 6px; }
+.wth-zoffset-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr) auto auto repeat(4, 1fr);
+  gap: 3px;
+  align-items: center;
+}
+.wth-save-btn { font-size: 13px; padding: 4px 6px; }
+
+/* Speed slider */
+.wth-speed-section { display: flex; flex-direction: column; gap: 6px; }
+.wth-speed-row { display: flex; align-items: center; gap: 8px; }
+.wth-speed-slider { flex: 1; accent-color: var(--teal); cursor: pointer; }
+.wth-speed-adj { font-size: 15px; width: 28px; padding: 2px; flex-shrink: 0; }
 
 /* Controls */
 .w-controls { display: flex; align-items: center; gap: 8px; height: 100%; flex-wrap: wrap; }
