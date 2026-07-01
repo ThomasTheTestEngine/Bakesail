@@ -138,6 +138,14 @@ TTYD_EOF
     sudo systemctl daemon-reload
     sudo systemctl enable bakesail-ttyd
     sudo systemctl restart bakesail-ttyd
+
+    # Add ttyd upstream to nginx conf.d if not already there
+    local upstreams_conf="/etc/nginx/conf.d/upstreams.conf"
+    if ! grep -q "upstream ttyd" "${upstreams_conf}" 2>/dev/null; then
+        echo -e "\nupstream ttyd {\n    server 127.0.0.1:7681;\n}" | sudo tee -a "${upstreams_conf}" > /dev/null
+        info "ttyd upstream added to ${upstreams_conf}."
+    fi
+
     success "bakesail-ttyd service enabled and started."
 }
 
