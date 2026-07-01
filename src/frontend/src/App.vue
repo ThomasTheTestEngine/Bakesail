@@ -150,10 +150,12 @@
             <i :class="cbarTerminal ? 'mdi mdi-bash' : 'mdi mdi-chevron-right'" class="cbar-prompt-icon"></i>
             <input ref="cbarInputEl" class="cbar-input" v-model="cbarInput"
                    :placeholder="cbarTerminal ? 'Shell command…' : 'Klipper command…'"
-                   @keydown.enter="cbarSubmit"
-                   @keydown.up.prevent="cbarHistoryUp"
-                   @keydown.down.prevent="cbarHistoryDown"
-                   spellcheck="false" autocomplete="off" autocapitalize="off" />
+                   @keydown="cbarTerminal ? cbarTermKey($event) : null"
+                   @keydown.enter.prevent="cbarSubmit"
+                   @keydown.up.prevent="cbarTerminal ? null : cbarHistoryUp()"
+                   @keydown.down.prevent="cbarTerminal ? null : cbarHistoryDown()"
+                   spellcheck="false" autocomplete="off" autocapitalize="off"
+                   autocorrect="off" />
             <!-- Mode button: text label, toggles on click -->
             <button class="cbar-mode-text-btn" @click="cbarTerminal ? (cbarTerminal=false, cbarScrollBottom()) : cbarSetTerminal(true)">
               {{ cbarTerminal ? 'Shell' : 'Console' }}
@@ -361,10 +363,12 @@ function cbarSetTerminal(val) {
   const ws = new WebSocket(`${proto}://${location.host}/terminal/ws`, ['tty'])
   ws.binaryType = 'arraybuffer'
   ws.onopen = () => {
-    // ttyd protocol v2: send '0' + JSON config as first message
+    // ttyd binary protocol: send init as binary frame with '0' prefix
     const cols = Math.max(80, Math.floor((cbarEl.value?.offsetWidth || 800) / 9))
     const rows = Math.max(10, Math.floor(((cbarHeight.value || 240) - 80) / 18))
-    ws.send('0' + JSON.stringify({ AuthToken: '', columns: cols, rows }))
+    const initStr = '0' + JSON.stringify({ AuthToken: '', columns: cols, rows })
+    const initBuf = new TextEncoder().encode(initStr)
+    ws.send(initBuf.buffer)
     nextTick(cbarScrollBottom)
   }
   ws.onmessage = e => {
@@ -398,6 +402,32 @@ function cbarSetTerminal(val) {
   cbarTermWs = ws
 }
 
+// Send individual keystrokes to terminal in real time
+function cbarTermKey(e) {
+  if (!cbarTermWs || cbarTermWs.readyState !== WebSocket.OPEN) return
+  let data = ''
+  if (e.key === 'Enter')          { data = '\r' }
+  else if (e.key === 'Backspace') { data = '\x7f' }
+  else if (e.key === 'Tab')       { e.preventDefault(); data = '\t' }
+  else if (e.key === 'Escape')    { data = '\x1b' }
+  else if (e.key === 'ArrowUp')   { e.preventDefault(); data = '\x1b[A' }
+  else if (e.key === 'ArrowDown') { e.preventDefault(); data = '\x1b[B' }
+  else if (e.key === 'ArrowRight'){ e.preventDefault(); data = '\x1b[C' }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); data = '\x1b[D' }
+  else if (e.ctrlKey && e.key.length === 1) {
+    const code = e.key.toUpperCase().charCodeAt(0) - 64
+    if (code > 0 && code < 32) { e.preventDefault(); data = String.fromCharCode(code) }
+  } else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey) {
+    data = e.key
+  }
+  if (data) {
+    e.preventDefault()
+    // Clear the input field — we handle all input ourselves in terminal mode
+    cbarInput.value = ''
+    cbarTermWs.send(new TextEncoder().encode('0' + data).buffer)
+  }
+}
+
 async function cbarSubmit() {
   const text = cbarInput.value
   if (!text.trim()) return
@@ -407,12 +437,9 @@ async function cbarSubmit() {
   cbarInput.value = ''
   if (cbarTerminal.value) {
     if (cbarTermWs?.readyState === WebSocket.OPEN) {
-      // ttyd input: byte '0' + text as binary frame
-      const enc = new TextEncoder()
-      const inp = new Uint8Array(text.length + 2)
-      inp[0] = 48  // '0'
-      enc.encodeInto(text + '\n', inp.subarray(1))
-      cbarTermWs.send(inp.buffer)
+      // ttyd input: binary frame with '0' prefix + text
+      const inputStr = '0' + text + '\n'
+      cbarTermWs.send(new TextEncoder().encode(inputStr).buffer)
     } else {
       cbarTermOutput.value += `<span style="color:#e05555">[not connected — click Console/Shell to connect]</span>\n`
     }
