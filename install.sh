@@ -88,6 +88,59 @@ install_dependencies() {
     install_node
 }
 
+install_ttyd() {
+    section "Installing ttyd (browser terminal)"
+
+    if command -v ttyd &>/dev/null; then
+        success "ttyd already installed ($(ttyd --version 2>&1 | head -1))."
+    else
+        info "Installing ttyd via apt..."
+        sudo apt-get install -y -qq ttyd || {
+            # Fallback: build from GitHub release binary
+            info "apt install failed, downloading prebuilt binary..."
+            local arch
+            arch=$(uname -m)
+            local ttyd_url
+            case "${arch}" in
+                aarch64) ttyd_url="https://github.com/tsl0922/ttyd/releases/latest/download/ttyd.aarch64" ;;
+                armv7l)  ttyd_url="https://github.com/tsl0922/ttyd/releases/latest/download/ttyd.arm" ;;
+                x86_64)  ttyd_url="https://github.com/tsl0922/ttyd/releases/latest/download/ttyd.x86_64" ;;
+                *)       die "Unsupported architecture for ttyd: ${arch}" ;;
+            esac
+            sudo curl -fsSL "${ttyd_url}" -o /usr/local/bin/ttyd
+            sudo chmod +x /usr/local/bin/ttyd
+        }
+        success "ttyd installed."
+    fi
+
+    # Write systemd service — binds to localhost only, not externally exposed
+    local ttyd_service="/etc/systemd/system/bakesail-ttyd.service"
+    sudo tee "${ttyd_service}" > /dev/null << TTYD_EOF
+[Unit]
+Description=Bakesail TTY terminal (ttyd)
+After=network.target
+
+[Service]
+User=${USER}
+ExecStart=/usr/bin/ttyd --port 7681 --interface 127.0.0.1 --once bash
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+TTYD_EOF
+
+    # Try /usr/local/bin if /usr/bin/ttyd doesn't exist
+    if [[ ! -f /usr/bin/ttyd ]] && [[ -f /usr/local/bin/ttyd ]]; then
+        sudo sed -i 's|/usr/bin/ttyd|/usr/local/bin/ttyd|g' "${ttyd_service}"
+    fi
+
+    sudo systemctl daemon-reload
+    sudo systemctl enable bakesail-ttyd
+    sudo systemctl restart bakesail-ttyd
+    success "bakesail-ttyd service enabled and started."
+}
+
 install_node() {
     local current_major=0
     if command -v node &>/dev/null; then
@@ -381,6 +434,7 @@ main() {
 
     preflight_checks
     install_dependencies
+    install_ttyd
     clone_repo
     build_frontend
     install_klipper_extra

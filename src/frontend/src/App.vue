@@ -350,35 +350,40 @@ function cbarAnsiToHtml(text) {
 }
 
 function cbarSetTerminal(val) {
-  // Close existing terminal connection first
+  // Close existing connection first
   if (cbarTermWs) { cbarTermWs.close(); cbarTermWs = null }
   cbarTerminal.value = val
   if (!val) { nextTick(cbarScrollBottom); return }
 
   cbarTermOutput.value = ''
+  // ttyd WebSocket — proxied by nginx at /terminal/ws
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  const ws = new WebSocket(`${proto}://${location.host}/machine/terminal`)
+  const ws = new WebSocket(`${proto}://${location.host}/terminal/ws`)
   ws.binaryType = 'arraybuffer'
   ws.onopen = () => {
-    cbarTermOutput.value += `<span style="color:#4caf7d">Terminal connected</span>\n`
-    if (cbarAutoScroll.value) nextTick(cbarScrollBottom)
+    // ttyd protocol: send JSON init message with dimensions
+    const cols = Math.floor((cbarEl.value?.offsetWidth || 800) / 8)
+    const rows = Math.floor(((cbarHeight.value || 240) - 80) / 20)
+    ws.send(JSON.stringify({ AuthToken: '', columns: cols, rows }))
+    nextTick(cbarScrollBottom)
   }
   ws.onmessage = e => {
-    let text
     if (e.data instanceof ArrayBuffer) {
-      text = new TextDecoder().decode(e.data)
-    } else {
-      text = String(e.data)
+      // ttyd sends: first byte = message type (0=output, 1=ping, 2=set_window_title)
+      const buf = new Uint8Array(e.data)
+      if (buf[0] === 0) {
+        const text = new TextDecoder().decode(buf.slice(1))
+        cbarTermOutput.value += cbarAnsiToHtml(text)
+        if (cbarAutoScroll.value) nextTick(cbarScrollBottom)
+      }
     }
-    cbarTermOutput.value += cbarAnsiToHtml(text)
-    if (cbarAutoScroll.value) nextTick(cbarScrollBottom)
   }
   ws.onclose = () => {
-    cbarTermOutput.value += `\n<span style="color:#f0d87a">[disconnected]</span>\n`
+    cbarTermOutput.value += `\n<span style="color:#f0d87a">[session ended — session will restart shortly]</span>\n`
     cbarTermWs = null
   }
   ws.onerror = () => {
-    cbarTermOutput.value += `\n<span style="color:#e05555">[connection failed — add [machine] to moonraker.conf and restart moonraker]</span>\n`
+    cbarTermOutput.value += `\n<span style="color:#e05555">[connection failed — is bakesail-ttyd service running? Run: sudo systemctl start bakesail-ttyd]</span>\n`
   }
   cbarTermWs = ws
 }
@@ -392,8 +397,8 @@ async function cbarSubmit() {
   cbarInput.value = ''
   if (cbarTerminal.value) {
     if (cbarTermWs?.readyState === WebSocket.OPEN) {
-      // Send as UTF-8 bytes — Moonraker terminal expects raw PTY input
-      const encoded = new TextEncoder().encode(text + '\n')
+      // ttyd input: type byte '0' (ASCII) + text
+      const encoded = new TextEncoder().encode('0' + text + '\n')
       cbarTermWs.send(encoded)
     } else {
       cbarTermOutput.value += `<span style="color:#e05555">[not connected — click Console/Shell to connect]</span>\n`
