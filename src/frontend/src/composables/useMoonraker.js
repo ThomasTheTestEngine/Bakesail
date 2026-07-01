@@ -79,6 +79,20 @@ function send(method, params = {}) {
 
 // Convenience alias used by LaserDashboard and PrinterDashboard
 function sendGcode(script) {
+  // On connect, request gcode console history
+  async function fetchConsoleHistory() {
+    try {
+      const r = await send('server.gcode_store', { count: 200 })
+      if (r?.gcode_store) {
+        for (const entry of r.gcode_store) {
+          for (const cb of consoleSubscribers) {
+            try { cb(entry.message) } catch {}
+          }
+        }
+      }
+    } catch {}
+  }
+
   return send('printer.gcode.script', { script })
 }
 
@@ -236,6 +250,15 @@ function handleMessage(event) {
       useDeviceStore().setKlippyOffline()
       startKlippyPoll()
       break
+    case 'notify_gcode_response': {
+      const lines = Array.isArray(msg.params) ? msg.params : [msg.params]
+      for (const line of lines.flat()) {
+        for (const cb of consoleSubscribers) {
+          try { cb(String(line)) } catch {}
+        }
+      }
+      break
+    }
     // Ignore other notifications
   }
 }
@@ -337,14 +360,24 @@ function stopKlippyPoll() {
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export function useMoonraker() {
+  function subscribeToConsole(cb) {
+    consoleSubscribers.push(cb)
+    return () => {
+      const i = consoleSubscribers.indexOf(cb)
+      if (i >= 0) consoleSubscribers.splice(i, 1)
+    }
+  }
+
   return {
     connected:         readonly(connected),
     klippyState:       readonly(klippyState),
     connect,
     send,
     runGcode,
-    sendGcode,            // alias — same as runGcode, matches LaserDashboard usage
-    subscribeToStatus,    // (callback) => unsubscribeFn
+    sendGcode,
+    subscribeToStatus,
+    subscribeToConsole,
+    fetchConsoleHistory,
     startKlippyPoll,
   }
 }

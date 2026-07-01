@@ -60,23 +60,20 @@
             <button class="topbar-btn topbar-btn--action"
                     :class="isHomed ? 'topbar-btn--homed' : ''"
                     @click="topbarGcode('G28')" title="Home All">
-              <!-- MDI home -->
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-2px;margin-right:3px"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>Home
+<i class="mdi mdi-home" style="font-size:15px;margin-right:3px;vertical-align:-2px"></i>Home
             </button>
             <!-- QGL: lit (green) when leveled, dim when not. Klipper exposes z_tilt/quad_gantry_level applied state -->
             <button class="topbar-btn topbar-btn--action"
                     :class="deviceStore.qglApplied ? 'topbar-btn--homed' : ''"
                     @click="topbarGcode('QUAD_GANTRY_LEVEL')" title="Quad Gantry Level">
-              <!-- MDI format-vertical-align-center as leveling icon -->
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-2px;margin-right:3px"><path d="M8 19h3v3h2v-3h3l-4-4-4 4zm8-14h-3V2h-2v3H8l4 4 4-4zM4 11v2h16v-2H4z"/></svg>QGL
+<i class="mdi mdi-arrow-collapse-vertical" style="font-size:15px;margin-right:3px;vertical-align:-2px"></i>QGL
             </button>
             <!-- Motors: lit when enabled, dim+strikethrough feel when disabled -->
             <button class="topbar-btn topbar-btn--action"
                     :class="deviceStore.motorsEnabled ? 'topbar-btn--lit' : 'topbar-btn--motors-off'"
                     @click="topbarToggleMotors"
                     :title="deviceStore.motorsEnabled ? 'Disable motors' : 'Enable motors'">
-              <!-- MDI cog (stepper/motor icon) -->
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-2px"><path d="M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.92c.04-.3.07-.62.07-.96s-.03-.66-.07-1l2.13-1.63c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64L4.57 11c-.04.34-.07.67-.07 1s.03.65.07.97l-2.11 1.66c-.19.15-.25.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1.01c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.58 1.69-.98l2.49 1.01c.22.08.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.66z"/></svg>
+<i class="mdi mdi-cog" style="font-size:16px;vertical-align:-2px"></i>
             </button>
           </template>
         </div>
@@ -100,7 +97,7 @@
           <!-- Load file button — always visible when klippy ready and not printing -->
           <button v-if="klippyState === 'ready' && deviceStore.printerState === 'standby'"
                   class="topbar-btn topbar-btn--lit" @click="openFileDialog" title="Load file">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-2px;margin-right:4px"><path d="M6 2c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6H6zm7 7V3.5L18.5 9H13z"/></svg>Load
+<i class="mdi mdi-file-upload-outline" style="font-size:14px;margin-right:3px;vertical-align:-2px"></i>Load
           </button>
           <!-- Pause/Resume + Cancel — shown when printing or paused -->
           <template v-if="deviceStore.printerState === 'printing' || deviceStore.printerState === 'paused'">
@@ -113,7 +110,7 @@
           <!-- FW/Power dropdown -->
           <div class="topbar-dropdown-wrap" @click.stop>
             <button class="topbar-btn" @click="powerMenuOpen = !powerMenuOpen" title="System Controls">
-              ⏻
+              <i class="mdi mdi-power" style="font-size:16px"></i>
             </button>
             <div v-if="powerMenuOpen" class="topbar-dropdown" @click="powerMenuOpen = false">
               <div class="topbar-dropdown-section">Klipper Control</div>
@@ -126,7 +123,7 @@
           </div>
 
           <button class="topbar-btn topbar-btn--estop" @click="emergencyStop" title="Emergency Stop">
-            ⏹ E-Stop
+            <i class="mdi mdi-octagon" style="font-size:14px;margin-right:4px;vertical-align:-2px"></i>E-Stop
           </button>
 
           <!-- Slot for page-specific topbar content (e.g. customize gear) -->

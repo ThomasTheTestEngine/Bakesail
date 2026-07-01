@@ -599,6 +599,11 @@
           </div>
         </template>
 
+        <!-- ── Console ──────────────────────────────────────── -->
+        <template v-else-if="w.type === 'console'">
+          <ConsoleWidget style="height:100%" />
+        </template>
+
         <!-- ── Camera Feed ────────────────────────────────────── -->
         <template v-else-if="w.type === 'camera'">
           <div class="w-camera">
@@ -646,7 +651,8 @@ import { useDeviceStore }     from '../stores/device.js'
 import { useMoonraker }       from '../composables/useMoonraker.js'
 import { useDashboardLayout } from '../composables/useDashboardLayout.js'
 import WidgetShell from '../components/WidgetShell.vue'
-import CameraFeed  from '../components/CameraFeed.vue'
+import CameraFeed     from '../components/CameraFeed.vue'
+import ConsoleWidget  from '../components/ConsoleWidget.vue'
 
 const settings = useSettingsStore()
 const deviceStore = useDeviceStore()
@@ -850,6 +856,7 @@ const WIDGET_DEFS = [
   ] },
   { type: 'controls',  label: 'Print Controls',      defaultW: 600, defaultH: 60,  defaultConfig: {}, fields: [] },
   { type: 'macros',    label: 'Macro Buttons',       defaultW: 400, defaultH: 100, defaultConfig: { macros: ['BED_MESH_CALIBRATE', 'LOAD_FILAMENT', 'UNLOAD_FILAMENT'] }, fields: [] },
+  { type: 'console',   label: 'Console',             defaultW: 480, defaultH: 360, defaultConfig: {}, fields: [] },
   { type: 'camera',    label: 'Camera Feed',         defaultW: 320, defaultH: 260, defaultConfig: { cameraId: null }, fields: [{ key: 'label', label: 'Show camera name' }] },
 ]
 
