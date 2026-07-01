@@ -46,16 +46,18 @@
           <button class="btn btn-primary btn-sm" @click="layout.applyLayout()">✓ Apply</button>
           <span v-if="layout.saveMsg.value" class="dt-save-msg">{{ layout.saveMsg.value }}</span>
         </template>
-        <button
-          class="btn btn-ghost btn-sm customize-btn"
-          :class="{ 'customize-btn--active': layout.customizeMode.value }"
-          @click.stop="layout.customizeMode.value ? exitCustomize() : layout.enterCustomize()"
-        >
-          <span v-if="layout.customizeMode.value">✕ Exit</span>
-          <span v-else>⚙ Customize</span>
-        </button>
       </div>
     </div>
+
+    <!-- Gear button teleported into topbar slot -->
+    <Teleport to="#topbar-page-slot">
+      <button
+        class="topbar-customize-btn"
+        :class="{ 'topbar-customize-btn--active': layout.customizeMode.value }"
+        :title="layout.customizeMode.value ? 'Exit customize' : 'Customize dashboard'"
+        @click.stop="layout.customizeMode.value ? exitCustomize() : layout.enterCustomize()"
+      >⚙</button>
+    </Teleport>
 
     <!-- ── Widget canvas ─────────────────────────────────────── -->
     <div class="dash-canvas" :style="canvasStyle" @click.self="layout.closeWidgetSettings()">

@@ -56,11 +56,26 @@
 
         <!-- Right: action buttons -->
         <div class="topbar-actions">
+          <!-- Slot for page-specific topbar content (e.g. customize gear) -->
+          <div id="topbar-page-slot"></div>
+
+          <!-- FW/Power dropdown -->
+          <div class="topbar-dropdown-wrap" @click.stop>
+            <button class="topbar-btn" @click="powerMenuOpen = !powerMenuOpen" title="System Controls">
+              ⏻
+            </button>
+            <div v-if="powerMenuOpen" class="topbar-dropdown" @click="powerMenuOpen = false">
+              <div class="topbar-dropdown-section">Klipper Control</div>
+              <button class="topbar-dropdown-item" @click="klipperRestart">↺ Restart</button>
+              <button class="topbar-dropdown-item" @click="firmwareRestart">↺ Firmware Restart</button>
+              <div class="topbar-dropdown-section">Host Control</div>
+              <button class="topbar-dropdown-item topbar-dropdown-item--danger" @click="hostReboot">⏻ Reboot</button>
+              <button class="topbar-dropdown-item topbar-dropdown-item--danger" @click="hostShutdown">⏻ Shutdown</button>
+            </div>
+          </div>
+
           <button class="topbar-btn topbar-btn--estop" @click="emergencyStop" title="Emergency Stop">
             ⏹ E-Stop
-          </button>
-          <button class="topbar-btn" @click="firmwareRestart" title="Firmware Restart">
-            ↺ FW
           </button>
         </div>
       </header>
@@ -131,8 +146,27 @@ function emergencyStop() {
   fetch('/printer/emergency_stop', { method: 'POST' }).catch(() => {})
 }
 
+const powerMenuOpen = ref(false)
+
+function klipperRestart() {
+  fetch('/printer/restart', { method: 'POST' }).catch(() => {})
+}
+
 function firmwareRestart() {
-  sendGcode('FIRMWARE_RESTART').catch(() => {})
+  fetch('/printer/firmware_restart', { method: 'POST' }).catch(() => {})
+}
+
+function hostReboot() {
+  fetch('/machine/reboot', { method: 'POST' }).catch(() => {})
+}
+
+function hostShutdown() {
+  fetch('/machine/shutdown', { method: 'POST' }).catch(() => {})
+}
+
+// Close power menu on outside click
+if (typeof window !== 'undefined') {
+  window.addEventListener('click', () => { powerMenuOpen.value = false })
 }
 
 // ── Theme ─────────────────────────────────────────────────────────
@@ -353,6 +387,55 @@ a { color: inherit; text-decoration: none; }
   color: var(--red);
 }
 
+.topbar-dropdown-wrap {
+  position: relative;
+}
+
+.topbar-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 180px;
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  z-index: 200;
+  padding: 4px 0;
+}
+
+.topbar-dropdown-section {
+  padding: 6px 12px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.topbar-dropdown-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 7px 14px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+.topbar-dropdown-item:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.topbar-dropdown-item--danger:hover {
+  color: var(--red);
+  background: var(--red-glow);
+}
+
 .topbar-btn--estop:hover {
   background: var(--red-glow);
   border-color: var(--red);
@@ -507,6 +590,35 @@ a { color: inherit; text-decoration: none; }
   flex: 1;
   overflow-y: auto;
   padding: 24px 28px;
+}
+
+/* ── Topbar customize gear (teleported from PrinterDashboard) ── */
+.topbar-customize-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 21px;        /* ~3x the 7px effective icon size */
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+  line-height: 1;
+}
+
+.topbar-customize-btn:hover {
+  color: var(--text);
+  background: var(--surface-2);
+  border-color: var(--border-2);
+}
+
+.topbar-customize-btn--active {
+  color: var(--amber);
+  border-color: var(--amber);
+  background: var(--amber-glow);
 }
 
 /* ── Shared utilities ───────────────────────────────────────── */
