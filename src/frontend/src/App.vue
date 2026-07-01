@@ -361,17 +361,27 @@ function cbarSetTerminal(val) {
   const ws = new WebSocket(`${proto}://${location.host}/terminal/ws`, ['tty'])
   ws.binaryType = 'arraybuffer'
   ws.onopen = () => {
-    // ttyd protocol: send JSON init message with dimensions
-    const cols = Math.floor((cbarEl.value?.offsetWidth || 800) / 8)
-    const rows = Math.floor(((cbarHeight.value || 240) - 80) / 20)
-    ws.send(JSON.stringify({ AuthToken: '', columns: cols, rows }))
+    // ttyd protocol v2: send '0' + JSON config as first message
+    const cols = Math.max(80, Math.floor((cbarEl.value?.offsetWidth || 800) / 9))
+    const rows = Math.max(10, Math.floor(((cbarHeight.value || 240) - 80) / 18))
+    ws.send('0' + JSON.stringify({ AuthToken: '', columns: cols, rows }))
     nextTick(cbarScrollBottom)
   }
   ws.onmessage = e => {
-    if (e.data instanceof ArrayBuffer) {
-      // ttyd sends: first byte = message type (0=output, 1=ping, 2=set_window_title)
+    // ttyd sends text frames: first char = type ('0'=output, '1'=ping, '2'=title, '3'=prefs)
+    // and also binary frames in some versions
+    let raw
+    if (typeof e.data === 'string') {
+      const type = e.data[0]
+      if (type === '0') {
+        cbarTermOutput.value += cbarAnsiToHtml(e.data.slice(1))
+        if (cbarAutoScroll.value) nextTick(cbarScrollBottom)
+      }
+    } else if (e.data instanceof ArrayBuffer) {
       const buf = new Uint8Array(e.data)
-      if (buf[0] === 0) {
+      // binary: first byte is type (0x02=output in some versions)
+      const type = buf[0]
+      if (type === 0 || type === 2) {
         const text = new TextDecoder().decode(buf.slice(1))
         cbarTermOutput.value += cbarAnsiToHtml(text)
         if (cbarAutoScroll.value) nextTick(cbarScrollBottom)
@@ -398,9 +408,8 @@ async function cbarSubmit() {
   cbarInput.value = ''
   if (cbarTerminal.value) {
     if (cbarTermWs?.readyState === WebSocket.OPEN) {
-      // ttyd input: type byte '0' (ASCII) + text
-      const encoded = new TextEncoder().encode('0' + text + '\n')
-      cbarTermWs.send(encoded)
+      // ttyd input: '1' prefix + text (text frame)
+      cbarTermWs.send('1' + text + '\n')
     } else {
       cbarTermOutput.value += `<span style="color:#e05555">[not connected — click Console/Shell to connect]</span>\n`
     }
