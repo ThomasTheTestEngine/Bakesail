@@ -157,12 +157,17 @@
                       </div>
                       <!-- Series section -->
                       <div class="wmon-series-section">SERIES</div>
-                      <label v-for="s in chartSeries(w.id)" :key="s.key" class="wmon-series-item">
+                      <div v-for="s in chartSeries(w.id)" :key="s.key" class="wmon-series-item">
                         <input type="checkbox" :checked="!hiddenSeries[w.id]?.[s.key]"
                                @change="toggleSeries(w.id, s.key, $event.target.checked)" />
-                        <span class="wmon-series-dot" :style="{ background: s.colour }"></span>
-                        {{ s.label }}
-                      </label>
+                        <!-- Colour dot — click opens native colour picker -->
+                        <label class="wmon-series-colour-wrap" :title="'Change colour for ' + s.label">
+                          <span class="wmon-series-dot" :style="{ background: s.colour }"></span>
+                          <input type="color" class="wmon-colour-input" :value="s.colour"
+                                 @input.stop="setSeriesColour(w.id, s.key, $event.target.value)" />
+                        </label>
+                        <span class="wmon-series-label">{{ s.label }}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -935,17 +940,48 @@ function decreaseTimeWindow(id) {
   if (idx > 0) chartWindows[id] = TIME_WINDOWS[idx - 1]
 }
 
-function chartSeries(id) {
+// Default palette for series beyond the first two
+const SERIES_PALETTE = [
+  '#e06c75', // red
+  '#c678dd', // purple
+  '#56b6c2', // cyan
+  '#98c379', // green
+  '#d19a66', // orange
+  '#61afef', // blue
+  '#e5c07b', // yellow
+]
+
+function seriesColour(widgetId, key, paletteIdx) {
+  // User-overridden colour takes priority
+  const w = layout.widgets.value.find(w => w.id === widgetId)
+  const stored = w?.config?.seriesColours?.[key]
+  if (stored) return stored
+  // Built-in defaults
   const cs = getComputedStyle(document.documentElement)
+  if (key === 'hotend') return cs.getPropertyValue('--amber').trim() || '#e5a550'
+  if (key === 'bed')    return cs.getPropertyValue('--teal').trim()  || '#4ec9b0'
+  return SERIES_PALETTE[paletteIdx % SERIES_PALETTE.length]
+}
+
+function setSeriesColour(widgetId, key, colour) {
+  const w = layout.widgets.value.find(w => w.id === widgetId)
+  if (!w) return
+  if (!w.config.seriesColours) w.config.seriesColours = {}
+  w.config.seriesColours[key] = colour
+  layout.saveLayout('')
+}
+
+function chartSeries(id) {
   const series = [
-    { key: 'hotend', label: 'Hotend', colour: cs.getPropertyValue('--amber').trim(), data: () => tempHistory.hotend },
-    { key: 'bed',    label: 'Bed',    colour: cs.getPropertyValue('--teal').trim(),  data: () => tempHistory.bed   },
+    { key: 'hotend', label: 'Hotend', colour: seriesColour(id, 'hotend', 0), data: () => tempHistory.hotend },
+    { key: 'bed',    label: 'Bed',    colour: seriesColour(id, 'bed', 1),    data: () => tempHistory.bed   },
   ]
-  // Add dynamic temperature_sensor series
-  for (const [name, obj] of Object.entries(deviceStore.dynamicObjects)) {
+  let pi = 0
+  for (const name of Object.keys(deviceStore.dynamicObjects)) {
     if (name.startsWith('temperature_sensor ')) {
       const label = name.replace('temperature_sensor ', '')
-      series.push({ key: name, label, colour: '#888', data: () => tempHistory[name] ?? [] })
+      series.push({ key: name, label, colour: seriesColour(id, name, pi), data: () => tempHistory[name] ?? [] })
+      pi++
     }
   }
   return series
@@ -1201,7 +1237,25 @@ onUnmounted(() => {
   gap: 8px;
   padding: 4px 12px 8px;
 }
-.wmon-series-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.wmon-series-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; cursor: pointer; }
+.wmon-series-colour-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.wmon-colour-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  padding: 0;
+  border: none;
+}
+.wmon-series-label { font-size: 12px; }
 .wmon-chart-wrap { flex-shrink: 0; width: 100%; }
 .wmon-chart-resize { padding: 2px 0; }
 .wmon-chart-slider { width: 100%; accent-color: var(--border-2); cursor: row-resize; height: 4px; }
