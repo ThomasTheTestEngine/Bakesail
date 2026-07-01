@@ -358,7 +358,7 @@ function cbarSetTerminal(val) {
   cbarTermOutput.value = ''
   // ttyd WebSocket — proxied by nginx at /terminal/ws
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  const ws = new WebSocket(`${proto}://${location.host}/terminal/ws`)
+  const ws = new WebSocket(`${proto}://${location.host}/terminal/ws`, ['tty'])
   ws.binaryType = 'arraybuffer'
   ws.onopen = () => {
     // ttyd protocol: send JSON init message with dimensions
@@ -382,8 +382,9 @@ function cbarSetTerminal(val) {
     cbarTermOutput.value += `\n<span style="color:#f0d87a">[session ended — session will restart shortly]</span>\n`
     cbarTermWs = null
   }
-  ws.onerror = () => {
-    cbarTermOutput.value += `\n<span style="color:#e05555">[connection failed — is bakesail-ttyd service running? Run: sudo systemctl start bakesail-ttyd]</span>\n`
+  ws.onerror = (e) => {
+    console.error('[bakesail] ttyd WS error:', e)
+    cbarTermOutput.value += `\n<span style="color:#e05555">[connection failed — check browser console for details]</span>\n`
   }
   cbarTermWs = ws
 }
