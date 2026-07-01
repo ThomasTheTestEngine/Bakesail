@@ -233,6 +233,7 @@ function handleMessage(event) {
   }
 
   // JSON-RPC notification (no id, has method)
+  if (msg.method) console.log('[bakesail] ws method:', msg.method)
   switch (msg.method) {
     case 'notify_status_update': {
       const [status] = msg.params
@@ -254,6 +255,7 @@ function handleMessage(event) {
       startKlippyPoll()
       break
     case 'notify_gcode_response': {
+      console.log('[bakesail] gcode_response:', JSON.stringify(msg.params))
       const lines = Array.isArray(msg.params) ? msg.params : [msg.params]
       for (const line of lines.flat()) {
         for (const cb of consoleSubscribers) {
