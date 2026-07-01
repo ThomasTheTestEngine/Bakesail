@@ -50,6 +50,7 @@ export const useDeviceStore = defineStore('device', {
     idleState:      'Idle',     // idle_timeout.state
     homedAxes:      '',         // toolhead.homed_axes
     motorsEnabled:  true,
+    qglApplied:     false,
     filename:       '',
     progress:       0,
     printDuration:  0,
@@ -190,7 +191,7 @@ export const useDeviceStore = defineStore('device', {
       this.mcus = mcus
     },
 
-    updatePrinter({ printerState, idleState, homedAxes, motorsEnabled, filename, progress, printDuration }) {
+    updatePrinter({ printerState, idleState, homedAxes, motorsEnabled, filename, progress, printDuration, qglApplied }) {
       if (printerState  !== undefined) this.printerState  = printerState
       if (idleState     !== undefined) this.idleState     = idleState
       if (homedAxes     !== undefined) this.homedAxes     = homedAxes
@@ -198,6 +199,7 @@ export const useDeviceStore = defineStore('device', {
       if (filename      !== undefined) this.filename      = filename
       if (progress      !== undefined) this.progress      = progress
       if (printDuration !== undefined) this.printDuration = printDuration
+      if (qglApplied    !== undefined) this.qglApplied    = qglApplied
     },
   },
 })

@@ -54,8 +54,9 @@ const SUBSCRIBED_OBJECTS = {
   virtual_sdcard:  ['progress', 'is_active', 'file_position', 'file_size'],
   toolhead:        ['position', 'homed_axes', 'max_velocity', 'max_accel', 'square_corner_velocity'],
   gcode_move:      ['speed_factor', 'extrude_factor', 'homing_origin', 'speed'],
-  idle_timeout:    ['state'],
-  system_stats:    ['cputime', 'memavail', 'sysload'],
+  idle_timeout:         ['state'],
+  system_stats:         ['cputime', 'memavail', 'sysload'],
+  quad_gantry_level:    ['applied'],   // null if not configured — handled gracefully
 }
 
 // ── JSON-RPC helpers ──────────────────────────────────────────────────────────

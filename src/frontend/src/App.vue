@@ -56,15 +56,27 @@
           <!-- Quick actions: only meaningful when klippy is ready -->
           <template v-if="klippyState === 'ready'">
             <div class="topbar-divider"></div>
-            <button class="topbar-btn topbar-btn--action topbar-btn--lit" @click="topbarGcode('G28')" title="Home All">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-2px;margin-right:4px"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>Home
+            <!-- Home: lit (green) when all axes homed, dim when not -->
+            <button class="topbar-btn topbar-btn--action"
+                    :class="isHomed ? 'topbar-btn--homed' : ''"
+                    @click="topbarGcode('G28')" title="Home All">
+              <!-- MDI home -->
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-2px;margin-right:3px"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>Home
             </button>
-            <button class="topbar-btn topbar-btn--action topbar-btn--lit" @click="topbarGcode('QUAD_GANTRY_LEVEL')" title="Quad Gantry Level">QGL</button>
+            <!-- QGL: lit (green) when leveled, dim when not. Klipper exposes z_tilt/quad_gantry_level applied state -->
+            <button class="topbar-btn topbar-btn--action"
+                    :class="deviceStore.qglApplied ? 'topbar-btn--homed' : ''"
+                    @click="topbarGcode('QUAD_GANTRY_LEVEL')" title="Quad Gantry Level">
+              <!-- MDI format-vertical-align-center as leveling icon -->
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-2px;margin-right:3px"><path d="M8 19h3v3h2v-3h3l-4-4-4 4zm8-14h-3V2h-2v3H8l4 4 4-4zM4 11v2h16v-2H4z"/></svg>QGL
+            </button>
+            <!-- Motors: lit when enabled, dim+strikethrough feel when disabled -->
             <button class="topbar-btn topbar-btn--action"
                     :class="deviceStore.motorsEnabled ? 'topbar-btn--lit' : 'topbar-btn--motors-off'"
                     @click="topbarToggleMotors"
                     :title="deviceStore.motorsEnabled ? 'Disable motors' : 'Enable motors'">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-2px"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 15.82 9.64 15 12 15s4.53.82 6.24 2.19c.48.38.76.97.76 1.58V19z"/></svg>
+              <!-- MDI cog (stepper/motor icon) -->
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-2px"><path d="M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.92c.04-.3.07-.62.07-.96s-.03-.66-.07-1l2.13-1.63c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64L4.57 11c-.04.34-.07.67-.07 1s.03.65.07.97l-2.11 1.66c-.19.15-.25.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1.01c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.58 1.69-.98l2.49 1.01c.22.08.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.66z"/></svg>
             </button>
           </template>
         </div>
@@ -248,6 +260,12 @@ function topbarFormatDuration(s) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
+// Home button lit when all XYZ homed
+const isHomed = computed(() => {
+  const h = deviceStore.homedAxes
+  return h.includes('x') && h.includes('y') && h.includes('z')
+})
+
 const topbarEta = computed(() => {
   const { progress, printDuration } = deviceStore
   if (!progress || progress <= 0) return '—'
@@ -410,6 +428,19 @@ html, body {
 
 a { color: inherit; text-decoration: none; }
 
+/* ── Scrollbars: hidden until hover ─────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+*:hover {
+  scrollbar-color: var(--border-2) transparent;
+}
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+*:hover::-webkit-scrollbar-thumb { background: var(--border-2); }
+
 /* ── App shell ──────────────────────────────────────────────── */
 .app-shell {
   display: flex;
@@ -467,6 +498,17 @@ a { color: inherit; text-decoration: none; }
 .topbar-btn--lit:hover {
   color: var(--text);
   border-color: var(--teal);
+}
+
+.topbar-btn--homed {
+  color: var(--green);
+  border-color: var(--green);
+}
+
+.topbar-btn--homed:hover {
+  color: var(--green);
+  border-color: var(--green);
+  background: rgba(76,175,125,0.10);
 }
 
 .topbar-btn--motors-off {

@@ -735,6 +735,7 @@ function handleStatus(data) {
     filename:      printer.filename,
     progress:      printer.progress,
     printDuration: printer.printDuration,
+    qglApplied:    data.quad_gantry_level?.applied ?? undefined,
   })
 
   const t = Date.now()
