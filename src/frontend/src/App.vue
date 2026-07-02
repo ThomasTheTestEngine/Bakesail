@@ -370,9 +370,7 @@ function cbarSetTerminal(val) {
     // ttyd binary protocol: send init as binary frame with '0' prefix
     const cols = Math.max(80, Math.floor((cbarEl.value?.offsetWidth || 800) / 9))
     const rows = Math.max(10, Math.floor(((cbarHeight.value || 240) - 80) / 18))
-    const initStr = '0' + JSON.stringify({ AuthToken: '', columns: cols, rows })
-    const initBuf = new TextEncoder().encode(initStr)
-    ws.send(initBuf.buffer)
+    ws.send('0' + JSON.stringify({ AuthToken: '', columns: cols, rows }))
     nextTick(cbarScrollBottom)
   }
   ws.onmessage = e => {
@@ -430,7 +428,7 @@ function cbarTermKey(e) {
     e.preventDefault()
     // Clear the input field — we handle all input ourselves in terminal mode
     cbarInput.value = ''
-    cbarTermWs.send(new TextEncoder().encode('0' + data).buffer)
+    cbarTermWs.send('0' + data)  // ttyd input: text frame with '0' prefix
   }
 }
 
