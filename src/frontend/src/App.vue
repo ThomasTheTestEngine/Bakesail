@@ -1187,6 +1187,7 @@ a { color: inherit; text-decoration: none; }
   padding: 4px 12px;
   display: flex;
   flex-direction: column;
+  justify-content: flex-end;
   gap: 1px;
 }
 
