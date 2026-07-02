@@ -376,15 +376,18 @@ function cbarSetTerminal(val) {
     nextTick(cbarScrollBottom)
   }
   ws.onmessage = e => {
+    console.log('[ttyd msg] type:', typeof e.data, 'len:', e.data?.length ?? e.data?.byteLength)
     let text = null
     if (typeof e.data === 'string') {
-      // Text frame: first char is type
+      console.log('[ttyd text] first char code:', e.data.charCodeAt(0), 'preview:', JSON.stringify(e.data.slice(0,20)))
       if (e.data[0] === '1' || e.data[0] === '0') text = e.data.slice(1)
     } else if (e.data instanceof ArrayBuffer) {
       const buf = new Uint8Array(e.data)
+      console.log('[ttyd binary] first byte:', buf[0], 'char:', String.fromCharCode(buf[0]))
       const t = String.fromCharCode(buf[0])
       if (t === '1' || t === '0') text = new TextDecoder().decode(buf.slice(1))
     }
+    console.log('[ttyd] extracted text:', text === null ? 'null' : JSON.stringify(text.slice(0,30)))
     if (text !== null) {
       cbarTermOutput.value += cbarAnsiToHtml(text)
       cbarAutoScroll.value = true
