@@ -424,8 +424,14 @@ function cbarTermKey(e) {
   }
   if (data) {
     e.preventDefault()
-    // Clear the input field — we handle all input ourselves in terminal mode
-    cbarInput.value = ''
+    // Update display in input field to show what's being typed
+    if (e.key === 'Enter') {
+      cbarInput.value = ''
+    } else if (e.key === 'Backspace') {
+      cbarInput.value = cbarInput.value.slice(0, -1)
+    } else if (data.length === 1 && data >= ' ') {
+      cbarInput.value += data
+    }
     cbarTermWs.send('0' + data)  // ttyd input: text frame with '0' prefix
   }
 }
