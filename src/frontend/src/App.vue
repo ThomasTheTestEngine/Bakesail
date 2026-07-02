@@ -148,14 +148,18 @@
           <!-- Input row -->
           <div class="cbar-input-row">
             <i :class="cbarTerminal ? 'mdi mdi-bash' : 'mdi mdi-chevron-right'" class="cbar-prompt-icon"></i>
-            <input ref="cbarInputEl" class="cbar-input" v-model="cbarInput"
-                   :placeholder="cbarTerminal ? 'Shell command…' : 'Klipper command…'"
-                   @keydown="cbarTerminal ? cbarTermKey($event) : null"
-                   @keydown.enter.prevent="cbarSubmit"
-                   @keydown.up.prevent="cbarTerminal ? null : cbarHistoryUp()"
-                   @keydown.down.prevent="cbarTerminal ? null : cbarHistoryDown()"
-                   spellcheck="false" autocomplete="off" autocapitalize="off"
-                   autocorrect="off" />
+            <!-- In terminal mode: raw keystroke passthrough, no v-model -->
+            <input v-if="cbarTerminal" ref="cbarInputEl" class="cbar-input"
+                   placeholder="Shell command…"
+                   @keydown="cbarTermKey($event)"
+                   spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" />
+            <!-- In console mode: normal input with history -->
+            <input v-else ref="cbarInputEl" class="cbar-input" v-model="cbarInput"
+                   placeholder="Klipper command…"
+                   @keydown.enter="cbarSubmit"
+                   @keydown.up.prevent="cbarHistoryUp"
+                   @keydown.down.prevent="cbarHistoryDown"
+                   spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" />
             <!-- Mode button: text label, toggles on click -->
             <button class="cbar-mode-text-btn" @click="cbarTerminal ? (cbarTerminal=false, cbarScrollBottom()) : cbarSetTerminal(true)">
               {{ cbarTerminal ? 'Shell' : 'Console' }}
@@ -372,23 +376,21 @@ function cbarSetTerminal(val) {
     nextTick(cbarScrollBottom)
   }
   ws.onmessage = e => {
-    // Log raw message for debugging
+    let text = null
     if (typeof e.data === 'string') {
-      const type = e.data[0]
-      if (type === '0') {
-        cbarTermOutput.value += cbarAnsiToHtml(e.data.slice(1))
-        if (cbarAutoScroll.value) nextTick(cbarScrollBottom)
-      }
+      // Text frame: first char is type
+      if (e.data[0] === '1' || e.data[0] === '0') text = e.data.slice(1)
     } else if (e.data instanceof ArrayBuffer) {
       const buf = new Uint8Array(e.data)
-      const typeChar = String.fromCharCode(buf[0])
-      if (typeChar === '1') {
-        // Output data
-        const text = new TextDecoder().decode(buf.slice(1))
-        cbarTermOutput.value += cbarAnsiToHtml(text)
-        if (cbarAutoScroll.value) nextTick(cbarScrollBottom)
-      }
-      // typeChar '2' = window title, '3' = preferences — ignore
+      const t = String.fromCharCode(buf[0])
+      if (t === '1' || t === '0') text = new TextDecoder().decode(buf.slice(1))
+    }
+    if (text !== null) {
+      cbarTermOutput.value += cbarAnsiToHtml(text)
+      cbarAutoScroll.value = true
+      nextTick(() => {
+        if (cbarOutputEl.value) cbarOutputEl.value.scrollTop = cbarOutputEl.value.scrollHeight
+      })
     }
   }
   ws.onclose = () => {
