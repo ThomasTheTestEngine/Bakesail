@@ -122,7 +122,7 @@ After=network.target
 
 [Service]
 User=${USER}
-ExecStart=/usr/bin/ttyd --port 7681 --interface 127.0.0.1 bash
+ExecStart=/usr/bin/ttyd --port 7681 --interface 127.0.0.1 --writable bash
 Restart=always
 RestartSec=2
 
