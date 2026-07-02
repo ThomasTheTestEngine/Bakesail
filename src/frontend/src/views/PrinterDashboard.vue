@@ -802,7 +802,7 @@ async function doCancel() { showCancelConfirm.value = false; await sendGcode('CA
 
 // ── Temperature chart ──────────────────────────────────────────
 const chartCanvases  = ref({})
-const chartWindows   = reactive({})   // widgetId → minutes (default 60)
+const chartWindows   = reactive({})   // widgetId → minutes (default 15)
 const chartHeights   = reactive({})   // widgetId → px height
 const hiddenSeries   = reactive({})   // widgetId → { seriesKey: bool }
 const seriesMenuOpen = ref(null)
@@ -810,7 +810,7 @@ let chartTimer = null
 
 const TIME_WINDOWS = [1, 2, 5, 15, 30, 60, 120, 240, 480]
 
-function chartWindowMins(id) { return chartWindows[id] ?? 60 }
+function chartWindowMins(id) { return chartWindows[id] ?? 15 }
 function chartWindowLabel(id) {
   const m = chartWindowMins(id)
   return m >= 60 ? `${m/60}h` : `${m}m`
@@ -891,8 +891,18 @@ function drawCharts() {
     const w = canvas.offsetWidth || canvas.parentElement?.offsetWidth || 0
     const h = canvas.offsetHeight || canvas.parentElement?.offsetHeight || 0
     if (!w || !h) continue
-    canvas.width = w; canvas.height = h
+    // Render at device pixel ratio so text/lines are crisp on HiDPI screens.
+    // The backing store is sized in physical pixels (w*dpr × h*dpr) while all
+    // the drawing math below stays in CSS pixels — ctx.setTransform maps one
+    // onto the other. Without this the canvas was drawn at 1x and upscaled by
+    // the browser, which is what made the labels blurry.
+    const dpr = window.devicePixelRatio || 1
     const ctx = canvas.getContext('2d')
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+      canvas.width  = Math.round(w * dpr)
+      canvas.height = Math.round(h * dpr)
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     const cs  = getComputedStyle(document.documentElement)
     const colG = cs.getPropertyValue('--border').trim()
     const colT = cs.getPropertyValue('--text-muted').trim()
