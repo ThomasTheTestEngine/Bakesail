@@ -172,8 +172,9 @@
             </button>
           </div>
 
-          <!-- Log output -->
-          <div class="cbar-output" ref="cbarOutputEl" @scroll="cbarOnScroll">
+          <!-- Log output — click to focus input -->
+          <div class="cbar-output" ref="cbarOutputEl" @scroll="cbarOnScroll"
+               @click="cbarInputEl?.focus()">
             <template v-if="!cbarTerminal">
               <div v-for="(line, i) in cbarLines" :key="i" class="cbar-line" :class="cbarLineClass(line)">
                 <span class="cbar-line-time">{{ line.time }}</span>
@@ -312,6 +313,9 @@ function cbarExpand() {
   cbarOpen.value = true
   nextTick(() => { cbarScrollBottom(); cbarInputEl.value?.focus() })
 }
+
+// Focus input when clicking anywhere in the cbar
+function cbarFocusInput() { cbarInputEl.value?.focus() }
 
 function cbarCollapse() {
   cbarOpen.value = false
