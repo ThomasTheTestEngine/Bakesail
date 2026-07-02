@@ -324,6 +324,8 @@ function cbarFocusInput() { cbarInputEl.value?.focus() }
 
 function cbarCollapse() {
   cbarOpen.value = false
+  // Destroy xterm — xtermEl will be removed from DOM, recreate on next open
+  if (xterm) { xterm.dispose(); xterm = null; xtermFitAddon = null }
   if (cbarTermWs) { cbarTermWs.close(); cbarTermWs = null }
 }
 
@@ -470,11 +472,8 @@ watch(klippyState, async val => {
 // Re-init xterm when console bar reopens while in terminal mode
 watch(cbarOpen, async (isOpen) => {
   if (isOpen && cbarTerminal.value) {
-    // xtermEl hasn't mounted yet — wait a tick
     await nextTick()
-    if (xtermEl.value && !xterm) {
-      cbarSetTerminal(true)
-    }
+    cbarSetTerminal(true)  // always reinit — xterm was destroyed on collapse
   }
 })
 const host = window.location.hostname
