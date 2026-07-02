@@ -326,15 +326,16 @@ function cbarCollapse() {
 
 // Drag-to-resize the console (bottom footer bar)
 function cbarDragStart(e) {
-  cbarDragY = e.clientY
+  e.preventDefault()
+  const startY = e.clientY
   const startH = cbarHeight.value
   function onMove(ev) {
-    const delta = ev.clientY - cbarDragY   // drag bottom edge down = taller
-    cbarHeight.value = Math.max(120, Math.min(window.innerHeight * 0.8, startH + delta))
-    cbarDragY = ev.clientY  // update reference point each frame
+    // drag DOWN = smaller (handle is at bottom, pulling down shrinks from top perspective)
+    // drag UP = larger
+    const delta = startY - ev.clientY
+    cbarHeight.value = Math.max(80, Math.min(window.innerHeight * 0.85, startH + delta))
   }
   function onUp() {
-    cbarDragY = null
     window.removeEventListener('mousemove', onMove)
     window.removeEventListener('mouseup', onUp)
   }
