@@ -92,111 +92,108 @@
           </div>
         </template>
 
-        <!-- ── Monitor ───────────────────────────────────────── -->
+        <!-- ── Temperature History chart ─────────────────────── -->
         <template v-else-if="w.type === 'chart'">
           <div class="w-monitor">
-
-            <!-- Temperature chart -->
-            <template v-if="!isFieldHidden(w,'tempchart')">
-              <div class="wmon-chart-header">
-                <span class="wmon-section-title">TEMPERATURE HISTORY</span>
-                <div class="wmon-chart-controls">
-                  <!-- Gear opens combined series + time scale menu -->
-                  <div class="wmon-chart-gear-wrap" @click.stop>
-                    <button class="wmon-chart-btn wmon-chart-gear" @click="toggleSeriesMenu(w.id)" title="Chart settings">⚙</button>
-                    <div v-if="seriesMenuOpen === w.id" class="wmon-series-menu">
-                      <!-- Time scale section -->
-                      <div class="wmon-series-section">TIME SCALE</div>
-                      <div class="wmon-timescale-row">
-                        <button class="wmon-chart-btn" @click.stop="decreaseTimeWindow(w.id)">−</button>
-                        <span class="wmon-chart-window">{{ chartWindowLabel(w.id) }}</span>
-                        <button class="wmon-chart-btn" @click.stop="increaseTimeWindow(w.id)">+</button>
-                      </div>
-                      <!-- Series section -->
-                      <div class="wmon-series-section">SERIES</div>
-                      <div v-for="s in chartSeries(w.id)" :key="s.key" class="wmon-series-item">
-                        <input type="checkbox" :checked="!hiddenSeries[w.id]?.[s.key]"
-                               @change="toggleSeries(w.id, s.key, $event.target.checked)" />
-                        <!-- Colour dot — click opens native colour picker -->
-                        <label class="wmon-series-colour-wrap" :title="'Change colour for ' + s.label">
-                          <span class="wmon-series-dot" :style="{ background: s.colour }"></span>
-                          <input type="color" class="wmon-colour-input" :value="s.colour"
-                                 @input.stop="setSeriesColour(w.id, s.key, $event.target.value)" />
-                        </label>
-                        <span class="wmon-series-label">{{ s.label }}</span>
-                      </div>
+            <div class="wmon-chart-header">
+              <span class="wmon-section-title">TEMPERATURE HISTORY</span>
+              <div class="wmon-chart-controls">
+                <!-- Gear opens combined series + time scale menu -->
+                <div class="wmon-chart-gear-wrap" @click.stop>
+                  <button class="wmon-chart-btn wmon-chart-gear" @click="toggleSeriesMenu(w.id)" title="Chart settings">⚙</button>
+                  <div v-if="seriesMenuOpen === w.id" class="wmon-series-menu">
+                    <!-- Time scale section -->
+                    <div class="wmon-series-section">TIME SCALE</div>
+                    <div class="wmon-timescale-row">
+                      <button class="wmon-chart-btn" @click.stop="decreaseTimeWindow(w.id)">−</button>
+                      <span class="wmon-chart-window">{{ chartWindowLabel(w.id) }}</span>
+                      <button class="wmon-chart-btn" @click.stop="increaseTimeWindow(w.id)">+</button>
+                    </div>
+                    <!-- Series section -->
+                    <div class="wmon-series-section">SERIES</div>
+                    <div v-for="s in chartSeries(w.id)" :key="s.key" class="wmon-series-item">
+                      <input type="checkbox" :checked="!hiddenSeries[w.id]?.[s.key]"
+                             @change="toggleSeries(w.id, s.key, $event.target.checked)" />
+                      <!-- Colour dot — click opens native colour picker -->
+                      <label class="wmon-series-colour-wrap" :title="'Change colour for ' + s.label">
+                        <span class="wmon-series-dot" :style="{ background: s.colour }"></span>
+                        <input type="color" class="wmon-colour-input" :value="s.colour"
+                               @input.stop="setSeriesColour(w.id, s.key, $event.target.value)" />
+                      </label>
+                      <span class="wmon-series-label">{{ s.label }}</span>
                     </div>
                   </div>
                 </div>
               </div>
-              <div class="wmon-chart-wrap"
-                   :style="{ height: (w.config?.chartHeight ?? 180) + 'px' }">
-                <canvas :ref="el => { if (el) chartCanvases[w.id] = el }" style="width:100%;height:100%;display:block"></canvas>
+            </div>
+            <div class="wmon-chart-wrap" style="flex:1;min-height:0">
+              <canvas :ref="el => { if (el) chartCanvases[w.id] = el }" style="width:100%;height:100%;display:block"></canvas>
+            </div>
+          </div>
+        </template>
+
+        <!-- ── Temperatures ──────────────────────────────────── -->
+        <template v-else-if="w.type === 'temps'">
+          <div class="w-monitor">
+            <div class="wmon-section-title">TEMPERATURES</div>
+            <div class="wmon-sensor-grid">
+              <!-- Extruder -->
+              <div class="wmon-sensor-row">
+                <span class="wmon-sensor-name">Extruder</span>
+                <span class="wmon-sensor-val">{{ printer.hotendTemp?.toFixed(1) ?? '—' }}°C</span>
+                <span class="wmon-sensor-target" v-if="printer.hotendTarget > 0">→ {{ printer.hotendTarget.toFixed(0) }}°</span>
               </div>
-
-            </template>
-
-            <!-- Temperatures -->
-            <template v-if="!isFieldHidden(w,'temps')">
-              <div class="wmon-section-title" style="margin-top:8px">TEMPERATURES</div>
-              <div class="wmon-sensor-grid">
-                <!-- Extruder -->
-                <div class="wmon-sensor-row">
-                  <span class="wmon-sensor-name">Extruder</span>
-                  <span class="wmon-sensor-val">{{ printer.hotendTemp?.toFixed(1) ?? '—' }}°C</span>
-                  <span class="wmon-sensor-target" v-if="printer.hotendTarget > 0">→ {{ printer.hotendTarget.toFixed(0) }}°</span>
-                </div>
-                <!-- Bed -->
-                <div class="wmon-sensor-row">
-                  <span class="wmon-sensor-name">Bed</span>
-                  <span class="wmon-sensor-val">{{ printer.bedTemp?.toFixed(1) ?? '—' }}°C</span>
-                  <span class="wmon-sensor-target" v-if="printer.bedTarget > 0">→ {{ printer.bedTarget.toFixed(0) }}°</span>
-                </div>
-                <!-- Dynamic temperature_sensor * -->
-                <div class="wmon-sensor-row" v-for="(obj, name) in tempSensors" :key="name">
-                  <span class="wmon-sensor-name">{{ name.replace('temperature_sensor ','') }}</span>
-                  <span class="wmon-sensor-val">{{ obj.temperature?.toFixed(1) ?? '—' }}°C</span>
-                  <span class="wmon-sensor-target" v-if="obj.target != null && obj.target > 0">→ {{ obj.target.toFixed(0) }}°</span>
-                </div>
+              <!-- Bed -->
+              <div class="wmon-sensor-row">
+                <span class="wmon-sensor-name">Bed</span>
+                <span class="wmon-sensor-val">{{ printer.bedTemp?.toFixed(1) ?? '—' }}°C</span>
+                <span class="wmon-sensor-target" v-if="printer.bedTarget > 0">→ {{ printer.bedTarget.toFixed(0) }}°</span>
               </div>
-            </template>
-
-            <!-- Fans -->
-            <template v-if="!isFieldHidden(w,'fans')">
-              <div class="wmon-section-title" style="margin-top:8px">FANS</div>
-              <div class="wmon-sensor-grid">
-                <div class="wmon-sensor-row">
-                  <span class="wmon-sensor-name">Part Fan</span>
-                  <span class="wmon-sensor-val">{{ printer.fanSpeed != null ? (printer.fanSpeed*100).toFixed(0)+'%' : '—' }}</span>
-                </div>
-                <div class="wmon-sensor-row" v-for="(obj, name) in allFans" :key="name">
-                  <span class="wmon-sensor-name">{{ name.replace(/^(heater_fan |fan_generic |temperature_fan )/,'') }}</span>
-                  <span class="wmon-sensor-val">{{ obj.speed != null ? (obj.speed*100).toFixed(0)+'%' : '—' }}</span>
-                  <span class="wmon-sensor-target" v-if="obj.rpm != null">{{ Math.round(obj.rpm) }} RPM</span>
-                </div>
+              <!-- Dynamic temperature_sensor * -->
+              <div class="wmon-sensor-row" v-for="(obj, name) in tempSensors" :key="name">
+                <span class="wmon-sensor-name">{{ name.replace('temperature_sensor ','') }}</span>
+                <span class="wmon-sensor-val">{{ obj.temperature?.toFixed(1) ?? '—' }}°C</span>
+                <span class="wmon-sensor-target" v-if="obj.target != null && obj.target > 0">→ {{ obj.target.toFixed(0) }}°</span>
               </div>
-            </template>
+            </div>
+          </div>
+        </template>
 
-            <!-- Lighting / LEDs -->
-            <template v-if="!isFieldHidden(w,'lighting') && ledObjects.length > 0">
-              <div class="wmon-section-title" style="margin-top:8px">LIGHTING</div>
-              <div class="wmon-sensor-grid">
-                <div class="wmon-sensor-row" v-for="(obj, name) in ledObjects" :key="name">
-                  <span class="wmon-sensor-name">{{ name.replace(/^(neopixel |led )/,'') }}</span>
-                  <div class="wmon-led-swatches">
-                    <div v-for="(color, i) in (obj.color_data ?? [])" :key="i" class="wmon-led-swatch"
-                         :style="{ background: `rgb(${Math.round(color[0]*255)},${Math.round(color[1]*255)},${Math.round(color[2]*255)})` }">
-                    </div>
+        <!-- ── Fan List ──────────────────────────────────────── -->
+        <template v-else-if="w.type === 'fanlist'">
+          <div class="w-monitor">
+            <div class="wmon-section-title">FANS</div>
+            <div class="wmon-sensor-grid">
+              <div class="wmon-sensor-row">
+                <span class="wmon-sensor-name">Part Fan</span>
+                <span class="wmon-sensor-val">{{ printer.fanSpeed != null ? (printer.fanSpeed*100).toFixed(0)+'%' : '—' }}</span>
+              </div>
+              <div class="wmon-sensor-row" v-for="(obj, name) in allFans" :key="name">
+                <span class="wmon-sensor-name">{{ name.replace(/^(heater_fan |fan_generic |temperature_fan )/,'') }}</span>
+                <span class="wmon-sensor-val">{{ obj.speed != null ? (obj.speed*100).toFixed(0)+'%' : '—' }}</span>
+                <span class="wmon-sensor-target" v-if="obj.rpm != null">{{ Math.round(obj.rpm) }} RPM</span>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ── Lighting / LEDs ───────────────────────────────── -->
+        <template v-else-if="w.type === 'lighting'">
+          <div class="w-monitor">
+            <div class="wmon-section-title">LIGHTING</div>
+            <div v-if="Object.keys(ledObjects).length === 0" class="wmon-sensor-target" style="padding:4px 0">
+              No LED / NeoPixel devices configured.
+            </div>
+            <div v-else class="wmon-sensor-grid">
+              <div class="wmon-sensor-row" v-for="(obj, name) in ledObjects" :key="name">
+                <span class="wmon-sensor-name">{{ name.replace(/^(neopixel |led )/,'') }}</span>
+                <div class="wmon-led-swatches">
+                  <div v-for="(color, i) in (obj.color_data ?? [])" :key="i" class="wmon-led-swatch"
+                       :style="{ background: `rgb(${Math.round(color[0]*255)},${Math.round(color[1]*255)},${Math.round(color[2]*255)})` }">
                   </div>
                 </div>
               </div>
-            </template>
-
-            <!-- System loads -->
-            <template v-if="!isFieldHidden(w,'sysloads')">
-              <SystemMonitorWidget />
-            </template>
-
+            </div>
           </div>
         </template>
 
@@ -706,13 +703,10 @@ const WIDGET_DEFS = [
   { type: 'state',     label: 'State Header',       defaultW: 700, defaultH: 80,  defaultConfig: {}, fields: [{ key: 'filename', label: 'Filename' }, { key: 'layer', label: 'Layer counter' }] },
   { type: 'hotend',    label: 'Hotend Temp',         defaultW: 180, defaultH: 160, defaultConfig: { label: 'Hotend' }, fields: [{ key: 'power', label: 'Heater power bar' }] },
   { type: 'bed',       label: 'Bed Temp',            defaultW: 180, defaultH: 160, defaultConfig: { label: 'Bed' },    fields: [{ key: 'power', label: 'Heater power bar' }] },
-  { type: 'chart',     label: 'Monitor',             defaultW: 560, defaultH: 500, defaultConfig: { hiddenFields: ['sysloads'] }, fields: [
-    { key: 'tempchart', label: 'Temperature chart' },
-    { key: 'temps',     label: 'Temperatures' },
-    { key: 'fans',      label: 'Fans' },
-    { key: 'lighting',  label: 'Lighting' },
-    { key: 'sysloads',  label: 'System loads' },
-  ] },
+  { type: 'chart',     label: 'Temperature Chart',   defaultW: 560, defaultH: 240, defaultConfig: {}, fields: [] },
+  { type: 'temps',     label: 'Temperatures',        defaultW: 280, defaultH: 160, defaultConfig: {}, fields: [] },
+  { type: 'fanlist',   label: 'Fan List',            defaultW: 280, defaultH: 160, defaultConfig: {}, fields: [] },
+  { type: 'lighting',  label: 'Lighting',            defaultW: 280, defaultH: 140, defaultConfig: {}, fields: [] },
   { type: 'sysloads',  label: 'System Loads',          defaultW: 380, defaultH: 400, defaultConfig: {}, fields: [] },
   { type: 'progress',  label: 'Print Progress',      defaultW: 520, defaultH: 120, defaultConfig: {}, fields: [{ key: 'time', label: 'Print time' }, { key: 'eta', label: 'ETA' }, { key: 'filament', label: 'Filament used' }] },
   { type: 'fan',       label: 'Part Fan',            defaultW: 180, defaultH: 140, defaultConfig: { label: 'Part Fan' }, fields: [] },
@@ -756,11 +750,20 @@ function buildDefaultLayout() {
   const extruderH = monitorY - gap
   const totalW    = rightColX + colW
 
+  // Bottom band: temperature chart on the left with a temps + fans stack
+  // beside it, system monitor on the right. (These were one composite
+  // "Monitor" widget before it was split into separate widgets.)
+  const chartW    = rightColX - colW - gap
+  const stackX    = chartW + gap
+  const tempsH    = Math.round((monitorH - gap) / 2)
+
   return [
     { id: 'toolhead',  type: 'toolhead',  x: 0,          y: 0,        w: colW,      h: monitorY - gap, config: {} },
     ...(hasCam ? [{ id: 'camera', type: 'camera', x: colW + gap, y: 0, w: camW, h: monitorY - gap, config: {} }] : []),
     { id: 'speedflow', type: 'speedflow', x: rightColX,  y: 0,        w: colW,      h: extruderH,      config: {} },
-    { id: 'chart',     type: 'chart',     x: 0,          y: monitorY, w: rightColX, h: monitorH,       config: { hiddenFields: ['sysloads'] } },
+    { id: 'chart',     type: 'chart',     x: 0,          y: monitorY, w: chartW,    h: monitorH,       config: {} },
+    { id: 'temps',     type: 'temps',     x: stackX,     y: monitorY,             w: colW, h: tempsH,   config: {} },
+    { id: 'fanlist',   type: 'fanlist',   x: stackX,     y: monitorY + tempsH + gap, w: colW, h: tempsH, config: {} },
     { id: 'sysloads',  type: 'sysloads',  x: rightColX,  y: monitorY, w: colW,      h: monitorH,       config: {} },
   ]
 }
@@ -803,7 +806,6 @@ async function doCancel() { showCancelConfirm.value = false; await sendGcode('CA
 // ── Temperature chart ──────────────────────────────────────────
 const chartCanvases  = ref({})
 const chartWindows   = reactive({})   // widgetId → minutes (default 15)
-const chartHeights   = reactive({})   // widgetId → px height
 const hiddenSeries   = reactive({})   // widgetId → { seriesKey: bool }
 const seriesMenuOpen = ref(null)
 let chartTimer = null
@@ -1099,8 +1101,7 @@ onUnmounted(() => {
   border: none;
 }
 .wmon-series-label { font-size: 12px; }
-.wmon-chart-wrap { flex-shrink: 0; width: 100%; }
-.wmon-chart-resize { padding: 2px 0; }
+.wmon-chart-wrap { flex: 1; min-height: 0; width: 100%; }
 .wmon-chart-slider { width: 100%; accent-color: var(--border-2); cursor: row-resize; height: 4px; }
 
 .w-chart { display: flex; flex-direction: column; height: 100%; gap: 4px; }
