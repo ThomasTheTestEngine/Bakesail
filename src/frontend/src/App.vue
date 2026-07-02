@@ -146,28 +146,24 @@
         <!-- EXPANDED -->
         <template v-else>
 
-          <!-- Log output — fills available space -->
-          <div class="cbar-output" ref="cbarOutputEl" @scroll="cbarOnScroll"
-               @click="cbarInputEl?.focus()">
-            <template v-if="!cbarTerminal">
-              <div v-for="(line, i) in cbarLines" :key="i" class="cbar-line" :class="cbarLineClass(line)">
-                <span class="cbar-line-time">{{ line.time }}</span>
-                <span class="cbar-line-text" v-html="cbarColourize(line.text)"></span>
-              </div>
-            </template>
-            <template v-else>
-              <div class="cbar-term-output" ref="cbarTermEl" v-html="cbarTermOutput"></div>
-            </template>
+          <!-- Console mode: scrollable line list -->
+          <div v-if="!cbarTerminal" class="cbar-output" ref="cbarOutputEl" @scroll="cbarOnScroll">
+            <div v-for="(line, i) in cbarLines" :key="i" class="cbar-line" :class="cbarLineClass(line)">
+              <span class="cbar-line-time">{{ line.time }}</span>
+              <span class="cbar-line-text" v-html="cbarColourize(line.text)"></span>
+            </div>
           </div>
+
+          <!-- Terminal mode: xterm.js fills the space -->
+          <div v-else ref="xtermEl" class="cbar-xterm"></div>
 
           <!-- Input row — always at bottom -->
           <div class="cbar-input-row">
             <i :class="cbarTerminal ? 'mdi mdi-bash' : 'mdi mdi-chevron-right'" class="cbar-prompt-icon"></i>
-            <input v-if="cbarTerminal" ref="cbarInputEl" class="cbar-input"
-                   :placeholder="cbarPromptLine || 'Shell…'"
-                   v-model="cbarInput"
-                   @keydown="cbarTermKey($event)"
-                   spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" />
+            <!-- Terminal mode: xterm handles input, just show focus hint -->
+            <span v-if="cbarTerminal" class="cbar-xterm-hint" @click="xtermFocus()">
+              {{ cbarTermWs ? 'Type in terminal above ↑' : 'Connecting…' }}
+            </span>
             <input v-else ref="cbarInputEl" class="cbar-input" v-model="cbarInput"
                    placeholder="Klipper command…"
                    @keydown.enter="cbarSubmit"
@@ -178,7 +174,7 @@
               {{ cbarTerminal ? 'Shell' : 'Console' }}
             </button>
             <button class="cbar-btn" @click="cbarClear" title="Clear"><i class="mdi mdi-delete-sweep-outline"></i></button>
-            <button class="cbar-btn cbar-send" @click="cbarSubmit" title="Send"><i class="mdi mdi-send"></i></button>
+            <button v-if="!cbarTerminal" class="cbar-btn cbar-send" @click="cbarSubmit" title="Send"><i class="mdi mdi-send"></i></button>
             <div class="cbar-divider-v"></div>
             <button class="cbar-btn" @click.stop="cbarCollapse()" title="Minimize console">
               <i class="mdi mdi-arrow-collapse-up"></i>
@@ -225,6 +221,9 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch, provide } from 'vue'
+import { Terminal } from '@xterm/xterm'
+import { FitAddon } from '@xterm/addon-fit'
+import '@xterm/xterm/css/xterm.css'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { tabsForDevice } from './router/index.js'
 import { useMoonraker } from './composables/useMoonraker.js'
@@ -250,7 +249,10 @@ const cbarTermEl     = ref(null)
 const cbarEl         = ref(null)
 const cbarAutoScroll = ref(true)
 const cbarTermOutput = ref('')
-const cbarPromptLine  = ref('')   // last prompt from shell
+const cbarPromptLine  = ref('')
+const xtermEl         = ref(null)
+let   xterm           = null
+let   xtermFitAddon   = null
 const cbarHistory    = ref([])
 const cbarHistIdx    = ref(-1)
 let   cbarTermWs     = null
@@ -359,92 +361,61 @@ function cbarAnsiToHtml(text) {
   return text
 }
 
+function xtermFocus() { xterm?.focus() }
+
 function cbarSetTerminal(val) {
-  // Close existing connection first
   if (cbarTermWs) { cbarTermWs.close(); cbarTermWs = null }
+  if (xterm) { xterm.dispose(); xterm = null; xtermFitAddon = null }
   cbarTerminal.value = val
   if (!val) { nextTick(cbarScrollBottom); return }
 
-  cbarTermOutput.value = ''
-  // ttyd WebSocket — proxied by nginx at /terminal/ws
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  const ws = new WebSocket(`${proto}://${location.host}/terminal/ws`, ['tty'])
-  ws.binaryType = 'arraybuffer'
-  ws.onopen = () => {
-    // ttyd binary protocol: send init as binary frame with '0' prefix
-    const cols = Math.max(80, Math.floor((cbarEl.value?.offsetWidth || 800) / 9))
-    const rows = Math.max(10, Math.floor(((cbarHeight.value || 240) - 80) / 18))
-    ws.send(JSON.stringify({ AuthToken: '', columns: cols, rows }))  // JSON_DATA = '{'
-    nextTick(cbarScrollBottom)
-  }
-  ws.onmessage = e => {
-    let text = null
-    if (typeof e.data === 'string') {
-      if (e.data[0] === '0') text = e.data.slice(1)  // OUTPUT
-    } else if (e.data instanceof ArrayBuffer) {
-      const buf = new Uint8Array(e.data)
-      if (buf[0] === 48) text = new TextDecoder().decode(buf.slice(1))  // OUTPUT='0'=48
-    }
-    if (text !== null) {
-      cbarTermOutput.value += cbarAnsiToHtml(text)
-      // Extract prompt line (last line ending in $ or #)
-      const lines = text.split(/\r?\n/)
-      for (const l of lines) {
-        const clean = l.replace(/\x1b\[[^m]*m/g, '').replace(/\x1b\][^\x07]*\x07/g, '').trim()
-        if (clean.endsWith('$') || clean.endsWith('#') || clean.match(/\$\s*$/)) {
-          cbarPromptLine.value = clean
-        }
+  nextTick(() => {
+    if (!xtermEl.value) return
+    const cs = getComputedStyle(document.documentElement)
+    xterm = new Terminal({
+      theme: {
+        background: '#0d0d0d',
+        foreground: cs.getPropertyValue('--text').trim() || '#e8e8e8',
+        cursor:     cs.getPropertyValue('--teal').trim() || '#4ec9b0',
+        green: '#98c379', yellow: '#e5c07b', blue: '#61afef',
+        magenta: '#c678dd', cyan: '#56b6c2', red: '#e06c75',
+      },
+      fontFamily: cs.getPropertyValue('--font-mono').trim() || 'monospace',
+      fontSize: 13,
+      cursorBlink: true,
+      scrollback: 1000,
+      convertEol: true,
+    })
+    xtermFitAddon = new FitAddon()
+    xterm.loadAddon(xtermFitAddon)
+    xterm.open(xtermEl.value)
+    xtermFitAddon.fit()
+    xterm.focus()
+
+    xterm.onData(data => {
+      if (cbarTermWs?.readyState === WebSocket.OPEN) cbarTermWs.send('0' + data)
+    })
+
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+    const ws = new WebSocket(`${proto}://${location.host}/terminal/ws`, ['tty'])
+    ws.binaryType = 'arraybuffer'
+    ws.onopen = () => { ws.send(JSON.stringify({ AuthToken: '', columns: xterm.cols, rows: xterm.rows })) }
+    ws.onmessage = e => {
+      let text = null
+      if (e.data instanceof ArrayBuffer) {
+        const buf = new Uint8Array(e.data)
+        if (buf[0] === 48) text = new TextDecoder().decode(buf.slice(1))
+      } else if (typeof e.data === 'string' && e.data[0] === '0') {
+        text = e.data.slice(1)
       }
-      cbarAutoScroll.value = true
-      nextTick(() => {
-        if (cbarOutputEl.value) cbarOutputEl.value.scrollTop = cbarOutputEl.value.scrollHeight
-      })
+      if (text !== null) xterm?.write(text)
     }
-  }
-  ws.onclose = () => {
-    cbarTermOutput.value += `\n<span style="color:#f0d87a">[session ended — session will restart shortly]</span>\n`
-    cbarTermWs = null
-  }
-  ws.onerror = (e) => {
-    console.error('[bakesail] ttyd WS error:', e)
-    cbarTermOutput.value += `\n<span style="color:#e05555">[connection failed — check browser console for details]</span>\n`
-  }
-  cbarTermWs = ws
+    ws.onclose = () => xterm?.write('\r\n\x1b[33m[disconnected — session ended]\x1b[0m\r\n')
+    ws.onerror = () => xterm?.write('\r\n\x1b[31m[connection failed]\x1b[0m\r\n')
+    cbarTermWs = ws
+  })
 }
 
-// Send individual keystrokes to terminal in real time
-function cbarTermKey(e) {
-  if (!cbarTermWs || cbarTermWs.readyState !== WebSocket.OPEN) return
-  let data = ''
-  if (e.key === 'Enter')          { data = '\r' }
-  else if (e.key === 'Backspace') { data = '\x7f' }
-  else if (e.key === 'Tab')       { e.preventDefault(); data = '\t' }
-  else if (e.key === 'Escape')    { data = '\x1b' }
-  else if (e.key === 'ArrowUp')   { e.preventDefault(); data = '\x1b[A' }
-  else if (e.key === 'ArrowDown') { e.preventDefault(); data = '\x1b[B' }
-  else if (e.key === 'ArrowRight'){ e.preventDefault(); data = '\x1b[C' }
-  else if (e.key === 'ArrowLeft') { e.preventDefault(); data = '\x1b[D' }
-  else if (e.ctrlKey && e.key.length === 1) {
-    const code = e.key.toUpperCase().charCodeAt(0) - 64
-    if (code > 0 && code < 32) { e.preventDefault(); data = String.fromCharCode(code) }
-  } else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey) {
-    data = e.key
-  }
-  if (data) {
-    // Let v-model handle display for printable chars — only intervene for special keys
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      cbarInput.value = ''
-      cbarPromptLine.value = ''
-    } else if (e.key === 'Backspace') {
-      // let browser handle the backspace in the input field naturally
-    } else if (data.length > 1 || data < ' ') {
-      // Special key — prevent default so it doesn't do browser things
-      e.preventDefault()
-    }
-    cbarTermWs.send('0' + data)  // ttyd input: text frame with '0' prefix
-  }
-}
 
 async function cbarSubmit() {
   const text = cbarInput.value
@@ -1273,11 +1244,24 @@ a { color: inherit; text-decoration: none; }
 .cbar-line--warn    .cbar-line-text { color: var(--yellow); }
 .cbar-line--info    .cbar-line-text { color: var(--text-muted); }
 
-.cbar-term-output {
-  white-space: pre-wrap;
-  word-break: break-all;
-  color: var(--text);
-  line-height: 1.5;
+.cbar-xterm {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.cbar-xterm .xterm {
+  height: 100%;
+  padding: 4px 8px;
+}
+
+.cbar-xterm-hint {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
 }
 
 /* ── Topbar center: file + progress ─────────────────────────── */
