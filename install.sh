@@ -386,6 +386,21 @@ CFGEOF
 }
 JSONEOF
         info "bakesail_settings.json written with deviceType: 3d_printer."
+    else
+        # File already exists from a previous run — don't clobber the user's
+        # settings, but deviceType MUST be 3d_printer here or the frontend's
+        # store default ('oven') can silently apply instead, which causes
+        # ensurePrinterCfgInclude() to think this isn't a 3d_printer install
+        # and re-add [include bakesail.cfg] to printer.cfg on the next Apply.
+        # This is exactly the bug that slipped through before — fix forward
+        # on every install/reinstall, not just the first.
+        if jq -e '.deviceType == "3d_printer"' "${bakesail_settings}" &>/dev/null; then
+            info "bakesail_settings.json already has deviceType: 3d_printer."
+        else
+            jq '.deviceType = "3d_printer"' "${bakesail_settings}" > "${bakesail_settings}.tmp" \
+                && mv "${bakesail_settings}.tmp" "${bakesail_settings}"
+            info "Corrected deviceType to 3d_printer in existing bakesail_settings.json."
+        fi
     fi
 
     success "3D printer auto-configuration complete."
