@@ -165,6 +165,7 @@
             <i :class="cbarTerminal ? 'mdi mdi-bash' : 'mdi mdi-chevron-right'" class="cbar-prompt-icon"></i>
             <input v-if="cbarTerminal" ref="cbarInputEl" class="cbar-input"
                    :placeholder="cbarPromptLine || 'Shell…'"
+                   v-model="cbarInput"
                    @keydown="cbarTermKey($event)"
                    spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" />
             <input v-else ref="cbarInputEl" class="cbar-input" v-model="cbarInput"
@@ -430,15 +431,16 @@ function cbarTermKey(e) {
     data = e.key
   }
   if (data) {
-    e.preventDefault()
-    // Update display in input field to show what's being typed
+    // Let v-model handle display for printable chars — only intervene for special keys
     if (e.key === 'Enter') {
+      e.preventDefault()
       cbarInput.value = ''
-      cbarPromptLine.value = ''  // clear until shell sends new prompt
+      cbarPromptLine.value = ''
     } else if (e.key === 'Backspace') {
-      cbarInput.value = cbarInput.value.slice(0, -1)
-    } else if (data.length === 1 && data >= ' ') {
-      cbarInput.value += data
+      // let browser handle the backspace in the input field naturally
+    } else if (data.length > 1 || data < ' ') {
+      // Special key — prevent default so it doesn't do browser things
+      e.preventDefault()
     }
     cbarTermWs.send('0' + data)  // ttyd input: text frame with '0' prefix
   }
