@@ -73,6 +73,7 @@
         :widget="w"
         :customizeMode="layout.customizeMode.value"
         :settingsOpen="layout.openWidgetSettings.value === w.id"
+        :widgetLabel="widgetLabel(w.type)"
         :allFields="widgetFields(w.type)"
         :defaultConfig="defaultConfig(w.type)"
         @startDrag="layout.startDrag"
@@ -591,6 +592,109 @@
           </div>
         </template>
 
+
+        <!-- ── System Loads ───────────────────────────────────── -->
+        <template v-else-if="w.type === 'sysloads'">
+          <div class="w-monitor" style="overflow-y:auto;height:100%">
+              <div class="wmon-section-title" style="margin-top:8px">SYSTEM LOADS</div>
+              <div class="wmon-loads">
+                <div class="wmon-load-row" v-for="mcu in deviceStore.mcus" :key="mcu.name">
+                  <div class="wmon-load-left">
+                    <div class="wmon-load-name">
+                      <span class="wmon-load-bold">{{ mcu.name }}</span>
+                      <span class="wmon-load-chip" v-if="deviceStore.hostInfo?.mcu_info?.[mcu.name]?.chip">
+                        ({{ deviceStore.hostInfo.mcu_info[mcu.name].chip }})
+                      </span>
+                    </div>
+                    <div class="wmon-load-detail" v-if="mcu.version">Version: {{ mcu.version }}</div>
+                    <div class="wmon-load-detail">
+                      <template v-if="mcu.load != null">Load: {{ mcu.load }}, </template>
+                      <template v-if="mcu.awake != null">Awake: {{ mcu.awake }}, </template>
+                      <template v-if="mcu.freq != null">Freq: {{ mcu.freq }} MHz<template v-if="mcu.temp != null">, </template></template>
+                      <template v-if="mcu.temp != null">Temp: {{ mcu.temp }}°C</template>
+                    </div>
+                  </div>
+                  <div class="wmon-load-gauge" v-if="mcu.load != null">
+                    <svg viewBox="0 0 48 48" class="wmon-gauge-svg">
+                      <circle cx="24" cy="24" r="20" fill="none" stroke="var(--border-2)" stroke-width="4"/>
+                      <circle cx="24" cy="24" r="20" fill="none" stroke="var(--teal)" stroke-width="4"
+                              stroke-dasharray="125.66"
+                              :stroke-dashoffset="125.66 * (1 - Math.min(parseFloat(mcu.load), 1))"
+                              stroke-linecap="round" transform="rotate(-90 24 24)"/>
+                      <text x="24" y="29" text-anchor="middle" font-size="12" fill="var(--teal)" font-family="var(--font-mono)">
+                        {{ Math.round(parseFloat(mcu.load) * 100) }}
+                      </text>
+                    </svg>
+                  </div>
+                </div>
+
+                <!-- Host row -->
+                <div class="wmon-load-row" v-if="deviceStore.systemStats">
+                  <div class="wmon-load-left">
+                    <div class="wmon-load-name">
+                      <span class="wmon-load-bold">Host</span>
+                      <span class="wmon-load-chip" v-if="deviceStore.hostInfo?.cpu_info">
+                        ({{ deviceStore.hostInfo.cpu_info.processor }}, {{ deviceStore.hostInfo.cpu_info.bits }})
+                      </span>
+                    </div>
+                    <div class="wmon-load-detail" v-if="deviceStore.hostInfo?.software_info?.moonraker_version">
+                      Version: {{ deviceStore.hostInfo.software_info.moonraker_version }}
+                    </div>
+                    <div class="wmon-load-detail" v-if="deviceStore.hostInfo?.distribution">
+                      OS: {{ deviceStore.hostInfo.distribution.name }} {{ deviceStore.hostInfo.distribution.version_parts?.major ?? '' }}
+                      ({{ deviceStore.hostInfo.distribution.codename }})
+                      · Distro: {{ deviceStore.hostInfo.distribution.like ?? '—' }}
+                    </div>
+                    <div class="wmon-load-detail">
+                      Load: {{ deviceStore.systemStats.sysload?.toFixed(2) ?? '—' }}
+                      <template v-if="deviceStore.systemStats.memavail != null && deviceStore.hostInfo?.cpu_info?.total_memory">
+                        , Mem: {{ Math.round((deviceStore.hostInfo.cpu_info.total_memory - deviceStore.systemStats.memavail) / 1024) }} MB
+                        / {{ (deviceStore.hostInfo.cpu_info.total_memory / 1024 / 1024).toFixed(1) }} GB
+                      </template>
+                    </div>
+                    <template v-if="deviceStore.hostInfo?.network">
+                      <div class="wmon-load-detail" v-for="(iface, name) in deviceStore.hostInfo.network" :key="name">
+                        {{ name }}
+                        <template v-if="iface.ip_addresses?.[0]?.address"> ({{ iface.ip_addresses[0].address }})</template>
+                        : Bandwidth: {{ ((iface.bandwidth ?? 0) / 1024).toFixed(1) }} kB/s,
+                        Received: {{ ((iface.rx_bytes ?? 0) / 1048576).toFixed(1) }} MB,
+                        Transmitted: {{ ((iface.tx_bytes ?? 0) / 1048576).toFixed(1) }} MB
+                      </div>
+                    </template>
+                  </div>
+                  <div class="wmon-gauge-pair">
+                    <div class="wmon-gauge-wrap" v-if="deviceStore.systemStats.sysload != null">
+                      <svg viewBox="0 0 48 48" class="wmon-gauge-svg">
+                        <circle cx="24" cy="24" r="20" fill="none" stroke="var(--border-2)" stroke-width="4"/>
+                        <circle cx="24" cy="24" r="20" fill="none" stroke="var(--teal)" stroke-width="4"
+                                stroke-dasharray="125.66"
+                                :stroke-dashoffset="125.66 * (1 - Math.min(deviceStore.systemStats.sysload / (deviceStore.hostInfo?.cpu_info?.cpu_count || 4), 1))"
+                                stroke-linecap="round" transform="rotate(-90 24 24)"/>
+                        <text x="24" y="29" text-anchor="middle" font-size="12" fill="var(--teal)" font-family="var(--font-mono)">
+                          {{ Math.round(Math.min(deviceStore.systemStats.sysload / (deviceStore.hostInfo?.cpu_info?.cpu_count || 4), 1) * 100) }}
+                        </text>
+                      </svg>
+                      <span class="wmon-gauge-label">CPU</span>
+                    </div>
+                    <div class="wmon-gauge-wrap" v-if="deviceStore.systemStats.memavail != null && deviceStore.hostInfo?.cpu_info?.total_memory">
+                      <svg viewBox="0 0 48 48" class="wmon-gauge-svg">
+                        <circle cx="24" cy="24" r="20" fill="none" stroke="var(--border-2)" stroke-width="4"/>
+                        <circle cx="24" cy="24" r="20" fill="none" stroke="var(--teal)" stroke-width="4"
+                                stroke-dasharray="125.66"
+                                :stroke-dashoffset="125.66 * (deviceStore.systemStats.memavail / deviceStore.hostInfo.cpu_info.total_memory)"
+                                stroke-linecap="round" transform="rotate(-90 24 24)"/>
+                        <text x="24" y="29" text-anchor="middle" font-size="12" fill="var(--teal)" font-family="var(--font-mono)">
+                          {{ Math.round((1 - deviceStore.systemStats.memavail / deviceStore.hostInfo.cpu_info.total_memory) * 100) }}
+                        </text>
+                      </svg>
+                      <span class="wmon-gauge-label">MEM</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+          </div>
+        </template>
+
         <!-- ── Console ──────────────────────────────────────── -->
         <template v-else-if="w.type === 'console'">
           <ConsoleWidget style="height:100%" />
@@ -831,13 +935,14 @@ const WIDGET_DEFS = [
   { type: 'state',     label: 'State Header',       defaultW: 700, defaultH: 80,  defaultConfig: {}, fields: [{ key: 'filename', label: 'Filename' }, { key: 'layer', label: 'Layer counter' }] },
   { type: 'hotend',    label: 'Hotend Temp',         defaultW: 180, defaultH: 160, defaultConfig: { label: 'Hotend' }, fields: [{ key: 'power', label: 'Heater power bar' }] },
   { type: 'bed',       label: 'Bed Temp',            defaultW: 180, defaultH: 160, defaultConfig: { label: 'Bed' },    fields: [{ key: 'power', label: 'Heater power bar' }] },
-  { type: 'chart',     label: 'Monitor',             defaultW: 560, defaultH: 500, defaultConfig: {}, fields: [
+  { type: 'chart',     label: 'Monitor',             defaultW: 560, defaultH: 500, defaultConfig: { hiddenFields: ['sysloads'] }, fields: [
     { key: 'tempchart', label: 'Temperature chart' },
     { key: 'temps',     label: 'Temperatures' },
     { key: 'fans',      label: 'Fans' },
     { key: 'lighting',  label: 'Lighting' },
     { key: 'sysloads',  label: 'System loads' },
   ] },
+  { type: 'sysloads',  label: 'System Loads',          defaultW: 380, defaultH: 400, defaultConfig: {}, fields: [] },
   { type: 'progress',  label: 'Print Progress',      defaultW: 520, defaultH: 120, defaultConfig: {}, fields: [{ key: 'time', label: 'Print time' }, { key: 'eta', label: 'ETA' }, { key: 'filament', label: 'Filament used' }] },
   { type: 'fan',       label: 'Part Fan',            defaultW: 180, defaultH: 140, defaultConfig: { label: 'Part Fan' }, fields: [] },
   { type: 'speedflow', label: 'Extruder',            defaultW: 400, defaultH: 420, defaultConfig: {}, fields: [] },
@@ -864,11 +969,14 @@ function buildDefaultLayout() {
   const colW  = hasCam ? 360 : 440
   const camW  = hasCam ? 320 : 0
   const rightX = colW + (hasCam ? camW + 20 : 0)
+  const totalW = rightX + 10 + colW
+  const sysW = 320
   return [
-    { id: 'toolhead',  type: 'toolhead',  x: 0,            y: 0,   w: colW, h: 460, config: {} },
+    { id: 'toolhead',  type: 'toolhead',  x: 0,            y: 0,   w: colW,  h: 460, config: {} },
     ...(hasCam ? [{ id: 'camera', type: 'camera', x: colW + 10, y: 0, w: camW, h: 280, config: {} }] : []),
-    { id: 'speedflow', type: 'speedflow', x: rightX + 10,  y: 0,   w: colW, h: 460, config: {} },
-    { id: 'chart',     type: 'chart',     x: 0,            y: 470, w: rightX + 10 + colW, h: 520, config: {} },
+    { id: 'speedflow', type: 'speedflow', x: rightX + 10,  y: 0,   w: colW,  h: 460, config: {} },
+    { id: 'chart',     type: 'chart',     x: 0,            y: 470, w: totalW, h: 520, config: { hiddenFields: ['sysloads'] } },
+    { id: 'sysloads',  type: 'sysloads',  x: totalW + 10,  y: 0,   w: sysW,  h: 990, config: {} },
   ]
 }
 

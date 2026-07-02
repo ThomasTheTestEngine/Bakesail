@@ -16,7 +16,7 @@
       <!-- Drag handle bar -->
       <div class="ws-drag-bar"
            @pointerdown.prevent="$emit('startDrag', $event, widget.id)">
-        <span class="ws-type-label">{{ widget.type }}</span>
+        <span class="ws-type-label">{{ widgetLabel || widget.type }}</span>
         <div class="ws-drag-bar-actions">
           <button class="ws-icon-btn" @click.stop="$emit('toggleSettings', widget.id)" title="Widget settings">⚙</button>
         </div>
@@ -111,6 +111,7 @@ import { computed } from 'vue'
 import { useSettingsStore } from '../stores/settings.js'
 
 const props = defineProps({
+  widgetLabel: { type: String, default: null },
   widget:        { type: Object,  required: true },
   customizeMode: { type: Boolean, default: false },
   settingsOpen:  { type: Boolean, default: false },
