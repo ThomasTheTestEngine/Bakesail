@@ -370,22 +370,17 @@ function cbarSetTerminal(val) {
     // ttyd binary protocol: send init as binary frame with '0' prefix
     const cols = Math.max(80, Math.floor((cbarEl.value?.offsetWidth || 800) / 9))
     const rows = Math.max(10, Math.floor(((cbarHeight.value || 240) - 80) / 18))
-    ws.send('0' + JSON.stringify({ AuthToken: '', columns: cols, rows }))
+    ws.send(JSON.stringify({ AuthToken: '', columns: cols, rows }))  // JSON_DATA = '{'
     nextTick(cbarScrollBottom)
   }
   ws.onmessage = e => {
-    console.log('[ttyd msg] type:', typeof e.data, 'len:', e.data?.length ?? e.data?.byteLength)
     let text = null
     if (typeof e.data === 'string') {
-      console.log('[ttyd text] first char code:', e.data.charCodeAt(0), 'preview:', JSON.stringify(e.data.slice(0,20)))
-      if (e.data[0] === '1' || e.data[0] === '0') text = e.data.slice(1)
+      if (e.data[0] === '0') text = e.data.slice(1)  // OUTPUT
     } else if (e.data instanceof ArrayBuffer) {
       const buf = new Uint8Array(e.data)
-      console.log('[ttyd binary] first byte:', buf[0], 'char:', String.fromCharCode(buf[0]))
-      const t = String.fromCharCode(buf[0])
-      if (t === '1' || t === '0') text = new TextDecoder().decode(buf.slice(1))
+      if (buf[0] === 48) text = new TextDecoder().decode(buf.slice(1))  // OUTPUT='0'=48
     }
-    console.log('[ttyd] extracted text:', text === null ? 'null' : JSON.stringify(text.slice(0,30)))
     if (text !== null) {
       cbarTermOutput.value += cbarAnsiToHtml(text)
       cbarAutoScroll.value = true
@@ -407,7 +402,6 @@ function cbarSetTerminal(val) {
 
 // Send individual keystrokes to terminal in real time
 function cbarTermKey(e) {
-  console.log('[cbarTermKey] key:', e.key, 'ws state:', cbarTermWs?.readyState)
   if (!cbarTermWs || cbarTermWs.readyState !== WebSocket.OPEN) return
   let data = ''
   if (e.key === 'Enter')          { data = '\r' }
