@@ -332,7 +332,7 @@ function cbarDragStart(e) {
   function onMove(ev) {
     // drag DOWN = smaller (handle is at bottom, pulling down shrinks from top perspective)
     // drag UP = larger
-    const delta = startY - ev.clientY
+    const delta = ev.clientY - startY
     cbarHeight.value = Math.max(80, Math.min(window.innerHeight * 0.85, startH + delta))
   }
   function onUp() {
