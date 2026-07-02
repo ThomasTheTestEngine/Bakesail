@@ -113,7 +113,15 @@ install_ttyd() {
         success "ttyd installed."
     fi
 
-    # Write systemd service — binds to localhost only, not externally exposed
+    # Write systemd service — binds to localhost only, not externally exposed.
+    #
+    # Runs as root and executes ONLY `login` — never a shell directly. This
+    # is ttyd's own documented pattern for browser-terminal auth: `login`
+    # authenticates against real Linux accounts via PAM (same credentials
+    # as SSH) and only then drops privileges to that user's shell, exactly
+    # like a physical console getty. Root here is required for `login` to
+    # do that privilege drop safely — do not change ExecStart to run
+    # anything other than `login` while User=root.
     local ttyd_service="/etc/systemd/system/bakesail-ttyd.service"
     sudo tee "${ttyd_service}" > /dev/null << TTYD_EOF
 [Unit]
@@ -121,8 +129,8 @@ Description=Bakesail TTY terminal (ttyd)
 After=network.target
 
 [Service]
-User=${USER}
-ExecStart=/usr/bin/ttyd --port 7681 --interface 127.0.0.1 --writable bash
+User=root
+ExecStart=/usr/bin/ttyd --port 7681 --interface 127.0.0.1 --writable login
 Restart=always
 RestartSec=2
 
