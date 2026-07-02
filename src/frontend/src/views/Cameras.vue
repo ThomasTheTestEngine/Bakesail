@@ -32,20 +32,12 @@
 <script setup>
 import { useSettingsStore } from '../stores/settings.js'
 import CameraFeed from '../components/CameraFeed.vue'
+import { cameraTypeLabel, cameraDisplayName } from '../utils/cameraTypes.js'
 
 const settings = useSettingsStore()
 
-const TYPE_LABELS = {
-  bga_grid:        'BGA Grid',
-  alignment_chip:  'Alignment - Chip',
-  alignment_board: 'Alignment - Board',
-  custom:          'Custom',
-}
-
-function typeLabel(type) { return TYPE_LABELS[type] || type }
-function displayName(cam) {
-  return cam.name || typeLabel(cam.type)
-}
+function typeLabel(type) { return cameraTypeLabel(type) }
+function displayName(cam) { return cameraDisplayName(cam) }
 </script>
 
 <style scoped>

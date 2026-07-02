@@ -618,6 +618,7 @@ import { useSettingsStore, defaultSettings, ZONE_TYPES } from '../stores/setting
 import { useTestPins } from '../composables/useTestPins.js'
 import { saveBakesailCfg, ensurePrinterCfgInclude, generateBakesailCfg } from '../utils/configWriter.js'
 import { useMoonraker } from '../composables/useMoonraker.js'
+import { cameraTypeLabel } from '../utils/cameraTypes.js'
 
 const router   = useRouter()
 const settings = useSettingsStore()
@@ -625,13 +626,7 @@ const { isTestPin, toggleTestPin } = useTestPins(settings)
 const zoneTypes = ZONE_TYPES
 
 // ── Camera helpers ─────────────────────────────────────────────
-const CAMERA_TYPE_LABELS = {
-  bga_grid:        'BGA Grid',
-  alignment_chip:  'Alignment - Chip',
-  alignment_board: 'Alignment - Board',
-  custom:          'Custom',
-}
-function camTypeLabel(type) { return CAMERA_TYPE_LABELS[type] || type }
+function camTypeLabel(type) { return cameraTypeLabel(type) }
 
 // Probe /dev/video* devices via a simple fetch to Moonraker's system info,
 // falling back to a static list of common paths if unavailable.
@@ -646,7 +641,7 @@ onMounted(async () => {
     }
   } catch { /* stay with defaults */ }
 })
-const { runGcode } = useMoonraker()
+const { sendGcode } = useMoonraker()
 
 const activeSection = ref('device')
 const saving        = ref(false)
@@ -777,7 +772,7 @@ async function doRevert() {
     if (!up.ok) throw new Error('Could not write config')
 
     revertTarget.value = null
-    await runGcode('FIRMWARE_RESTART')
+    await sendGcode('FIRMWARE_RESTART')
   } catch (e) {
     saveError.value = e.message
   } finally { reverting.value = false }
@@ -818,7 +813,7 @@ async function writeConfig() {
     await saveBakesailCfg(settings.$state)
     await settings.save()
     await ensurePrinterCfgInclude(settings.deviceType)
-    await runGcode('FIRMWARE_RESTART')
+    await sendGcode('FIRMWARE_RESTART')
   } catch (e) {
     saveError.value = e.message
   } finally {
@@ -844,7 +839,7 @@ async function applyConfig() {
     }
     await settings.save()
     await ensurePrinterCfgInclude(settings.deviceType)
-    await runGcode('FIRMWARE_RESTART')
+    await sendGcode('FIRMWARE_RESTART')
     editMode.value     = false
     applySuccess.value = true
     setTimeout(() => { applySuccess.value = false }, 4000)

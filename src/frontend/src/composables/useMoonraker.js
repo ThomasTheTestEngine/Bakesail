@@ -5,7 +5,7 @@
  * and Klipper state notifications.
  *
  * Usage:
- *   const { connected, klippyState, send, runGcode, sendGcode, subscribeToStatus } = useMoonraker()
+ *   const { connected, klippyState, send, sendGcode, subscribeToStatus } = useMoonraker()
  *   // Call connect() once at app startup (App.vue onMounted)
  *
  * subscribeToStatus(callback) — register a handler for raw status diffs.
@@ -78,7 +78,7 @@ function send(method, params = {}) {
   })
 }
 
-// Convenience alias used by LaserDashboard and PrinterDashboard
+// Send a single gcode script to Klipper via Moonraker.
 function sendGcode(script) {
   return send('printer.gcode.script', { script })
 }
@@ -329,10 +329,6 @@ function connect() {
 
 // ── GCode helper ─────────────────────────────────────────────────────────────
 
-function runGcode(script) {
-  return send('printer.gcode.script', { script })
-}
-
 // ── Klippy state poller ──────────────────────────────────────────────────────
 // After a FIRMWARE_RESTART the WS to Moonraker stays open but Klipper
 // goes through a disconnect/reconnect cycle. We poll printer.info every
@@ -377,7 +373,6 @@ export function useMoonraker() {
     klippyState:       readonly(klippyState),
     connect,
     send,
-    runGcode,
     sendGcode,
     subscribeToStatus,
     subscribeToConsole,

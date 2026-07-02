@@ -20,7 +20,7 @@ const props = defineProps({
   label: { type: String, default: '' },
 })
 
-const { runGcode } = useMoonraker()
+const { sendGcode } = useMoonraker()
 const busy      = ref(false)
 const busyLabel = ref('…')
 
@@ -34,7 +34,7 @@ async function test() {
 
     // 2. Restart Klipper to load the new pin declaration
     busyLabel.value = 'Restarting…'
-    await runGcode('FIRMWARE_RESTART')
+    await sendGcode('FIRMWARE_RESTART')
 
     // 3. Wait for Klipper to come back
     busyLabel.value = 'Waiting…'
@@ -42,7 +42,7 @@ async function test() {
 
     // 4. Fire the test pulse
     busyLabel.value = 'Testing…'
-    await runGcode('BAKESAIL_TEST_PIN VALUE=1 DURATION=0.5')
+    await sendGcode('BAKESAIL_TEST_PIN VALUE=1 DURATION=0.5')
 
   } catch (e) {
     console.error('[bakesail] test pin failed:', e)

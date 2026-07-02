@@ -402,7 +402,7 @@ import { generateBakesailCfg } from '../../utils/configWriter.js'
 
 const router   = useRouter()
 const settings = useSettingsStore()
-const { runGcode } = useMoonraker()
+const { sendGcode } = useMoonraker()
 
 // ── Steps ──────────────────────────────────────────────────────────
 
@@ -490,7 +490,7 @@ async function writeConfig() {
     await ensurePrinterCfgInclude(settings.deviceType)
     settings.wizardComplete = true
     await settings.save()
-    await runGcode('FIRMWARE_RESTART')
+    await sendGcode('FIRMWARE_RESTART')
     // Navigate to dashboard — Klipper will reconnect via useMoonraker's reconnect loop
     router.push('/')
   } catch (e) {

@@ -33,6 +33,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useSettingsStore } from '../stores/settings.js'
+import { cameraDisplayName } from '../utils/cameraTypes.js'
 
 const props = defineProps({
   cam:       { type: Object,  default: null },   // full camera object (takes priority)
@@ -58,13 +59,7 @@ const camDevice = computed(() => {
   return cam.device === '__manual__' ? (cam.deviceManual || '') : (cam.device || '')
 })
 
-const displayName = computed(() => {
-  const cam = resolvedCam.value
-  if (!cam) return 'Camera'
-  if (cam.name) return cam.name
-  const labels = { bga_grid: 'BGA Grid', alignment_chip: 'Alignment - Chip', alignment_board: 'Alignment - Board', custom: 'Camera' }
-  return labels[cam.type] || 'Camera'
-})
+const displayName = computed(() => cameraDisplayName(resolvedCam.value))
 
 // Build mjpeg stream URL proxied through nginx → Crowsnest/ustreamer.
 // ustreamer serves at /?action=stream (not /stream).

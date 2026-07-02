@@ -313,7 +313,7 @@ import CameraFeed from '../components/CameraFeed.vue'
 
 const store    = useDeviceStore()
 const settings = useSettingsStore()
-const { send, runGcode, connected } = useMoonraker()
+const { send, sendGcode, connected } = useMoonraker()
 const _uid = Math.random().toString(36).slice(2, 7)
 
 // ── Widget definitions ─────────────────────────────────────────
@@ -502,17 +502,17 @@ async function loadProfiles() {
 }
 function selectProfile(name) { selectedProfile.value = name; if (name) localStorage.setItem('bakesail-last-profile', name) }
 function chooseProfile(name) { selectProfile(name); showRunModal.value = false }
-async function runProfile()    { if (!selectedProfile.value) { showRunModal.value = true; return } try { await runGcode(`BGA_PROFILE_RUN PROFILE="${selectedProfile.value}"`) } catch (e) { console.error(e) } }
-async function pauseProfile()  { try { await runGcode('BGA_PROFILE_PAUSE')  } catch (e) { console.error(e) } }
-async function resumeProfile() { try { await runGcode('BGA_PROFILE_RESUME') } catch (e) { console.error(e) } }
-async function abortProfile()  { try { await runGcode('BGA_PROFILE_ABORT')  } catch (e) { console.error(e) } }
+async function runProfile()    { if (!selectedProfile.value) { showRunModal.value = true; return } try { await sendGcode(`BGA_PROFILE_RUN PROFILE="${selectedProfile.value}"`) } catch (e) { console.error(e) } }
+async function pauseProfile()  { try { await sendGcode('BGA_PROFILE_PAUSE')  } catch (e) { console.error(e) } }
+async function resumeProfile() { try { await sendGcode('BGA_PROFILE_RESUME') } catch (e) { console.error(e) } }
+async function abortProfile()  { try { await sendGcode('BGA_PROFILE_ABORT')  } catch (e) { console.error(e) } }
 
 // ── Ops ────────────────────────────────────────────────────────
-async function pickup()           { try { await runGcode('SET_PIN PIN=vacuum_pen VALUE=1') } catch (e) { console.error(e) } }
-async function place()            { try { await runGcode('SET_PIN PIN=vacuum_pen VALUE=0') } catch (e) { console.error(e) } }
-async function toggleVacuumPen()  { const v = store.vacuumPenOn ? 0 : 1; try { await runGcode(`SET_PIN PIN=vacuum_pen VALUE=${v}`); store.vacuumPenOn = !!v } catch (e) { console.error(e) } }
-async function toggleNozzleVacuum(){ const v = store.nozzleVacuumOn ? 0 : 1; try { await runGcode(`SET_PIN PIN=nozzle_vacuum VALUE=${v}`); store.nozzleVacuumOn = !!v } catch (e) { console.error(e) } }
-async function emergencyStop()    { try { await runGcode('BAKESAIL_ESTOP') } catch (e) { console.error(e) } }
+async function pickup()           { try { await sendGcode('SET_PIN PIN=vacuum_pen VALUE=1') } catch (e) { console.error(e) } }
+async function place()            { try { await sendGcode('SET_PIN PIN=vacuum_pen VALUE=0') } catch (e) { console.error(e) } }
+async function toggleVacuumPen()  { const v = store.vacuumPenOn ? 0 : 1; try { await sendGcode(`SET_PIN PIN=vacuum_pen VALUE=${v}`); store.vacuumPenOn = !!v } catch (e) { console.error(e) } }
+async function toggleNozzleVacuum(){ const v = store.nozzleVacuumOn ? 0 : 1; try { await sendGcode(`SET_PIN PIN=nozzle_vacuum VALUE=${v}`); store.nozzleVacuumOn = !!v } catch (e) { console.error(e) } }
+async function emergencyStop()    { try { await sendGcode('BAKESAIL_ESTOP') } catch (e) { console.error(e) } }
 
 // ── Customize mode helpers ─────────────────────────────────────
 function exitCustomize() { layout.exitCustomize(); showLoadMenu.value = false }
