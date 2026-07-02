@@ -406,6 +406,7 @@ function cbarSetTerminal(val) {
 
 // Send individual keystrokes to terminal in real time
 function cbarTermKey(e) {
+  console.log('[cbarTermKey] key:', e.key, 'ws state:', cbarTermWs?.readyState)
   if (!cbarTermWs || cbarTermWs.readyState !== WebSocket.OPEN) return
   let data = ''
   if (e.key === 'Enter')          { data = '\r' }
@@ -1262,27 +1263,6 @@ a { color: inherit; text-decoration: none; }
   color: var(--text);
   line-height: 1.5;
 }
-
-.cbar-input-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.cbar-input {
-  flex: 1;
-  background: none;
-  border: none;
-  outline: none;
-  color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  min-width: 0;
-}
-.cbar-input::placeholder { color: var(--text-muted); }
 
 /* ── Topbar center: file + progress ─────────────────────────── */
 .topbar-center {
