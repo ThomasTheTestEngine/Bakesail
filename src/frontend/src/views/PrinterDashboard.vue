@@ -970,14 +970,20 @@ function buildDefaultLayout() {
   const colW  = hasCam ? 360 : 440
   const camW  = hasCam ? 320 : 0
   const rightX = colW + (hasCam ? camW + 20 : 0)
-  const totalW = rightX + 10 + colW
-  const sysW = 320
+  const monitorY = 470          // top of monitor row
+  const monitorH = 520          // monitor height
+  const sysW    = colW          // sysloads same width as extruder
+  const sysY    = monitorY      // sysloads top aligns with monitor
+  const extruderH = sysY - 10  // extruder fills space above sysloads
+  const sysH    = monitorH      // sysloads same height as monitor
+  const totalW  = rightX + 10 + colW
+  const rightColX = rightX + 10
   return [
-    { id: 'toolhead',  type: 'toolhead',  x: 0,            y: 0,   w: colW,  h: 460, config: {} },
-    ...(hasCam ? [{ id: 'camera', type: 'camera', x: colW + 10, y: 0, w: camW, h: 280, config: {} }] : []),
-    { id: 'speedflow', type: 'speedflow', x: rightX + 10,  y: 0,   w: colW,  h: 460, config: {} },
-    { id: 'chart',     type: 'chart',     x: 0,            y: 470, w: totalW, h: 520, config: { hiddenFields: ['sysloads'] } },
-    { id: 'sysloads',  type: 'sysloads',  x: totalW + 10,  y: 0,   w: sysW,  h: 990, config: {} },
+    { id: 'toolhead',  type: 'toolhead',  x: 0,          y: 0,        w: colW, h: monitorY - 10, config: {} },
+    ...(hasCam ? [{ id: 'camera', type: 'camera', x: colW + 10, y: 0, w: camW, h: monitorY - 10, config: {} }] : []),
+    { id: 'speedflow', type: 'speedflow', x: rightColX,  y: 0,        w: sysW, h: extruderH,     config: {} },
+    { id: 'chart',     type: 'chart',     x: 0,          y: monitorY, w: rightColX, h: monitorH,  config: { hiddenFields: ['sysloads'] } },
+    { id: 'sysloads',  type: 'sysloads',  x: rightColX,  y: sysY,     w: sysW, h: sysH,          config: {} },
   ]
 }
 
