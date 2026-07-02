@@ -160,9 +160,9 @@
           <!-- Input row — always at bottom -->
           <div class="cbar-input-row">
             <i :class="cbarTerminal ? 'mdi mdi-bash' : 'mdi mdi-chevron-right'" class="cbar-prompt-icon"></i>
-            <!-- Terminal mode: xterm handles input, just show focus hint -->
-            <span v-if="cbarTerminal" class="cbar-xterm-hint" @click="xtermFocus()">
-              {{ cbarTermWs ? 'Type in terminal above ↑' : 'Connecting…' }}
+            <!-- Terminal mode: xterm captures keyboard directly when focused -->
+            <span v-if="cbarTerminal" class="cbar-xterm-hint" @click="xtermFocus()" title="Click terminal to focus">
+              <i class="mdi mdi-keyboard" style="font-size:14px;opacity:0.4"></i>
             </span>
             <input v-else ref="cbarInputEl" class="cbar-input" v-model="cbarInput"
                    placeholder="Klipper command…"
@@ -170,9 +170,12 @@
                    @keydown.up.prevent="cbarHistoryUp"
                    @keydown.down.prevent="cbarHistoryDown"
                    spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" />
-            <button class="cbar-mode-text-btn" @click="cbarTerminal ? (cbarTerminal=false, cbarScrollBottom()) : cbarSetTerminal(true)">
-              {{ cbarTerminal ? 'Shell' : 'Console' }}
-            </button>
+            <div class="cbar-mode-toggle">
+              <button :class="['cbar-mode-btn', !cbarTerminal ? 'cbar-mode-btn--active' : '']"
+                      @click="cbarTerminal && (cbarTerminal=false, cbarScrollBottom())">Console</button>
+              <button :class="['cbar-mode-btn', cbarTerminal ? 'cbar-mode-btn--active' : '']"
+                      @click="!cbarTerminal && cbarSetTerminal(true)">Shell</button>
+            </div>
             <button class="cbar-btn" @click="cbarClear" title="Clear"><i class="mdi mdi-delete-sweep-outline"></i></button>
             <button v-if="!cbarTerminal" class="cbar-btn cbar-send" @click="cbarSubmit" title="Send"><i class="mdi mdi-send"></i></button>
             <div class="cbar-divider-v"></div>
@@ -1069,7 +1072,7 @@ a { color: inherit; text-decoration: none; }
 .content {
   flex: 1;
   overflow-y: auto;
-  padding: 24px 28px;
+  padding: 12px 16px;
 }
 
 /* ── Console bar ────────────────────────────────────────────── */
@@ -1176,15 +1179,16 @@ a { color: inherit; text-decoration: none; }
 .cbar-mode-btn {
   background: none;
   border: none;
-  padding: 4px 9px;
-  font-size: 16px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   color: var(--text-muted);
   cursor: pointer;
-  display: flex;
-  align-items: center;
   transition: background 0.1s, color 0.1s;
 }
-.cbar-mode-btn--active { background: var(--surface-2); color: var(--teal); }
+.cbar-mode-btn--active { background: var(--surface-2); color: var(--text); }
+.cbar-mode-btn:not(.cbar-mode-btn--active):hover { color: var(--text-dim); }
 
 .cbar-mode-text-btn {
   background: var(--surface-2);

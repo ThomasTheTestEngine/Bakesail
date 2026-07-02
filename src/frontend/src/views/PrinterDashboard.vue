@@ -1128,7 +1128,7 @@ onUnmounted(() => {
 .pd-offline-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); opacity: 0.5; animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 0%,100%{opacity:0.3} 50%{opacity:1} }
 
-.dash-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; min-height: 36px; flex-shrink: 0; gap: 10px; position: relative; flex-wrap: wrap; }
+.dash-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-shrink: 0; gap: 10px; position: relative; flex-wrap: wrap; }
 .dt-left  { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
 .dt-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .dt-mode-label { font-size: 11px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: var(--amber); white-space: nowrap; }
