@@ -174,7 +174,7 @@
               <button :class="['cbar-mode-btn', !cbarTerminal ? 'cbar-mode-btn--active' : '']"
                       @click="cbarTerminal && (cbarTerminal=false, cbarScrollBottom())">Console</button>
               <button :class="['cbar-mode-btn', cbarTerminal ? 'cbar-mode-btn--active' : '']"
-                      @click="!cbarTerminal && cbarSetTerminal(true)">Shell</button>
+                      @click="!cbarTerminal && cbarSetTerminal(true)">Terminal</button>
             </div>
             <button class="cbar-btn" @click="cbarClear" title="Clear"><i class="mdi mdi-delete-sweep-outline"></i></button>
             <button v-if="!cbarTerminal" class="cbar-btn cbar-send" @click="cbarSubmit" title="Send"><i class="mdi mdi-send"></i></button>
@@ -465,6 +465,17 @@ onMounted(async () => {
 onUnmounted(() => { if (cbarUnsub) cbarUnsub(); if (cbarTermWs) cbarTermWs.close() })
 watch(klippyState, async val => {
   if (val === 'ready') { await fetchConsoleHistory(); cbarScrollBottom() }
+})
+
+// Re-init xterm when console bar reopens while in terminal mode
+watch(cbarOpen, async (isOpen) => {
+  if (isOpen && cbarTerminal.value) {
+    // xtermEl hasn't mounted yet — wait a tick
+    await nextTick()
+    if (xtermEl.value && !xterm) {
+      cbarSetTerminal(true)
+    }
+  }
 })
 const host = window.location.hostname
 
