@@ -145,34 +145,8 @@
 
         <!-- EXPANDED -->
         <template v-else>
-          <!-- Input row -->
-          <div class="cbar-input-row">
-            <i :class="cbarTerminal ? 'mdi mdi-bash' : 'mdi mdi-chevron-right'" class="cbar-prompt-icon"></i>
-            <!-- In terminal mode: raw keystroke passthrough, no v-model -->
-            <input v-if="cbarTerminal" ref="cbarInputEl" class="cbar-input"
-                   placeholder="Shell command…"
-                   @keydown="cbarTermKey($event)"
-                   spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" />
-            <!-- In console mode: normal input with history -->
-            <input v-else ref="cbarInputEl" class="cbar-input" v-model="cbarInput"
-                   placeholder="Klipper command…"
-                   @keydown.enter="cbarSubmit"
-                   @keydown.up.prevent="cbarHistoryUp"
-                   @keydown.down.prevent="cbarHistoryDown"
-                   spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" />
-            <!-- Mode button: text label, toggles on click -->
-            <button class="cbar-mode-text-btn" @click="cbarTerminal ? (cbarTerminal=false, cbarScrollBottom()) : cbarSetTerminal(true)">
-              {{ cbarTerminal ? 'Shell' : 'Console' }}
-            </button>
-            <button class="cbar-btn" @click="cbarClear" title="Clear"><i class="mdi mdi-delete-sweep-outline"></i></button>
-            <button class="cbar-btn cbar-send" @click="cbarSubmit" title="Send"><i class="mdi mdi-send"></i></button>
-            <div class="cbar-divider-v"></div>
-            <button class="cbar-btn" @click="cbarCollapse()" title="Minimize console">
-              <i class="mdi mdi-chevron-up"></i>
-            </button>
-          </div>
 
-          <!-- Log output — click to focus input -->
+          <!-- Log output — fills available space -->
           <div class="cbar-output" ref="cbarOutputEl" @scroll="cbarOnScroll"
                @click="cbarInputEl?.focus()">
             <template v-if="!cbarTerminal">
@@ -186,11 +160,35 @@
             </template>
           </div>
 
-          <!-- Bottom bar: drag handle (customize mode) + minimize -->
-          <!-- Drag-resize handle — always active on the bottom edge -->
-          <div class="cbar-resize-handle" @mousedown.prevent="cbarDragStart">
+          <!-- Input row — always at bottom -->
+          <div class="cbar-input-row">
+            <i :class="cbarTerminal ? 'mdi mdi-bash' : 'mdi mdi-chevron-right'" class="cbar-prompt-icon"></i>
+            <input v-if="cbarTerminal" ref="cbarInputEl" class="cbar-input"
+                   placeholder="Shell command…"
+                   @keydown="cbarTermKey($event)"
+                   spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" />
+            <input v-else ref="cbarInputEl" class="cbar-input" v-model="cbarInput"
+                   placeholder="Klipper command…"
+                   @keydown.enter="cbarSubmit"
+                   @keydown.up.prevent="cbarHistoryUp"
+                   @keydown.down.prevent="cbarHistoryDown"
+                   spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" />
+            <button class="cbar-mode-text-btn" @click="cbarTerminal ? (cbarTerminal=false, cbarScrollBottom()) : cbarSetTerminal(true)">
+              {{ cbarTerminal ? 'Shell' : 'Console' }}
+            </button>
+            <button class="cbar-btn" @click="cbarClear" title="Clear"><i class="mdi mdi-delete-sweep-outline"></i></button>
+            <button class="cbar-btn cbar-send" @click="cbarSubmit" title="Send"><i class="mdi mdi-send"></i></button>
+            <div class="cbar-divider-v"></div>
+            <button class="cbar-btn" @click.stop="cbarCollapse()" title="Minimize console">
+              <i class="mdi mdi-chevron-up"></i>
+            </button>
+          </div>
+
+          <!-- Drag-resize handle at very bottom -->
+          <div class="cbar-resize-handle" @mousedown="cbarDragStart">
             <i class="mdi mdi-drag-horizontal cbar-drag-icon"></i>
           </div>
+
         </template>
 
       </div>
