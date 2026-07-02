@@ -958,6 +958,7 @@ const WIDGET_DEFS = [
   { type: 'camera',    label: 'Camera Feed',         defaultW: 320, defaultH: 260, defaultConfig: { cameraId: null }, fields: [{ key: 'label', label: 'Show camera name' }] },
 ]
 
+function widgetLabel(type)   { return WIDGET_DEFS.find(d => d.type === type)?.label ?? type }
 function widgetFields(type)  { return WIDGET_DEFS.find(d => d.type === type)?.fields || [] }
 function defaultConfig(type) { return WIDGET_DEFS.find(d => d.type === type)?.defaultConfig || {} }
 function isFieldHidden(w, key) { return w.config?.hiddenFields?.includes(key) }
