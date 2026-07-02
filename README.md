@@ -51,7 +51,7 @@ Bakesail is intentionally thin on top of the existing Klipper ecosystem:
 
 ### Console / Terminal
 
-The global topbar has a collapsible console bar with two modes: a Klipper gcode console (same data as Fluidd/Mainsail's console, via Moonraker's websocket) and a full shell terminal (`xterm.js` + `ttyd`, real PTY access to the Pi). This is the canonical implementation, available from every device type.
+The global topbar has a collapsible console bar with two modes: a Klipper gcode console (same data as Fluidd/Mainsail's console, via Moonraker's websocket) and a full shell terminal (`xterm.js` + `ttyd`, real PTY access to the Pi). This is the canonical implementation, available from every device type. The terminal requires a real login — `ttyd` runs `login` as root (never a shell directly), which authenticates against normal Linux accounts via PAM and drops to that user's shell only after success, same as SSH or a physical console. See `install_ttyd()` in `install.sh`.
 
 `ConsoleWidget.vue` is a second, self-contained console+terminal widget currently only used on `PrinterDashboard.vue`. Its terminal mode talks to Moonraker's own `/machine/terminal` endpoint rather than ttyd — a different backend from the topbar's. It's being kept as-is intentionally, as a starting point for fleshing out a dashboard-embeddable terminal widget down the road; it isn't wired into the shared widget system yet and shouldn't be assumed equivalent to the topbar terminal.
 
