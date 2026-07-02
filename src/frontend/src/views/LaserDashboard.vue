@@ -133,6 +133,11 @@
           <CameraWidget :widget="w" />
         </template>
 
+        <!-- ── SYSTEM MONITOR widget ─────────────────────── -->
+        <template v-else-if="w.type === 'sysloads'">
+          <SystemMonitorWidget />
+        </template>
+
       </WidgetShell>
     </div>
 
@@ -146,6 +151,7 @@ import { useMoonraker } from '../composables/useMoonraker.js'
 import { useDashboardLayout } from '../composables/useDashboardLayout.js'
 import WidgetShell from '../components/WidgetShell.vue'
 import CameraWidget from '../components/CameraWidget.vue'
+import SystemMonitorWidget from '../components/SystemMonitorWidget.vue'
 import DashboardCustomizeBar from '../components/DashboardCustomizeBar.vue'
 
 const settings = useSettingsStore()
@@ -202,6 +208,7 @@ const WIDGET_DEFS = [
   { type: 'job',      label: 'Job Progress',    defaultW: 280, defaultH: 160, defaultConfig: {}, fields: [{ key: 'eta', label: 'ETA' }] },
   { type: 'controls', label: 'Job Controls',    defaultW: 480, defaultH: 80,  defaultConfig: {}, fields: [] },
   { type: 'camera',   label: 'Camera Feed',     defaultW: 320, defaultH: 260, defaultConfig: { cameraId: null }, multiple: true, fields: [{ key: 'label', label: 'Show camera name label' }] },
+  { type: 'sysloads', label: 'System Monitor',  defaultW: 420, defaultH: 260, defaultConfig: {}, fields: [] },
 ]
 
 function widgetFields(type)  { return WIDGET_DEFS.find(d => d.type === type)?.fields || [] }
