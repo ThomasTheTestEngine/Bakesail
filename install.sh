@@ -145,11 +145,7 @@ TTYD_EOF
         echo -e "\nupstream ttyd {\n    server 127.0.0.1:7681;\n}" | sudo tee -a "${upstreams_conf}" > /dev/null
         info "ttyd upstream added to ${upstreams_conf}."
     fi
-    # moonraker upstream alias (MainsailOS uses 'apiserver' but our config uses 'moonraker')
-    if ! grep -q "upstream moonraker" "${upstreams_conf}" 2>/dev/null; then
-        echo -e "\nupstream moonraker {\n    server 127.0.0.1:7125;\n}" | sudo tee -a "${upstreams_conf}" > /dev/null
-        info "moonraker upstream added to ${upstreams_conf}."
-    fi
+    # Bakesail nginx config now uses 'apiserver' upstream (defined by MainsailOS) — no alias needed
 
     success "bakesail-ttyd service enabled and started."
 }
