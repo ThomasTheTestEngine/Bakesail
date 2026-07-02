@@ -702,10 +702,7 @@
 
         <!-- ── Camera Feed ────────────────────────────────────── -->
         <template v-else-if="w.type === 'camera'">
-          <div class="w-camera">
-            <div v-if="!isFieldHidden(w,'label')" class="wc-cam-title">{{ cameraLabel(w.config?.cameraId) }}</div>
-            <div class="wc-cam-feed"><CameraFeed :camera-id="w.config?.cameraId" /></div>
-          </div>
+          <CameraWidget :widget="w" />
         </template>
 
       </WidgetShell>
@@ -747,7 +744,7 @@ import { useDeviceStore }     from '../stores/device.js'
 import { useMoonraker }       from '../composables/useMoonraker.js'
 import { useDashboardLayout } from '../composables/useDashboardLayout.js'
 import WidgetShell from '../components/WidgetShell.vue'
-import CameraFeed     from '../components/CameraFeed.vue'
+import CameraWidget   from '../components/CameraWidget.vue'
 import ConsoleWidget  from '../components/ConsoleWidget.vue'
 
 const settings = useSettingsStore()
@@ -1025,11 +1022,6 @@ function formatEta(elapsed, progress) {
   if (!progress || progress <= 0) return '—'
   const remaining = (elapsed / progress) - elapsed
   return new Date(Date.now() + remaining * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
-
-function cameraLabel(id) {
-  if (!id) return 'Camera'
-  return settings.cameras?.find(c => c.id === id)?.name || id
 }
 
 const defaultMacros = ['BED_MESH_CALIBRATE', 'LOAD_FILAMENT', 'UNLOAD_FILAMENT']
@@ -1575,9 +1567,6 @@ onUnmounted(() => {
 .wm-btns  { display: flex; gap: 6px; flex-wrap: wrap; }
 
 /* Camera */
-.w-camera { display: flex; flex-direction: column; gap: 6px; height: 100%; }
-.wc-cam-title { font-size: 10px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: var(--text-muted); flex-shrink: 0; }
-.wc-cam-feed  { flex: 1; border-radius: var(--radius); overflow: hidden; min-height: 0; }
 
 /* Modal */
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 300; }
