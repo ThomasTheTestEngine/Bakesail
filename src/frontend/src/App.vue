@@ -164,7 +164,7 @@
           <div class="cbar-input-row">
             <i :class="cbarTerminal ? 'mdi mdi-bash' : 'mdi mdi-chevron-right'" class="cbar-prompt-icon"></i>
             <input v-if="cbarTerminal" ref="cbarInputEl" class="cbar-input"
-                   placeholder="Shell command…"
+                   :placeholder="cbarPromptLine || 'Shell…'"
                    @keydown="cbarTermKey($event)"
                    spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" />
             <input v-else ref="cbarInputEl" class="cbar-input" v-model="cbarInput"
@@ -249,6 +249,7 @@ const cbarTermEl     = ref(null)
 const cbarEl         = ref(null)
 const cbarAutoScroll = ref(true)
 const cbarTermOutput = ref('')
+const cbarPromptLine  = ref('')   // last prompt from shell
 const cbarHistory    = ref([])
 const cbarHistIdx    = ref(-1)
 let   cbarTermWs     = null
@@ -385,6 +386,14 @@ function cbarSetTerminal(val) {
     }
     if (text !== null) {
       cbarTermOutput.value += cbarAnsiToHtml(text)
+      // Extract prompt line (last line ending in $ or #)
+      const lines = text.split(/\r?\n/)
+      for (const l of lines) {
+        const clean = l.replace(/\x1b\[[^m]*m/g, '').replace(/\x1b\][^\x07]*\x07/g, '').trim()
+        if (clean.endsWith('$') || clean.endsWith('#') || clean.match(/\$\s*$/)) {
+          cbarPromptLine.value = clean
+        }
+      }
       cbarAutoScroll.value = true
       nextTick(() => {
         if (cbarOutputEl.value) cbarOutputEl.value.scrollTop = cbarOutputEl.value.scrollHeight
@@ -425,6 +434,7 @@ function cbarTermKey(e) {
     // Update display in input field to show what's being typed
     if (e.key === 'Enter') {
       cbarInput.value = ''
+      cbarPromptLine.value = ''  // clear until shell sends new prompt
     } else if (e.key === 'Backspace') {
       cbarInput.value = cbarInput.value.slice(0, -1)
     } else if (data.length === 1 && data >= ' ') {
