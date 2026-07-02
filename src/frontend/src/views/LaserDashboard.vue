@@ -44,13 +44,13 @@
 
         <!-- ── STATE widget ──────────────────────────────── -->
         <template v-if="w.type === 'state'">
-          <div class="w-state" :style="{ '--sc': stateColour }">
-            <div class="ws-indicator">
-              <div class="ws-dot"></div>
-              <span class="ws-label" :style="{ color: w.config.valueColor || null }">{{ stateLabel }}</span>
-            </div>
+          <StatusHeaderWidget
+            :color="stateColour"
+            :label="stateLabel"
+            :value-color="w.config.valueColor"
+          >
             <div v-if="!w.config.hiddenFields?.includes('job')" class="ws-job">{{ jobName || 'No job loaded' }}</div>
-          </div>
+          </StatusHeaderWidget>
         </template>
 
         <!-- ── POSITION widget ───────────────────────────── -->
@@ -152,6 +152,7 @@ import { useDashboardLayout } from '../composables/useDashboardLayout.js'
 import WidgetShell from '../components/WidgetShell.vue'
 import CameraWidget from '../components/CameraWidget.vue'
 import SystemMonitorWidget from '../components/SystemMonitorWidget.vue'
+import StatusHeaderWidget from '../components/StatusHeaderWidget.vue'
 import DashboardCustomizeBar from '../components/DashboardCustomizeBar.vue'
 
 const settings = useSettingsStore()
@@ -266,10 +267,6 @@ onUnmounted(() => { if (unsubscribe) unsubscribe() })
 .grid-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
 
 /* Widget content */
-.w-state { display: flex; flex-direction: column; gap: 6px; height: 100%; justify-content: center; }
-.ws-indicator { display: flex; align-items: center; gap: 10px; }
-.ws-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--sc, var(--text-muted)); box-shadow: 0 0 8px var(--sc, transparent); flex-shrink: 0; }
-.ws-label { font-family: var(--font-mono); font-size: 13px; font-weight: 700; letter-spacing: 0.12em; color: var(--sc, var(--text-muted)); }
 .ws-job { font-size: 12px; color: var(--text-dim); font-family: var(--font-mono); }
 
 .w-pos { display: flex; flex-direction: column; gap: 8px; height: 100%; }

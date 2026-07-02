@@ -75,21 +75,18 @@
 
         <!-- ── STATE HEADER widget ──────────────────────── -->
         <template v-else-if="w.type === 'state'">
-          <div class="w-state" :style="{ '--sc': store.displayColour }">
-            <div class="ws-indicator">
-              <div class="ws-dot"></div>
-              <span class="ws-label"
-                    :style="{ color: w.config.valueColor || null }">
-                {{ store.displayLabel.toUpperCase() }}
-              </span>
-            </div>
+          <StatusHeaderWidget
+            :color="store.displayColour"
+            :label="store.displayLabel.toUpperCase()"
+            :value-color="w.config.valueColor"
+          >
             <div v-if="!w.config.hiddenFields?.includes('summary')" class="ws-summary">
               {{ store.stageSummary || 'No profile running' }}
             </div>
             <div v-if="!w.config.hiddenFields?.includes('profile')" class="ws-profile">
               {{ selectedProfile || 'No profile selected' }}
             </div>
-          </div>
+          </StatusHeaderWidget>
         </template>
 
         <!-- ── CHART widget ──────────────────────────────── -->
@@ -253,6 +250,7 @@ import { useDashboardLayout } from '../composables/useDashboardLayout.js'
 import WidgetShell from '../components/WidgetShell.vue'
 import CameraWidget from '../components/CameraWidget.vue'
 import SystemMonitorWidget from '../components/SystemMonitorWidget.vue'
+import StatusHeaderWidget from '../components/StatusHeaderWidget.vue'
 import DashboardCustomizeBar from '../components/DashboardCustomizeBar.vue'
 
 const store    = useDeviceStore()
@@ -523,10 +521,6 @@ onMounted(async () => {
 .wz-pct { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); width: 28px; text-align: right; }
 
 /* State */
-.w-state { display: flex; flex-direction: column; gap: 6px; height: 100%; justify-content: center; }
-.ws-indicator { display: flex; align-items: center; gap: 10px; }
-.ws-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--sc, var(--text-muted)); box-shadow: 0 0 8px var(--sc, transparent); flex-shrink: 0; }
-.ws-label { font-family: var(--font-mono); font-size: 13px; font-weight: 700; letter-spacing: 0.12em; color: var(--sc, var(--text-muted)); }
 .ws-summary { font-size: 12px; color: var(--text-dim); font-family: var(--font-mono); }
 .ws-profile { font-size: 12px; color: var(--amber); font-family: var(--font-mono); }
 

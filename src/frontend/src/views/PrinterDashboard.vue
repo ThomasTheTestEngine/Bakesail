@@ -45,13 +45,17 @@
 
         <!-- ── State Header ───────────────────────────────────── -->
         <template v-if="w.type === 'state'">
-          <div class="w-state">
-            <div class="ws-status" :style="{ color: stateColour }">{{ stateLabel }}</div>
+          <StatusHeaderWidget
+            :color="stateColour"
+            :label="stateLabel"
+            :dot="false"
+            label-class="ws-label--lg"
+          >
             <div class="ws-filename" v-if="printer.filename && !isFieldHidden(w,'filename')">{{ printer.filename }}</div>
             <div class="ws-layer" v-if="printer.currentLayer && !isFieldHidden(w,'layer')">
               Layer {{ printer.currentLayer }}<span v-if="printer.totalLayers"> / {{ printer.totalLayers }}</span>
             </div>
-          </div>
+          </StatusHeaderWidget>
         </template>
 
         <!-- ── Hotend Temperature ─────────────────────────────── -->
@@ -514,6 +518,7 @@ import { useDashboardLayout } from '../composables/useDashboardLayout.js'
 import WidgetShell from '../components/WidgetShell.vue'
 import CameraWidget   from '../components/CameraWidget.vue'
 import SystemMonitorWidget from '../components/SystemMonitorWidget.vue'
+import StatusHeaderWidget from '../components/StatusHeaderWidget.vue'
 import DashboardCustomizeBar from '../components/DashboardCustomizeBar.vue'
 import ConsoleWidget  from '../components/ConsoleWidget.vue'
 
@@ -998,8 +1003,6 @@ onUnmounted(() => {
 .grid-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 
 /* State */
-.w-state { display: flex; flex-direction: column; gap: 5px; height: 100%; justify-content: center; }
-.ws-status   { font-size: 22px; font-weight: 700; letter-spacing: 0.04em; }
 .ws-filename { font-size: 12px; color: var(--text-dim); font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ws-layer    { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); }
 
