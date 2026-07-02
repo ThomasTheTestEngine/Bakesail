@@ -7,34 +7,8 @@
       <span>INTERLOCK OPEN — Lid or safety circuit not closed. Laser disabled.</span>
     </div>
 
-    <!-- ── Toolbar ─────────────────────────────────────────── -->
-    <div class="dash-toolbar">
-      <div class="dash-toolbar-left"></div>
-      <div class="dash-toolbar-right">
-        <!-- Add widget (customize mode only) -->
-        <div v-if="layout.customizeMode.value" class="add-widget-wrap" @click.stop>
-          <button class="btn btn-ghost btn-sm" @click="layout.addWidgetOpen.value = !layout.addWidgetOpen.value">
-            + Add Widget
-          </button>
-          <div v-if="layout.addWidgetOpen.value" class="add-widget-dropdown">
-            <div class="add-widget-title">Add Widget</div>
-            <button v-for="def in availableToAdd" :key="def.type"
-                    class="add-widget-item" @click="layout.addWidget(def.type, WIDGET_DEFS)">
-              {{ def.label }}
-            </button>
-            <div v-if="availableToAdd.length === 0" class="add-widget-empty">All widgets on dashboard.</div>
-          </div>
-        </div>
-
-        <button class="customize-btn"
-                :class="{ 'customize-btn--active': layout.customizeMode.value }"
-                @click.stop="layout.customizeMode.value ? exitCustomize() : layout.enterCustomize()">
-          <span v-if="!layout.customizeMode.value && layout.firstTimeSeen.value" class="customize-label">CUSTOMIZE DASHBOARD</span>
-          <span v-else-if="layout.customizeMode.value" class="customize-label">EXIT CUSTOMIZE</span>
-          ⚙
-        </button>
-      </div>
-    </div>
+    <!-- ── Customize shell (gear + toolbar) ──────────────────── -->
+    <DashboardCustomizeBar :layout="layout" :widget-defs="WIDGET_DEFS" dashboard-id="laser" />
 
     <!-- ── Widget canvas ───────────────────────────────────── -->
     <div class="dash-canvas" :style="canvasStyle" @click.self="layout.closeWidgetSettings()">
@@ -162,27 +136,6 @@
       </WidgetShell>
     </div>
 
-    <!-- ── Customize footer ────────────────────────────────── -->
-    <div v-if="layout.customizeMode.value" class="customize-footer">
-      <button class="btn btn-danger btn-sm" @click="layout.revertToDefault()">↺ Revert to Default Dashboard</button>
-      <div class="cf-right">
-        <span v-if="layout.saveMsg.value" class="cf-msg">{{ layout.saveMsg.value }}</span>
-        <div class="load-wrap" @click.stop>
-          <button class="btn btn-ghost btn-sm" @click="toggleLoadMenu">⬆ Load Custom Dashboard</button>
-          <div v-if="showLoadMenu" class="load-dropdown">
-            <div v-if="layout.loadingLayouts.value" class="load-empty">Loading…</div>
-            <div v-else-if="layout.availableLayouts.value.length === 0" class="load-empty">No saved layouts found.</div>
-            <button v-else v-for="f in layout.availableLayouts.value" :key="f"
-                    class="load-item" @click="doLoadLayout(f)">
-              {{ f.replace('bakesail_dashboard_laser_', '').replace('.json','') }}
-            </button>
-          </div>
-        </div>
-        <button class="btn btn-ghost btn-sm" @click="promptSaveAs">⬇ Save as Custom Dashboard</button>
-        <button class="btn btn-primary btn-sm" @click="layout.applyLayout()">✓ Apply</button>
-      </div>
-    </div>
-
   </div>
 </template>
 
@@ -193,6 +146,7 @@ import { useMoonraker } from '../composables/useMoonraker.js'
 import { useDashboardLayout } from '../composables/useDashboardLayout.js'
 import WidgetShell from '../components/WidgetShell.vue'
 import CameraWidget from '../components/CameraWidget.vue'
+import DashboardCustomizeBar from '../components/DashboardCustomizeBar.vue'
 
 const settings = useSettingsStore()
 const { klippyState, sendGcode, subscribeToStatus, connect } = useMoonraker()
@@ -247,7 +201,7 @@ const WIDGET_DEFS = [
   { type: 'laser',    label: 'Laser Status',    defaultW: 220, defaultH: 180, defaultConfig: {}, fields: [{ key: 'speed', label: 'Speed readout' }, { key: 'interlock', label: 'Interlock status' }] },
   { type: 'job',      label: 'Job Progress',    defaultW: 280, defaultH: 160, defaultConfig: {}, fields: [{ key: 'eta', label: 'ETA' }] },
   { type: 'controls', label: 'Job Controls',    defaultW: 480, defaultH: 80,  defaultConfig: {}, fields: [] },
-  { type: 'camera',   label: 'Camera Feed',     defaultW: 320, defaultH: 260, defaultConfig: { cameraId: null }, fields: [{ key: 'label', label: 'Show camera name label' }] },
+  { type: 'camera',   label: 'Camera Feed',     defaultW: 320, defaultH: 260, defaultConfig: { cameraId: null }, multiple: true, fields: [{ key: 'label', label: 'Show camera name label' }] },
 ]
 
 function widgetFields(type)  { return WIDGET_DEFS.find(d => d.type === type)?.fields || [] }
@@ -269,11 +223,6 @@ const canvasStyle = computed(() => {
   return { height: (minH + 80) + 'px' }
 })
 
-const availableToAdd = computed(() => {
-  const onCanvas = new Set(layout.widgets.value.map(w => w.type))
-  return WIDGET_DEFS.filter(d => d.type === 'camera' || !onCanvas.has(d.type))
-})
-
 // ── Actions ────────────────────────────────────────────────────
 // ── Camera helpers ─────────────────────────────────────────────
 async function homeAxes()     { await sendGcode('G28') }
@@ -285,13 +234,7 @@ async function cancelJob()    { await sendGcode('CANCEL_PRINT') }
 async function emergencyStop(){ await sendGcode('M112') }
 
 // ── Customize helpers ──────────────────────────────────────────
-function exitCustomize() { layout.exitCustomize(); showLoadMenu.value = false }
-function closeAllPopouts() { layout.closeWidgetSettings(); layout.addWidgetOpen.value = false; showLoadMenu.value = false }
-
-const showLoadMenu = ref(false)
-async function toggleLoadMenu() { showLoadMenu.value = !showLoadMenu.value; if (showLoadMenu.value) await layout.fetchAvailableLayouts() }
-async function doLoadLayout(f)  { await layout.loadLayout(f.replace(/^.*\//, '')); showLoadMenu.value = false }
-function promptSaveAs() { const name = prompt('Save layout as:', 'my_laser_layout'); if (name) layout.saveLayout(name) }
+function closeAllPopouts() { layout.closeWidgetSettings(); layout.addWidgetOpen.value = false }
 
 onMounted(async () => {
   connect()
@@ -311,34 +254,9 @@ onUnmounted(() => { if (unsubscribe) unsubscribe() })
   border-radius: var(--radius-lg); color: var(--red); font-weight: 600; font-size: 13px;
 }
 
-/* Toolbar */
-.dash-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; height: 36px; flex-shrink: 0; }
-.dash-toolbar-right { display: flex; align-items: center; gap: 10px; }
-.customize-btn { display: flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: var(--radius); border: 1px solid var(--border-2); background: transparent; color: var(--text-muted); font-size: 13px; cursor: pointer; transition: color 0.12s, border-color 0.12s, background 0.12s; }
-.customize-btn:hover   { color: var(--text); border-color: var(--amber-dim); background: var(--amber-glow); }
-.customize-btn--active { color: var(--amber); border-color: var(--amber); background: var(--amber-glow); }
-.customize-label { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; white-space: nowrap; }
-
-.add-widget-wrap { position: relative; }
-.add-widget-dropdown { position: absolute; top: calc(100% + 6px); right: 0; min-width: 200px; background: var(--surface); border: 1px solid var(--border-2); border-radius: var(--radius-lg); padding: 8px; z-index: 200; box-shadow: 0 8px 24px rgba(0,0,0,0.4); display: flex; flex-direction: column; gap: 2px; }
-.add-widget-title { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); padding: 4px 8px; margin-bottom: 4px; }
-.add-widget-item { text-align: left; padding: 7px 10px; background: transparent; border: none; border-radius: var(--radius); color: var(--text-dim); font-size: 13px; cursor: pointer; transition: background 0.1s, color 0.1s; }
-.add-widget-item:hover { background: var(--surface-2); color: var(--text); }
-.add-widget-empty { font-size: 12px; color: var(--text-muted); padding: 8px 10px; }
-
 /* Canvas */
 .dash-canvas { position: relative; flex: 1; min-height: 400px; }
 .grid-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
-
-/* Footer */
-.customize-footer { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px; background: var(--surface); border: 1px solid var(--amber-dim); border-radius: var(--radius-lg); margin-top: 16px; z-index: 10; }
-.cf-right { display: flex; align-items: center; gap: 10px; }
-.cf-msg { font-size: 12px; color: var(--green); font-family: var(--font-mono); }
-.load-wrap { position: relative; }
-.load-dropdown { position: absolute; bottom: calc(100% + 6px); right: 0; min-width: 220px; background: var(--surface); border: 1px solid var(--border-2); border-radius: var(--radius-lg); padding: 8px; z-index: 200; box-shadow: 0 -8px 24px rgba(0,0,0,0.4); display: flex; flex-direction: column; gap: 2px; }
-.load-item { text-align: left; padding: 7px 10px; background: transparent; border: none; border-radius: var(--radius); color: var(--text-dim); font-size: 13px; cursor: pointer; font-family: var(--font-mono); transition: background 0.1s, color 0.1s; }
-.load-item:hover { background: var(--surface-2); color: var(--text); }
-.load-empty { font-size: 12px; color: var(--text-muted); padding: 8px 10px; }
 
 /* Widget content */
 .w-state { display: flex; flex-direction: column; gap: 6px; height: 100%; justify-content: center; }
