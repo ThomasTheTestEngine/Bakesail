@@ -45,29 +45,39 @@ Bakesail is intentionally thin on top of the existing Klipper ecosystem:
 
 - **`bakesail.py`** — Klipper extra. Implements the profile execution engine and device state machine for rework/thermal device types. Exposes state via Klipper's standard status reporting. Not used by the 3D printer or laser types — those talk directly to standard Klipper/Moonraker objects.
 - **Moonraker** — completely unchanged. Bakesail uses its existing REST and WebSocket API only.
-- **Frontend** — Vue 3 + Vite SPA, served by nginx on port 80. Talks exclusively to Moonraker.
-- **nginx** — replaces Mainsail's site config on port 80. Mainsail config is backed up and fully restorable via the uninstall script.
+- **Frontend** — Vue 3 + Vite SPA, served by nginx on port 80. Talks exclusively to Moonraker, except for the terminal (see below).
+- **nginx** — replaces Mainsail's site config on port 80. Mainsail config is backed up and fully restorable via the uninstall script. Also proxies `/terminal/ws` to a local `ttyd` instance for the browser terminal.
+- **ttyd** — installed as a systemd service (`bakesail-ttyd`, port 7681, localhost only) to back the topbar terminal. Installed automatically by `install.sh`.
+
+### Console / Terminal
+
+The global topbar has a collapsible console bar with two modes: a Klipper gcode console (same data as Fluidd/Mainsail's console, via Moonraker's websocket) and a full shell terminal (`xterm.js` + `ttyd`, real PTY access to the Pi). This is the canonical implementation, available from every device type.
+
+`ConsoleWidget.vue` is a second, self-contained console+terminal widget currently only used on `PrinterDashboard.vue`. Its terminal mode talks to Moonraker's own `/machine/terminal` endpoint rather than ttyd — a different backend from the topbar's. It's being kept as-is intentionally, as a starting point for fleshing out a dashboard-embeddable terminal widget down the road; it isn't wired into the shared widget system yet and shouldn't be assumed equivalent to the topbar terminal.
 
 ### Dashboard System
 
-The dashboard is the core of the project. Every device type has its own dashboard component with its own set of widget types. All dashboards share:
+The dashboard is the core of the project. Every device type has its own dashboard component with its own set of widget types, but as of the current refactor they all share the same shell and, increasingly, the same widget implementations rather than each reimplementing them:
 
 - **`useDashboardLayout.js`** — composable that manages widget positions, drag/resize, grid snap, and save/load. Layouts persist per device type as JSON files in the Moonraker config directory.
 - **`WidgetShell.vue`** — wrapper that handles the customize-mode chrome (drag handle, resize handles, settings popout, remove button) around any widget's content.
+- **`DashboardCustomizeBar.vue`** — shared "customize mode" shell: the gear button teleported into the global topbar, plus the Add Widget / Load Saved / Save As / Reset / Apply controls bar. `PrinterDashboard.vue` is the most fleshed-out dashboard and originated this pattern; `ThermalDashboard.vue` and `LaserDashboard.vue` now use the same component instead of their own toolbar/footer.
 - **`DashboardRouter.vue`** — maps `deviceType` → dashboard component. Adding a new device type means adding one import and one map entry here.
+- **Shared widget components** (`src/components/*Widget.vue`) — widgets whose data isn't tied to one device type live here once, not once per dashboard. `CameraWidget.vue` is the first of these. The plan is to keep pulling genuinely device-agnostic widgets (system monitor, status header) out of the per-dashboard files the same way as they get built out; widgets tied to real hardware specifics (toolhead jog, laser power, zone temperature) stay local to their dashboard.
 
 ### Adding a New Device Type
 
-1. Create `src/frontend/src/views/YourDashboard.vue` — use `PrinterDashboard.vue` as a template
+1. Create `src/frontend/src/views/YourDashboard.vue` — use `PrinterDashboard.vue` as a template. It already gets the shared customize shell for free via `<DashboardCustomizeBar>`; you only need to define `WIDGET_DEFS`, a default layout, and your device-specific widget templates.
 2. Add it to the map in `DashboardRouter.vue`
 3. Add a `<option>` for it in the Settings device type dropdown (`Settings.vue`)
 4. Add any tab visibility rules (`hiddenFor` / `onlyFor`) to `ALL_TABS` in `router/index.js`
 
 ### Adding a Widget to an Existing Dashboard
 
-1. Add an entry to `WIDGET_DEFS` in the dashboard file
-2. Add a `<template v-else-if="w.type === 'yourtype'">` block in the canvas section
-3. Wire reactive data from `handleStatus()` into the local state object
+1. Check whether the widget is device-agnostic (camera, generic status/monitor displays). If so, look for or add a shared component in `src/components/` instead of writing it inline — see `CameraWidget.vue` for the pattern.
+2. Add an entry to that dashboard's `WIDGET_DEFS`. Set `multiple: true` if more than one instance should be addable at once (e.g. camera); omit it for widgets that only make sense once.
+3. Add a `<template v-else-if="w.type === 'yourtype'">` block in the canvas section — either rendering the shared component, or inline markup for something genuinely device-specific.
+4. Wire reactive data from `handleStatus()` into the local state object.
 
 ---
 
@@ -89,7 +99,7 @@ bakesail/
     │   └── bakesail.py                 # Klipper extra (rework/thermal types)
     └── frontend/
         └── src/
-            ├── App.vue                 # Shell, sidebar, theme, connection status
+            ├── App.vue                 # Shell, topbar (incl. console/terminal bar), theme, connection status
             ├── router/
             │   └── index.js            # ALL_TABS — tab definitions + device visibility
             ├── composables/
@@ -98,18 +108,21 @@ bakesail/
             │   └── useTestPins.js      # GPIO pool management for setup wizard
             ├── components/
             │   ├── WidgetShell.vue     # Customize-mode wrapper for all widgets
-            │   └── CameraFeed.vue
+            │   ├── DashboardCustomizeBar.vue # Shared customize shell (gear + toolbar), used by all dashboards
+            │   ├── CameraFeed.vue      # Low-level camera stream renderer
+            │   ├── CameraWidget.vue    # Dashboard `camera` widget — wraps CameraFeed, shared by all dashboards
+            │   └── ConsoleWidget.vue   # Dashboard console/terminal widget (PrinterDashboard only, experimental — see below)
             ├── stores/
             │   ├── device.js           # Live device state (rework types)
             │   └── settings.js         # Device config, persisted to bakesail_settings.json
             ├── utils/
-            │   └── configWriter.js     # Generates bakesail.cfg from settings store
+            │   ├── configWriter.js     # Generates bakesail.cfg from settings store
+            │   └── cameraTypes.js      # Camera type -> display label, shared everywhere a camera is shown
             └── views/
                 ├── DashboardRouter.vue # deviceType → dashboard component map
                 ├── ThermalDashboard.vue  # oven / ir_rework / hot_air / hot_plate
                 ├── LaserDashboard.vue    # laser_plotter
-                ├── PrinterDashboard.vue  # 3d_printer
-                ├── Dashboard.vue         # legacy — superseded by ThermalDashboard
+                ├── PrinterDashboard.vue  # 3d_printer — most fleshed-out dashboard; shell pattern others follow
                 ├── ProfileManager.vue
                 ├── JobQueue.vue          # laser_plotter only
                 ├── MaterialLibrary.vue   # laser_plotter only
