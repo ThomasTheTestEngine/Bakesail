@@ -8,43 +8,35 @@
     </div>
 
     <!-- ── Toolbar ────────────────────────────────────────────── -->
-    <div class="dash-toolbar">
-      <div class="dt-left">
-        <template v-if="layout.customizeMode.value">
-          <span class="dt-mode-label">CUSTOMIZE DASHBOARD</span>
-          <div class="add-widget-wrap" @click.stop>
-            <button class="btn btn-ghost btn-sm" @click="layout.addWidgetOpen.value = !layout.addWidgetOpen.value">
-              + Add Widget
-            </button>
-            <div v-if="layout.addWidgetOpen.value" class="add-widget-dropdown">
-              <button
-                v-for="def in availableToAdd" :key="def.type"
-                class="add-widget-item"
-                @click="layout.addWidget(def.type, WIDGET_DEFS)"
-              >{{ def.label }}</button>
-              <div v-if="!availableToAdd.length" class="add-widget-item" style="opacity:0.5;cursor:default">Nothing to add</div>
-            </div>
+    <!-- Toolbar only visible in customize mode -->
+    <div class="dash-toolbar" v-if="layout.customizeMode.value">
+      <div class="dt-right" style="width:100%;justify-content:flex-end">
+        <!-- Add Widget -->
+        <div class="add-widget-wrap" @click.stop>
+          <button class="btn btn-ghost btn-sm" @click="layout.addWidgetOpen.value = !layout.addWidgetOpen.value">
+            + Add Widget
+          </button>
+          <div v-if="layout.addWidgetOpen.value" class="add-widget-dropdown">
+            <button
+              v-for="def in availableToAdd" :key="def.type"
+              class="add-widget-item"
+              @click="layout.addWidget(def.type, WIDGET_DEFS)"
+            >{{ def.label }}</button>
+            <div v-if="!availableToAdd.length" class="add-widget-item" style="opacity:0.5;cursor:default">Nothing to add</div>
           </div>
-        </template>
-        <template v-else>
-          <!-- status/filename now in topbar -->
-        </template>
-      </div>
-      <div class="dt-right">
-        <template v-if="layout.customizeMode.value">
-          <button class="btn btn-ghost btn-sm" @click="toggleLoadMenu">{{ showLoadMenu ? '✕' : 'Load Saved' }}</button>
-          <div v-if="showLoadMenu" class="load-menu" @click.stop>
-            <div v-if="layout.loadingLayouts.value" class="load-menu-item" style="opacity:0.5">Loading…</div>
-            <div v-else-if="!layout.availableLayouts.value.length" class="load-menu-item" style="opacity:0.5">No saved layouts</div>
-            <button v-else v-for="f in layout.availableLayouts.value" :key="f" class="load-menu-item" @click="doLoadLayout(f)">
-              {{ f.replace('bakesail_dashboard_printer_','').replace('.json','') }}
-            </button>
-          </div>
-          <button class="btn btn-ghost btn-sm" @click="promptSaveAs">Save As…</button>
-          <button class="btn btn-ghost btn-sm" @click="layout.revertToDefault()">↺ Reset</button>
-          <button class="btn btn-primary btn-sm" @click="layout.applyLayout()">✓ Apply</button>
-          <span v-if="layout.saveMsg.value" class="dt-save-msg">{{ layout.saveMsg.value }}</span>
-        </template>
+        </div>
+        <button class="btn btn-ghost btn-sm" @click="toggleLoadMenu">{{ showLoadMenu ? '✕' : 'Load Saved' }}</button>
+        <div v-if="showLoadMenu" class="load-menu" @click.stop>
+          <div v-if="layout.loadingLayouts.value" class="load-menu-item" style="opacity:0.5">Loading…</div>
+          <div v-else-if="!layout.availableLayouts.value.length" class="load-menu-item" style="opacity:0.5">No saved layouts</div>
+          <button v-else v-for="f in layout.availableLayouts.value" :key="f" class="load-menu-item" @click="doLoadLayout(f)">
+            {{ f.replace('bakesail_dashboard_printer_','').replace('.json','') }}
+          </button>
+        </div>
+        <button class="btn btn-ghost btn-sm" @click="promptSaveAs">Save As…</button>
+        <button class="btn btn-ghost btn-sm" @click="layout.revertToDefault()">↺ Reset</button>
+        <button class="btn btn-primary btn-sm" @click="layout.applyLayout()">✓ Apply</button>
+        <span v-if="layout.saveMsg.value" class="dt-save-msg">{{ layout.saveMsg.value }}</span>
       </div>
     </div>
 
