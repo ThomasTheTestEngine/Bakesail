@@ -344,30 +344,17 @@ function cbarClear() {
   else cbarLines.value = []
 }
 
-function cbarAnsiToHtml(raw) {
-  // Normalize line endings
-  let text = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-  // Strip OSC sequences: ESC ] ... BEL or ESC ] ... ESC backslash
-  text = text.replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, '')
-  // Strip CSI sequences except SGR (m) — removes bracketed paste, cursor moves etc
-  text = text.replace(/\x1b\[[\d;?]*[A-LN-Za-z]/g, '')
-  // Strip remaining ESC + char
-  text = text.replace(/\x1b./g, '')
-  // HTML escape
-  text = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  // SGR colour codes
-  text = text.replace(/\x1b\[([\d;]*)m/g, (_, codes) => {
-    if (!codes || codes === '0') return '</span>'
+function cbarAnsiToHtml(text) {
+  text = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  text = text.replace(/\[([0-9;]*)m/g, (_, codes) => {
     const parts = codes.split(';').map(Number)
-    let out = ''
+    let span = ''
     for (const code of parts) {
-      if (code === 0) out += '</span>'
-      else if (CBAR_COLOURS[code]) out += '<span style="color:' + CBAR_COLOURS[code] + '">'
+      if (code === 0) span += '</span>'
+      else if (CBAR_COLOURS[code]) span += `<span style="color:${CBAR_COLOURS[code]}">`
     }
-    return out
+    return span
   })
-  // Newlines to br
-  text = text.replace(/\n/g, '<br>')
   return text
 }
 
