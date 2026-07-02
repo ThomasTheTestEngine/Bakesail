@@ -966,24 +966,31 @@ function isFieldHidden(w, key) { return w.config?.hiddenFields?.includes(key) }
 // ── Default layout ─────────────────────────────────────────────
 function buildDefaultLayout() {
   const hasCam = settings.cameras.length > 0
-  // Three-column layout: toolhead | camera (if present) | extruder, monitor below full-width
-  const colW  = hasCam ? 360 : 440
-  const camW  = hasCam ? 320 : 0
-  const rightX = colW + (hasCam ? camW + 20 : 0)
-  const monitorY = 470          // top of monitor row
-  const monitorH = 520          // monitor height
-  const sysW    = colW          // sysloads same width as extruder
-  const sysY    = monitorY      // sysloads top aligns with monitor
-  const extruderH = sysY - 10  // extruder fills space above sysloads
-  const sysH    = monitorH      // sysloads same height as monitor
-  const totalW  = rightX + 10 + colW
-  const rightColX = rightX + 10
+
+  // Measure available canvas width from the DOM, fall back to window width minus sidebar/padding
+  const canvasEl = document.querySelector('.pd-root')
+  const availW = canvasEl ? canvasEl.offsetWidth - 32 : window.innerWidth - 280
+
+  // Three equal-ish columns: toolhead | camera | extruder+sysloads
+  // With camera: split into 3. Without camera: split into 2 (toolhead + extruder)
+  const gap = 10
+  const numCols = hasCam ? 3 : 2
+  const colW = Math.floor((availW - gap * (numCols - 1)) / numCols)
+  const camW = hasCam ? colW : 0
+
+  const rightX    = hasCam ? colW + gap + camW + gap : colW + gap
+  const rightColX = rightX
+  const monitorY  = 470
+  const monitorH  = 520
+  const extruderH = monitorY - gap
+  const totalW    = rightColX + colW
+
   return [
-    { id: 'toolhead',  type: 'toolhead',  x: 0,          y: 0,        w: colW, h: monitorY - 10, config: {} },
-    ...(hasCam ? [{ id: 'camera', type: 'camera', x: colW + 10, y: 0, w: camW, h: monitorY - 10, config: {} }] : []),
-    { id: 'speedflow', type: 'speedflow', x: rightColX,  y: 0,        w: sysW, h: extruderH,     config: {} },
-    { id: 'chart',     type: 'chart',     x: 0,          y: monitorY, w: rightColX, h: monitorH,  config: { hiddenFields: ['sysloads'] } },
-    { id: 'sysloads',  type: 'sysloads',  x: rightColX,  y: sysY,     w: sysW, h: sysH,          config: {} },
+    { id: 'toolhead',  type: 'toolhead',  x: 0,          y: 0,        w: colW,      h: monitorY - gap, config: {} },
+    ...(hasCam ? [{ id: 'camera', type: 'camera', x: colW + gap, y: 0, w: camW, h: monitorY - gap, config: {} }] : []),
+    { id: 'speedflow', type: 'speedflow', x: rightColX,  y: 0,        w: colW,      h: extruderH,      config: {} },
+    { id: 'chart',     type: 'chart',     x: 0,          y: monitorY, w: rightColX, h: monitorH,       config: { hiddenFields: ['sysloads'] } },
+    { id: 'sysloads',  type: 'sysloads',  x: rightColX,  y: monitorY, w: colW,      h: monitorH,       config: {} },
   ]
 }
 
