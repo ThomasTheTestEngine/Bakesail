@@ -180,7 +180,7 @@
             <button class="cbar-btn cbar-send" @click="cbarSubmit" title="Send"><i class="mdi mdi-send"></i></button>
             <div class="cbar-divider-v"></div>
             <button class="cbar-btn" @click.stop="cbarCollapse()" title="Minimize console">
-              <i class="mdi mdi-chevron-up"></i>
+              <i class="mdi mdi-arrow-collapse-up"></i>
             </button>
           </div>
 
