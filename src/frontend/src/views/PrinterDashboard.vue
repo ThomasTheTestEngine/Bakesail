@@ -7,48 +7,8 @@
       <span>{{ klippyState === 'disconnected' ? 'Connecting to Klipper…' : 'Klipper ' + klippyState }}</span>
     </div>
 
-    <!-- ── Toolbar ────────────────────────────────────────────── -->
-    <!-- Toolbar only visible in customize mode -->
-    <div class="dash-toolbar" v-if="layout.customizeMode.value">
-      <div class="dt-right" style="width:100%;justify-content:flex-end">
-        <!-- Add Widget -->
-        <div class="add-widget-wrap" @click.stop>
-          <button class="btn btn-ghost btn-sm" @click="layout.addWidgetOpen.value = !layout.addWidgetOpen.value">
-            + Add Widget
-          </button>
-          <div v-if="layout.addWidgetOpen.value" class="add-widget-dropdown">
-            <button
-              v-for="def in availableToAdd" :key="def.type"
-              class="add-widget-item"
-              @click="layout.addWidget(def.type, WIDGET_DEFS)"
-            >{{ def.label }}</button>
-            <div v-if="!availableToAdd.length" class="add-widget-item" style="opacity:0.5;cursor:default">Nothing to add</div>
-          </div>
-        </div>
-        <button class="btn btn-ghost btn-sm" @click="toggleLoadMenu">{{ showLoadMenu ? '✕' : 'Load Saved' }}</button>
-        <div v-if="showLoadMenu" class="load-menu" @click.stop>
-          <div v-if="layout.loadingLayouts.value" class="load-menu-item" style="opacity:0.5">Loading…</div>
-          <div v-else-if="!layout.availableLayouts.value.length" class="load-menu-item" style="opacity:0.5">No saved layouts</div>
-          <button v-else v-for="f in layout.availableLayouts.value" :key="f" class="load-menu-item" @click="doLoadLayout(f)">
-            {{ f.replace('bakesail_dashboard_printer_','').replace('.json','') }}
-          </button>
-        </div>
-        <button class="btn btn-ghost btn-sm" @click="promptSaveAs">Save As…</button>
-        <button class="btn btn-ghost btn-sm" @click="layout.revertToDefault()">↺ Reset</button>
-        <button class="btn btn-primary btn-sm" @click="layout.applyLayout()">✓ Apply</button>
-        <span v-if="layout.saveMsg.value" class="dt-save-msg">{{ layout.saveMsg.value }}</span>
-      </div>
-    </div>
-
-    <!-- Gear button teleported into topbar slot -->
-    <Teleport to="#topbar-page-slot">
-      <button
-        class="topbar-customize-btn"
-        :class="{ 'topbar-customize-btn--active': layout.customizeMode.value }"
-        :title="layout.customizeMode.value ? 'Exit customize' : 'Customize dashboard'"
-        @click.stop="layout.customizeMode.value ? exitCustomize() : (layout.enterCustomize(), setCustomizing(true))"
-      >⚙</button>
-    </Teleport>
+    <!-- ── Customize shell (gear + toolbar) ──────────────────── -->
+    <DashboardCustomizeBar :layout="layout" :widget-defs="WIDGET_DEFS" dashboard-id="printer" />
 
     <!-- ── Widget canvas ─────────────────────────────────────── -->
     <div class="dash-canvas" :style="canvasStyle" @click.self="layout.closeWidgetSettings()">
@@ -738,18 +698,18 @@
  *   3. Wire reactive data from handleStatus() into the `printer` object
  */
 
-import { ref, reactive, computed, onMounted, onUnmounted, inject } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useSettingsStore }   from '../stores/settings.js'
 import { useDeviceStore }     from '../stores/device.js'
 import { useMoonraker }       from '../composables/useMoonraker.js'
 import { useDashboardLayout } from '../composables/useDashboardLayout.js'
 import WidgetShell from '../components/WidgetShell.vue'
 import CameraWidget   from '../components/CameraWidget.vue'
+import DashboardCustomizeBar from '../components/DashboardCustomizeBar.vue'
 import ConsoleWidget  from '../components/ConsoleWidget.vue'
 
 const settings = useSettingsStore()
 const deviceStore = useDeviceStore()
-const setCustomizing = inject('setCustomizing', () => {})
 const { klippyState, sendGcode, subscribeToStatus } = useMoonraker()
 const _uid = Math.random().toString(36).slice(2, 7)
 
@@ -950,9 +910,9 @@ const WIDGET_DEFS = [
     { key: 'speed',   label: 'Speed factor' },
   ] },
   { type: 'controls',  label: 'Print Controls',      defaultW: 600, defaultH: 60,  defaultConfig: {}, fields: [] },
-  { type: 'macros',    label: 'Macro Buttons',       defaultW: 400, defaultH: 100, defaultConfig: { macros: ['BED_MESH_CALIBRATE', 'LOAD_FILAMENT', 'UNLOAD_FILAMENT'] }, fields: [] },
+  { type: 'macros',    label: 'Macro Buttons',       defaultW: 400, defaultH: 100, defaultConfig: { macros: ['BED_MESH_CALIBRATE', 'LOAD_FILAMENT', 'UNLOAD_FILAMENT'] }, fields: [], multiple: true },
   { type: 'console',   label: 'Console',             defaultW: 480, defaultH: 360, defaultConfig: {}, fields: [] },
-  { type: 'camera',    label: 'Camera Feed',         defaultW: 320, defaultH: 260, defaultConfig: { cameraId: null }, fields: [{ key: 'label', label: 'Show camera name' }] },
+  { type: 'camera',    label: 'Camera Feed',         defaultW: 320, defaultH: 260, defaultConfig: { cameraId: null }, fields: [{ key: 'label', label: 'Show camera name' }], multiple: true },
 ]
 
 function widgetLabel(type)   { return WIDGET_DEFS.find(d => d.type === type)?.label ?? type }
@@ -996,11 +956,6 @@ const layout = useDashboardLayout('printer', buildDefaultLayout())
 const canvasStyle = computed(() => {
   const minH = layout.widgets.value.reduce((m, w) => Math.max(m, w.y + w.h), 600)
   return { height: (minH + 80) + 'px' }
-})
-
-const availableToAdd = computed(() => {
-  const onCanvas = new Set(layout.widgets.value.map(w => w.type))
-  return WIDGET_DEFS.filter(d => d.type === 'camera' || d.type === 'macros' || !onCanvas.has(d.type))
 })
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -1203,15 +1158,6 @@ function drawCharts() {
   }
 }
 
-// ── Customize helpers ──────────────────────────────────────────
-const showLoadMenu = ref(false)
-function exitCustomize() {
-  setCustomizing(false)
-  layout.exitCustomize(); showLoadMenu.value = false }
-async function toggleLoadMenu() { showLoadMenu.value = !showLoadMenu.value; if (showLoadMenu.value) await layout.fetchAvailableLayouts() }
-async function doLoadLayout(f) { await layout.loadLayout(f.replace(/^.*\//, '')); showLoadMenu.value = false }
-function promptSaveAs() { const name = prompt('Save layout as:', 'my_printer_layout'); if (name) layout.saveLayout(name) }
-
 // ── Lifecycle ──────────────────────────────────────────────────
 let unsubscribe = null
 
@@ -1242,25 +1188,10 @@ onUnmounted(() => {
 .pd-offline-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); opacity: 0.5; animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 0%,100%{opacity:0.3} 50%{opacity:1} }
 
-.dash-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-shrink: 0; gap: 10px; position: relative; flex-wrap: wrap; }
 .dt-left  { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
-.dt-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-.dt-mode-label { font-size: 11px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: var(--amber); white-space: nowrap; }
-.dt-save-msg { font-size: 11px; color: var(--green); font-family: var(--font-mono); }
 .pd-state-label { font-size: 15px; font-weight: 700; letter-spacing: 0.04em; white-space: nowrap; }
 .pd-filename { font-size: 12px; color: var(--text-dim); font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.customize-btn { transition: color 0.12s, border-color 0.12s; }
-.customize-btn--active { color: var(--amber); border-color: var(--amber); }
-
-.add-widget-wrap { position: relative; }
-.add-widget-dropdown { position: absolute; top: 32px; left: 0; z-index: 200; background: var(--surface); border: 1px solid var(--border-2); border-radius: var(--radius); padding: 6px; display: flex; flex-direction: column; gap: 2px; min-width: 180px; }
-.add-widget-item { text-align: left; padding: 6px 10px; background: transparent; border: none; color: var(--text-dim); font-size: 12px; cursor: pointer; border-radius: var(--radius); transition: background 0.1s; }
-.add-widget-item:hover { background: var(--surface-2); color: var(--text); }
-
-.load-menu { position: absolute; top: 40px; right: 80px; z-index: 200; background: var(--surface); border: 1px solid var(--border-2); border-radius: var(--radius); padding: 6px; display: flex; flex-direction: column; gap: 2px; min-width: 180px; }
-.load-menu-item { text-align: left; padding: 6px 10px; background: transparent; border: none; color: var(--text-dim); font-size: 12px; cursor: pointer; border-radius: var(--radius); transition: background 0.1s; }
-.load-menu-item:hover { background: var(--surface-2); color: var(--text); }
 
 .dash-canvas { position: relative; width: 100%; }
 .grid-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
