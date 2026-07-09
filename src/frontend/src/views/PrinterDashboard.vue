@@ -474,6 +474,11 @@
           <CameraWidget :widget="w" />
         </template>
 
+        <!-- ── Toolhead 3D ────────────────────────────────────── -->
+        <template v-else-if="w.type === 'toolhead3d'">
+          <Toolhead3DWidget :widget="w" />
+        </template>
+
       </WidgetShell>
     </div>
 
@@ -517,7 +522,8 @@ import CameraWidget   from '../components/CameraWidget.vue'
 import SystemMonitorWidget from '../components/SystemMonitorWidget.vue'
 import StatusHeaderWidget from '../components/StatusHeaderWidget.vue'
 import DashboardCustomizeBar from '../components/DashboardCustomizeBar.vue'
-import ConsoleWidget  from '../components/ConsoleWidget.vue'
+import ConsoleWidget      from '../components/ConsoleWidget.vue'
+import Toolhead3DWidget   from '../components/Toolhead3DWidget.vue'
 
 const settings = useSettingsStore()
 const deviceStore = useDeviceStore()
@@ -711,12 +717,13 @@ const WIDGET_DEFS = [
   { type: 'progress',  label: 'Print Progress',      defaultW: 520, defaultH: 120, defaultConfig: {}, fields: [{ key: 'time', label: 'Print time' }, { key: 'eta', label: 'ETA' }, { key: 'filament', label: 'Filament used' }] },
   { type: 'fan',       label: 'Part Fan',            defaultW: 180, defaultH: 140, defaultConfig: { label: 'Part Fan' }, fields: [] },
   { type: 'speedflow', label: 'Extruder',            defaultW: 400, defaultH: 420, defaultConfig: {}, fields: [] },
-  { type: 'toolhead',  label: 'Toolhead',            defaultW: 400, defaultH: 460, defaultConfig: {}, fields: [
+  { type: 'toolhead',   label: 'Toolhead Classic',    defaultW: 400, defaultH: 460, defaultConfig: {}, fields: [
     { key: 'coords',  label: 'Position display' },
     { key: 'jog',     label: 'Movement buttons' },
     { key: 'zoffset', label: 'Z-Offset adjust' },
     { key: 'speed',   label: 'Speed factor' },
   ] },
+  { type: 'toolhead3d', label: 'Toolhead 3D',         defaultW: 480, defaultH: 460, defaultConfig: {}, fields: [] },
   { type: 'controls',  label: 'Print Controls',      defaultW: 600, defaultH: 60,  defaultConfig: {}, fields: [] },
   { type: 'macros',    label: 'Macro Buttons',       defaultW: 400, defaultH: 100, defaultConfig: { macros: ['BED_MESH_CALIBRATE', 'LOAD_FILAMENT', 'UNLOAD_FILAMENT'] }, fields: [], multiple: true },
   { type: 'console',   label: 'Console',             defaultW: 480, defaultH: 360, defaultConfig: {}, fields: [] },
