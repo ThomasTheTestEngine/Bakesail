@@ -9,6 +9,14 @@
     :class="{ 'widget-shell--customize': customizeMode }"
     :style="shellStyle"
   >
+    <!-- Info tooltip (view mode only) -->
+    <template v-if="!customizeMode && widgetInfoText">
+      <div class="ws-info-wrap">
+        <button class="ws-info-btn" tabindex="-1">ⓘ</button>
+        <div class="ws-tooltip">{{ widgetInfoText }}</div>
+      </div>
+    </template>
+
     <template v-if="customizeMode">
       <!-- Remove button top-left -->
       <button class="ws-remove-btn" @click.stop="$emit('remove', widget.id)" title="Remove widget">−</button>
@@ -121,6 +129,24 @@ const props = defineProps({
 
 defineEmits(['startDrag','startResize','remove','toggleSettings','closeSettings'])
 
+// ── Per-widget-type info tooltip text ─────────────────────────────────────────
+const WIDGET_INFO = {
+  toolhead3d: [
+    'Click/drag on the bed to set XY position.',
+    'Drag the handle on the Z bar to set Z height.',
+    'Orbit: left-drag on empty space or right-drag.',
+    'Zoom: scroll wheel.',
+    'Snap views: click camera perspective models (coming soon).',
+  ].join(' '),
+  toolhead:  'Click the jog buttons to move the toolhead. Use the step selector to change distance.',
+  extruder:  'Control extruder temperature and filament load/unload.',
+  temps:     'Live temperature readings for all heaters and sensors.',
+  chart:     'Temperature history chart. Hover for values.',
+  camera:    'Live camera feed. Click to expand.',
+}
+
+const widgetInfoText = computed(() => WIDGET_INFO[props.widget?.type] ?? null)
+
 const _settings = useSettingsStore()
 const availableCameras = computed(() => Array.isArray(_settings.cameras) ? _settings.cameras : [])
 
@@ -171,16 +197,16 @@ function revertConfig() {
   box-shadow: 0 0 0 1px var(--amber-dim);
 }
 
-/* Remove button */
+/* Remove button — 50% smaller than before */
 .ws-remove-btn {
   position: absolute;
-  top: 4px; left: 6px;
-  width: 20px; height: 20px;
+  top: 6px; left: 6px;
+  width: 10px; height: 10px;
   border-radius: 50%;
   border: 1px solid var(--red);
   background: var(--surface);
   color: var(--red);
-  font-size: 15px;
+  font-size: 9px;
   line-height: 1;
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
@@ -213,14 +239,52 @@ function revertConfig() {
 }
 .ws-drag-bar-actions { display: flex; gap: 4px; }
 .ws-icon-btn {
-  width: 20px; height: 20px;
+  width: 28px; height: 28px;
   border-radius: 3px; border: none;
   background: transparent; color: var(--amber);
-  font-size: 13px; cursor: pointer;
+  font-size: 23px; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   opacity: 0.7; transition: opacity 0.1s, background 0.1s;
 }
 .ws-icon-btn:hover { opacity: 1; background: var(--amber-glow); }
+
+/* Info button + tooltip (view mode) */
+.ws-info-wrap {
+  position: absolute;
+  top: 6px; left: 6px;
+  z-index: 5;
+}
+.ws-info-btn {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--border-2);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1;
+  cursor: default;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0;
+}
+.ws-tooltip {
+  position: absolute;
+  top: 0; left: 20px;
+  width: 220px;
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  white-space: normal;
+}
+.ws-info-wrap:hover .ws-tooltip { opacity: 1; }
 
 /* Resize handles */
 .ws-resize { position: absolute; z-index: 4; }

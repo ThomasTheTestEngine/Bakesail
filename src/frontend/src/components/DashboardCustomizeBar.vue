@@ -39,19 +39,6 @@
 
   <div class="dash-toolbar" v-if="layout.customizeMode.value">
     <div class="dt-right" style="width:100%;justify-content:flex-end">
-      <div class="add-widget-wrap" @click.stop>
-        <button class="btn btn-ghost btn-sm" @click="layout.addWidgetOpen.value = !layout.addWidgetOpen.value">
-          + Add Widget
-        </button>
-        <div v-if="layout.addWidgetOpen.value" class="add-widget-dropdown">
-          <button v-for="def in availableToAdd" :key="def.type" class="add-widget-item"
-                  @click="layout.addWidget(def.type, widgetDefs)">
-            {{ def.label }}
-          </button>
-          <div v-if="!availableToAdd.length" class="add-widget-item" style="opacity:0.5;cursor:default">Nothing to add</div>
-        </div>
-      </div>
-
       <button class="btn btn-ghost btn-sm" @click="toggleLoadMenu">{{ showLoadMenu ? '✕' : 'Load Saved' }}</button>
       <div v-if="showLoadMenu" class="load-menu" @click.stop>
         <div v-if="layout.loadingLayouts.value" class="load-menu-item" style="opacity:0.5">Loading…</div>
@@ -63,8 +50,20 @@
 
       <button class="btn btn-ghost btn-sm" @click="promptSaveAs">Save As…</button>
       <button class="btn btn-ghost btn-sm" @click="doRevert">↺ Reset</button>
-      <button class="btn btn-primary btn-sm" @click="layout.applyLayout()">✓ Apply</button>
       <span v-if="layout.saveMsg.value" class="dt-save-msg">{{ layout.saveMsg.value }}</span>
+
+      <div class="add-widget-wrap" @click.stop>
+        <button class="btn btn-primary btn-sm" @click="layout.addWidgetOpen.value = !layout.addWidgetOpen.value">
+          + Add Widget
+        </button>
+        <div v-if="layout.addWidgetOpen.value" class="add-widget-dropdown">
+          <button v-for="def in availableToAdd" :key="def.type" class="add-widget-item"
+                  @click="layout.addWidget(def.type, widgetDefs)">
+            {{ def.label }}
+          </button>
+          <div v-if="!availableToAdd.length" class="add-widget-item" style="opacity:0.5;cursor:default">Nothing to add</div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -90,7 +89,7 @@ function enterCustomize() {
 }
 function exitCustomize() {
   setCustomizing(false)
-  props.layout.exitCustomize()
+  props.layout.applyLayout()   // saves + exits (same as old Apply button)
   showLoadMenu.value = false
 }
 
