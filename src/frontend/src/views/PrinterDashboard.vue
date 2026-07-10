@@ -8,7 +8,7 @@
     </div>
 
     <!-- ── Customize shell (gear + toolbar) ──────────────────── -->
-    <DashboardCustomizeBar :layout="layout" :widget-defs="WIDGET_DEFS" dashboard-id="printer" />
+    <DashboardCustomizeBar :layout="layout" :widget-defs="WIDGET_DEFS" dashboard-id="printer" :get-default-layout="buildDefaultLayout" />
 
     <!-- ── Widget canvas ─────────────────────────────────────── -->
     <div class="dash-canvas" :style="canvasStyle" @click.self="layout.closeWidgetSettings()">
@@ -741,48 +741,51 @@ function isFieldHidden(w, key) { return w.config?.hiddenFields?.includes(key) }
 function buildDefaultLayout() {
   const hasCam = settings.cameras.length > 0
 
-  // Measure available canvas width from the DOM, fall back to window width minus sidebar/padding
+  // Measure available dimensions. When called at reset time the DOM is ready;
+  // at component-creation time it falls back to window dimensions minus known offsets.
   const canvasEl = document.querySelector('.pd-root')
-  const availW = canvasEl ? canvasEl.offsetWidth - 32 : window.innerWidth - 280
+  const content  = document.querySelector('.content')
 
-  // Three equal-ish columns: toolhead | camera | extruder+sysloads
-  // With camera: split into 3. Without camera: split into 2 (toolhead + extruder)
-  const gap = 10
+  const availW = canvasEl?.offsetWidth ?? (window.innerWidth - 220)
+
+  let availH
+  if (canvasEl && content) {
+    // Exact measurement: from canvas top to content bottom, accounting for
+    // topbar, cbar, and any toolbar above the canvas.
+    availH = Math.max(300, content.getBoundingClientRect().bottom - canvasEl.getBoundingClientRect().top)
+  } else {
+    // Fallback before DOM is ready: window minus ~topbar(42) + cbar(36) + padding
+    availH = Math.max(300, window.innerHeight - 100)
+  }
+
+  const gap     = 10
   const numCols = hasCam ? 3 : 2
-  const colW = Math.floor((availW - gap * (numCols - 1)) / numCols)
-  const camW = hasCam ? colW : 0
+  const colW    = Math.floor((availW - gap * (numCols - 1)) / numCols)
+  const camW    = hasCam ? colW : 0
+  const rightColX = hasCam ? colW + gap + camW + gap : colW + gap
 
-  const rightX    = hasCam ? colW + gap + camW + gap : colW + gap
-  const rightColX = rightX
-  const monitorY  = 470
-  const monitorH  = 520
-  const extruderH = monitorY - gap
-  const totalW    = rightColX + colW
-
-  // Bottom band: temperature chart on the left with a temps + fans stack
-  // beside it, system monitor on the right. (These were one composite
-  // "Monitor" widget before it was split into separate widgets.)
-  const chartW    = rightColX - colW - gap
-  const stackX    = chartW + gap
-  const tempsH    = Math.round((monitorH - gap) / 2)
+  // Split height: top band 55%, bottom band 45%
+  const topH     = Math.floor(availH * 0.55)
+  const monitorY = topH + gap
+  const monitorH = availH - monitorY
+  const chartW   = rightColX - colW - gap
+  const stackX   = chartW + gap
+  const tempsH   = Math.round((monitorH - gap) / 2)
 
   return [
-    { id: 'toolhead',  type: 'toolhead3d', x: 0,          y: 0,        w: colW,      h: monitorY - gap, config: {} },
-    ...(hasCam ? [{ id: 'camera', type: 'camera', x: colW + gap, y: 0, w: camW, h: monitorY - gap, config: {} }] : []),
-    { id: 'speedflow', type: 'speedflow', x: rightColX,  y: 0,        w: colW,      h: extruderH,      config: {} },
-    { id: 'chart',     type: 'chart',     x: 0,          y: monitorY, w: chartW,    h: monitorH,       config: {} },
-    { id: 'temps',     type: 'temps',     x: stackX,     y: monitorY,             w: colW, h: tempsH,   config: {} },
+    { id: 'toolhead',  type: 'toolhead3d', x: 0,          y: 0,        w: colW,      h: topH,     config: {} },
+    ...(hasCam ? [{ id: 'camera', type: 'camera', x: colW + gap, y: 0, w: camW, h: topH, config: {} }] : []),
+    { id: 'speedflow', type: 'speedflow', x: rightColX,  y: 0,        w: colW,      h: topH - gap, config: {} },
+    { id: 'chart',     type: 'chart',     x: 0,          y: monitorY, w: chartW,    h: monitorH, config: {} },
+    { id: 'temps',     type: 'temps',     x: stackX,     y: monitorY, w: colW,      h: tempsH,   config: {} },
     { id: 'fanlist',   type: 'fanlist',   x: stackX,     y: monitorY + tempsH + gap, w: colW, h: tempsH, config: {} },
-    { id: 'sysloads',  type: 'sysloads',  x: rightColX,  y: monitorY, w: colW,      h: monitorH,       config: {} },
+    { id: 'sysloads',  type: 'sysloads',  x: rightColX,  y: monitorY, w: colW,      h: monitorH, config: {} },
   ]
 }
 
 const layout = useDashboardLayout('printer', buildDefaultLayout())
 
-const canvasStyle = computed(() => {
-  const minH = layout.widgets.value.reduce((m, w) => Math.max(m, w.y + w.h), 600)
-  return { height: (minH + 80) + 'px' }
-})
+const canvasStyle = computed(() => ({ minHeight: '100%' }))
 
 // ── Helpers ────────────────────────────────────────────────────
 function tempClass(temp, target) {
