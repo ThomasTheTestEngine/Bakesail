@@ -731,7 +731,7 @@ class Bakesail:
 # requests. All heavy lifting (auth, TLS) stays with nginx.
 #
 # Endpoints:
-#   GET  /info               → {"home": "/home/pi", "version": "1.0"}
+#   GET  /info               → {"home": "/home/<user>", "version": "1.0"}
 #   GET  /list?path=…        → {"path":…, "dirs":[…], "files":[…]}
 #   GET  /download?path=…    → file stream
 #   POST /upload?dir=…       → multipart upload into dir
