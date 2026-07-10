@@ -19,32 +19,35 @@
         :src="streamUrl"
         :alt="displayName"
         @error="streamError = true"
+        @load="onFrame"
+        ref="imgEl"
       />
       <div v-if="streamError" class="cam-placeholder cam-placeholder--err">
         <span class="cam-placeholder-icon">⊘</span>
         <span class="cam-placeholder-text">NO SIGNAL</span>
         <span class="cam-placeholder-sub">{{ camDevice }}</span>
       </div>
+      <!-- FPS overlay -->
+      <div v-if="resolvedCam.showFps && fps !== null" class="cam-fps">{{ fps }} fps</div>
     </template>
     <div class="cam-label" v-if="showLabel && resolvedCam">{{ displayName }}</div>
   </div>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch, onUnmounted } from 'vue'
 import { useSettingsStore } from '../stores/settings.js'
 import { cameraDisplayName } from '../utils/cameraTypes.js'
 
 const props = defineProps({
-  cam:       { type: Object,  default: null },   // full camera object (takes priority)
-  cameraId:  { type: String,  default: null },   // resolved from store if cam not passed
+  cam:       { type: Object,  default: null },
+  cameraId:  { type: String,  default: null },
   showLabel: { type: Boolean, default: true },
   bgColor:   { type: String,  default: null },
 })
 
 const settings = useSettingsStore()
 
-// Explicit cam prop wins; otherwise resolve by id; otherwise first camera
 const resolvedCam = computed(() => {
   if (props.cam) return props.cam
   if (props.cameraId) return settings.cameras.find(c => c.id === props.cameraId) || null
@@ -52,6 +55,7 @@ const resolvedCam = computed(() => {
 })
 
 const streamError = ref(false)
+const imgEl       = ref(null)
 
 const camDevice = computed(() => {
   const cam = resolvedCam.value
@@ -61,11 +65,6 @@ const camDevice = computed(() => {
 
 const displayName = computed(() => cameraDisplayName(resolvedCam.value))
 
-// Build mjpeg stream URL proxied through nginx → Crowsnest/ustreamer.
-// ustreamer serves at /?action=stream (not /stream).
-// /dev/video0 → /webcam/?action=stream
-// /dev/video1 → /webcam2/?action=stream  (Crowsnest cam index = videoN + 1 for N>0)
-// Falls back to raw URL for IP cameras or manual entries.
 const streamUrl = computed(() => {
   const dev = camDevice.value
   if (!dev) return ''
@@ -75,10 +74,114 @@ const streamUrl = computed(() => {
     const prefix = n === 0 ? '/webcam/' : `/webcam${n + 1}/`
     return `${prefix}?action=stream`
   }
-  return dev  // full URL passthrough for IP cameras
+  return dev
 })
+
+// ── FPS counter ───────────────────────────────────────────────────────────────
+// For an mjpeg stream, each `load` event on the img = one decoded frame.
+const fps         = ref(null)
+let   frameCount  = 0
+let   fpsInterval = null
+
+function onFrame() {
+  frameCount++
+}
+
+watch(
+  () => resolvedCam.value?.showFps,
+  (enabled) => {
+    if (enabled) {
+      frameCount = 0
+      fps.value  = null
+      fpsInterval = setInterval(() => {
+        fps.value  = frameCount
+        frameCount = 0
+      }, 1000)
+    } else {
+      clearInterval(fpsInterval)
+      fpsInterval = null
+      fps.value   = null
+    }
+  },
+  { immediate: true },
+)
+
+onUnmounted(() => clearInterval(fpsInterval))
 </script>
 
+<style scoped>
+.cam-feed {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cam-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 100%;
+  color: var(--text-muted);
+}
+.cam-placeholder--err .cam-placeholder-icon { color: var(--red); opacity: 0.5; }
+.cam-placeholder--err .cam-placeholder-text { color: var(--red); opacity: 0.6; }
+
+.cam-placeholder-icon { font-size: 28px; opacity: 0.4; }
+.cam-placeholder-text {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.5;
+}
+.cam-placeholder-sub {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  opacity: 0.35;
+}
+
+.cam-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.cam-label {
+  position: absolute;
+  bottom: 6px;
+  left: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.5);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  pointer-events: none;
+}
+
+.cam-fps {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: rgba(255,255,255,0.85);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.9);
+  pointer-events: none;
+  letter-spacing: 0.04em;
+}
+</style>
 <style scoped>
 .cam-feed {
   position: relative;

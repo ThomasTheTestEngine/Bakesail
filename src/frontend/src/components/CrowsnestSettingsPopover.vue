@@ -57,16 +57,15 @@
 
             <div class="cns-field-row">
               <label class="cns-label">Resolution</label>
-              <select class="cns-select cns-select--mid" v-model="resolutionMode" @change="onResolutionModeChange">
+              <select class="cns-select" style="width:130px;flex:none" v-model="resolutionMode" @change="onResolutionModeChange">
                 <option value="640x480">640×480</option>
                 <option value="1280x720">1280×720</option>
                 <option value="1920x1080">1920×1080</option>
                 <option value="2560x1440">2560×1440</option>
                 <option value="custom">Custom…</option>
               </select>
-              <input v-if="resolutionMode === 'custom'" class="cns-input cns-input--sm"
-                     v-model="activeSection.resolution" placeholder="1280x720"
-                     style="width:90px" />
+              <input v-if="resolutionMode === 'custom'" class="cns-input"
+                     v-model="activeSection.resolution" placeholder="1280x720" />
             </div>
 
             <div class="cns-field-row">
@@ -77,6 +76,14 @@
             <div class="cns-field-row">
               <label class="cns-label">Custom flags</label>
               <input class="cns-input" v-model="activeSection.custom_flags" placeholder="--no-log-stderr" />
+            </div>
+
+            <div class="cns-field-row">
+              <label class="cns-label">Show FPS</label>
+              <label class="cns-toggle">
+                <input type="checkbox" v-model="showFps" />
+                <span>Overlay FPS counter on camera feed</span>
+              </label>
             </div>
 
             <div class="cns-actions">
@@ -130,7 +137,11 @@ function positionPopover() {
   }
 }
 
-// ── Crowsnest config fetch + parse ─────────────────────────────────────────────
+// ── showFps — stored on the Bakesail camera object, not in crowsnest.conf ─────
+const showFps = computed({
+  get: () => props.cam?.showFps ?? false,
+  set: (v) => { if (props.cam) props.cam.showFps = v },
+})
 const loading  = ref(false)
 const error    = ref(null)
 const rawText  = ref('')
@@ -268,7 +279,7 @@ function serialise() {
 
 /* Popover */
 .cns-popover {
-  width: 320px;
+  width: 380px;
   background: var(--surface);
   border: 1px solid var(--border-2);
   border-radius: var(--radius);
@@ -340,4 +351,11 @@ function serialise() {
   font-family: var(--font-mono);
   flex: 1;
 }
+
+.cns-toggle {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--text-dim);
+  cursor: pointer;
+}
+.cns-toggle input { cursor: pointer; accent-color: var(--amber); }
 </style>

@@ -794,20 +794,21 @@ async function doRevert() {
   } finally { reverting.value = false }
 }
 
+const isLaser     = computed(() => settings.deviceType === 'laser_plotter')
+const is3dPrinter = computed(() => settings.deviceType === '3d_printer')
+
 const sections = computed(() => {
-  const isLaser     = computed(() => settings.deviceType === 'laser_plotter')
-  const is3dPrinter = computed(() => settings.deviceType === '3d_printer')
   const base = [
     { id: 'device',       label: 'Device' },
-    ...(!isLaser ? [
+    ...(!isLaser.value ? [
       { id: 'zones',        label: 'Heater Zones' },
       { id: 'tc',           label: 'Thermocouples' },
     ] : []),
-    ...(isLaser ? [
+    ...(isLaser.value ? [
       { id: 'laser',        label: 'Laser' },
     ] : []),
     { id: 'fans',         label: 'Fans' },
-    ...(!isLaser ? [
+    ...(!isLaser.value ? [
       { id: 'vacuum',       label: 'Vacuum' },
       { id: 'illumination', label: 'Illumination' },
     ] : []),
