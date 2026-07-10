@@ -11,6 +11,7 @@ import Alignment       from '../views/Alignment.vue'
 import Settings        from '../views/Settings.vue'
 import JobQueue        from '../views/JobQueue.vue'
 import MaterialLibrary from '../views/MaterialLibrary.vue'
+import FileExplorer      from '../views/FileExplorer.vue'
 import PrinterJobManager from '../views/PrinterJobManager.vue'
 
 export const routes_extra = [
@@ -74,6 +75,13 @@ export const ALL_TABS = [
     label: 'Calibration',
     icon: '◎',
     component: Calibration,
+  },
+  {
+    path: '/files',
+    name: 'files',
+    label: 'Files',
+    icon: '◫',
+    component: FileExplorer,
   },
   {
     path: '/alignment',
