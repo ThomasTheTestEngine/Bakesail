@@ -102,8 +102,21 @@ function doRevert() {
 function doFitScreen() {
   const content = document.querySelector('.content')
   const canvas  = document.querySelector('.pd-root, .td-root, .ld-root, .dashboard-root')
-  const availW  = canvas  ? canvas.offsetWidth   : (content?.offsetWidth   ?? window.innerWidth  - 220)
-  const availH  = content ? content.offsetHeight  : window.innerHeight
+  if (!canvas || !content) return
+
+  // availW: the canvas element's own rendered width (no guessing)
+  const availW = canvas.offsetWidth
+
+  // availH: viewport height minus everything ABOVE the canvas (topbar, cbar,
+  // customize toolbar) and everything BELOW it (cbar). We compute this by
+  // finding where the canvas starts inside the content scroll area and how
+  // much content-area height is left from there.
+  // canvas.getBoundingClientRect().top = distance from viewport top to canvas top
+  // content.getBoundingClientRect().bottom = distance from viewport top to content bottom
+  const canvasTop     = canvas.getBoundingClientRect().top
+  const contentBottom = content.getBoundingClientRect().bottom
+  const availH        = Math.max(200, contentBottom - canvasTop)
+
   props.layout.fitScreen(availW, availH)
 }
 
