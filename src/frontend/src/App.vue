@@ -797,17 +797,17 @@ a { color: inherit; text-decoration: none; }
   padding: 3px 10px;
 }
 
-.topbar-btn--home-unset { color: var(--teal); border-color: var(--teal); opacity: 0.35; }
-.topbar-btn--home-set   { color: var(--teal); border-color: var(--teal); }
-.topbar-btn--home-set:hover { background: var(--teal-glow); opacity: 1; }
+.topbar-btn.topbar-btn--home-unset { color: var(--teal); border-color: var(--teal); opacity: 0.35; }
+.topbar-btn.topbar-btn--home-set   { color: var(--teal); border-color: var(--teal); }
+.topbar-btn.topbar-btn--home-set:hover { background: var(--teal-glow); }
 
-.topbar-btn--qgl-unset  { color: var(--amber); border-color: var(--amber); opacity: 0.35; }
-.topbar-btn--qgl-set    { color: var(--amber); border-color: var(--amber); }
-.topbar-btn--qgl-set:hover  { background: var(--amber-glow); opacity: 1; }
+.topbar-btn.topbar-btn--qgl-unset  { color: var(--amber); border-color: var(--amber); opacity: 0.35; }
+.topbar-btn.topbar-btn--qgl-set    { color: var(--amber); border-color: var(--amber); }
+.topbar-btn.topbar-btn--qgl-set:hover  { background: var(--amber-glow); }
 
-.topbar-btn--motors-on  { color: var(--yellow); border-color: var(--yellow); }
-.topbar-btn--motors-on:hover  { background: var(--yellow-glow); }
-.topbar-btn--motors-off { color: var(--yellow); border-color: var(--yellow); opacity: 0.35; }
+.topbar-btn.topbar-btn--motors-on  { color: var(--yellow); border-color: var(--yellow); }
+.topbar-btn.topbar-btn--motors-on:hover  { background: var(--yellow-glow); }
+.topbar-btn.topbar-btn--motors-off { color: var(--yellow); border-color: var(--yellow); opacity: 0.35; }
 
 .topbar-btn--danger {
   border-color: var(--red);
