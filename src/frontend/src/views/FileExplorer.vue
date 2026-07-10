@@ -1,83 +1,82 @@
 <!--
   FileExplorer.vue
 
-  Full-featured file manager built on Moonraker's file API.
+  Safe mode   → Moonraker file API. Virtual "/" presents Moonraker's
+                registered roots (config, gcodes, logs, …) as top-level
+                dirs. Edits limited to /config/.
 
-  Virtual filesystem root "/" presents Moonraker's registered file roots
-  (config, gcodes, logs, …) as top-level directories, then navigates
-  naturally within each root.
+  Advanced mode → Bakesail FS server at /bakesail/ (port 7127 proxied
+                by nginx). Full arbitrary path access. Runs as a daemon
+                thread inside bakesail.py — no moonraker.conf changes.
 
-  Safe mode   — restricts edits/deletes to the /config/ root.
-  Advanced mode — full access to all roots.
-
-  Search — recursive server-side listing filtered client-side, results
-  double-clickable to navigate to parent directory.
+  The two modes share one UI layer; switching resets to the default path
+  for that mode.
 -->
 <template>
   <div class="fe-root">
 
+    <!-- ── Mode banner ─────────────────────────────────────── -->
+    <div class="fe-mode-bar">
+      <span class="fe-mode-label" :class="adv ? 'fe-mode--adv' : 'fe-mode--safe'">
+        {{ adv ? '⚡ Advanced' : '🔒 Safe' }}
+      </span>
+      <span class="fe-mode-desc">
+        {{ adv
+          ? 'Full filesystem access via Bakesail FS server'
+          : 'Moonraker roots only — edits limited to /config/' }}
+      </span>
+      <button class="btn btn-ghost btn-sm" @click="toggleMode">
+        Switch to {{ adv ? 'Safe' : 'Advanced' }} mode
+      </button>
+    </div>
+
     <!-- ── Toolbar ─────────────────────────────────────────── -->
     <div class="fe-toolbar">
       <div class="fe-toolbar-left">
-        <!-- Upload -->
-        <label class="btn btn-ghost btn-sm fe-btn" title="Upload file">
+        <label class="btn btn-ghost btn-sm fe-btn" title="Upload file(s)" :class="{ 'fe-btn--disabled': !canWrite }">
           ↑ Upload
           <input type="file" multiple style="display:none" @change="onUpload" :disabled="!canWrite" />
         </label>
-        <!-- Download selected -->
         <button class="btn btn-ghost btn-sm fe-btn" @click="downloadSelected"
-                :disabled="selectedFiles.length === 0" title="Download selected file(s)">↓ Download</button>
-        <!-- New file -->
+                :disabled="selectedFiles.length === 0">↓ Download</button>
         <button class="btn btn-ghost btn-sm fe-btn" @click="promptNewFile"
-                :disabled="!canWrite" title="New file">+ File</button>
-        <!-- New directory -->
+                :disabled="!canWrite">+ File</button>
         <button class="btn btn-ghost btn-sm fe-btn" @click="promptNewDir"
-                :disabled="!canWrite" title="New directory">+ Dir</button>
-        <!-- Delete -->
+                :disabled="!canWrite">+ Dir</button>
         <button class="btn btn-ghost btn-sm fe-btn fe-btn--danger" @click="confirmDelete"
-                :disabled="selected.size === 0 || !canWrite" title="Delete selected">✕ Delete</button>
-      </div>
-
-      <div class="fe-toolbar-right">
-        <!-- Safe/Advanced toggle -->
-        <label class="fe-mode-toggle" :title="safeMode ? 'Safe mode: edits limited to /config/' : 'Advanced mode: full access'">
-          <span class="fe-mode-label" :class="safeMode ? 'fe-mode--safe' : 'fe-mode--adv'">
-            {{ safeMode ? '🔒 Safe' : '⚡ Advanced' }}
-          </span>
-          <input type="checkbox" :checked="!safeMode" @change="safeMode = !safeMode" />
-        </label>
+                :disabled="selected.size === 0 || !canWrite">✕ Delete</button>
       </div>
     </div>
 
     <!-- ── Path bar ────────────────────────────────────────── -->
     <div class="fe-path-bar">
+      <button class="fe-up-btn" @click="goUp" :disabled="!canGoUp" title="Up">↑</button>
       <span class="fe-path-text">{{ displayPath }}</span>
-      <button v-if="pathSegments.length > 0" class="fe-up-btn" @click="goUp" title="Up one level">↑</button>
     </div>
 
-    <!-- ── Search bar ──────────────────────────────────────── -->
+    <!-- ── Search ──────────────────────────────────────────── -->
     <div class="fe-search-bar">
-      <input class="fe-search-input" v-model="searchTerm" placeholder="Search files/directories…"
+      <input class="fe-search-input" v-model="searchTerm"
+             placeholder="Search filenames in current directory tree…"
              @keydown.enter="runSearch" />
-      <button class="btn btn-ghost btn-sm" @click="searchOpen ? searchOpen = false : runSearch()">
+      <button class="btn btn-ghost btn-sm" @click="searchOpen ? closeSearch() : runSearch()">
         {{ searchOpen ? '✕ Clear' : '⌕ Search' }}
       </button>
     </div>
 
     <!-- ── Search results ─────────────────────────────────── -->
-    <div v-if="searchOpen" class="fe-search-results card">
+    <div v-if="searchOpen" class="fe-search-panel card">
       <div class="fe-search-header">
-        Results for <em>"{{ searchTerm }}"</em>
-        <span class="fe-count">{{ searchResults.length }}</span>
+        Results for <em>"{{ lastSearchTerm }}"</em>
+        <span class="fe-count">{{ searchResults.length }}{{ searchTruncated ? '+' : '' }}</span>
       </div>
       <div v-if="searchLoading" class="fe-empty">Searching…</div>
-      <div v-else-if="searchResults.length === 0" class="fe-empty">No matches found.</div>
-      <div v-else class="fe-list fe-list--search">
-        <div v-for="r in searchResults" :key="r.moonrakerPath"
-             class="fe-row fe-row--search"
-             @dblclick="navigateToResult(r)">
-          <span class="fe-icon">{{ r.isDir ? '📁' : '📄' }}</span>
-          <span class="fe-name">{{ r.path }}</span>
+      <div v-else-if="searchResults.length === 0" class="fe-empty">No matches.</div>
+      <div v-else class="fe-list">
+        <div v-for="r in searchResults" :key="r.path"
+             class="fe-row fe-row--result" @dblclick="navigateToResult(r)">
+          <span class="fe-icon">{{ r.is_dir ? '📁' : fileIcon(r.name) }}</span>
+          <span class="fe-name fe-name--muted">{{ r.path }}</span>
         </div>
       </div>
     </div>
@@ -87,9 +86,8 @@
       <div v-if="loading" class="fe-empty">Loading…</div>
       <div v-else-if="listError" class="fe-empty fe-empty--err">{{ listError }}</div>
       <template v-else>
-        <!-- Select all -->
         <div class="fe-list-header">
-          <label class="fe-check-wrap">
+          <label class="fe-check-cell">
             <input type="checkbox" :checked="allSelected" @change="toggleAll" />
           </label>
           <span class="fe-col-name">Name</span>
@@ -98,52 +96,48 @@
         </div>
 
         <div class="fe-list">
-          <!-- Directories -->
-          <div v-for="dir in dirs" :key="'d:'+dir.dirname"
-               class="fe-row"
-               :class="{ 'fe-row--selected': selected.has('d:'+dir.dirname) }">
-            <label class="fe-check-wrap" @click.stop>
-              <input type="checkbox"
-                     :checked="selected.has('d:'+dir.dirname)"
-                     @change="toggleItem('d:'+dir.dirname)" />
+          <div v-for="d in dirs" :key="'d:'+d.name"
+               class="fe-row" :class="{ 'fe-row--sel': selected.has('d:'+d.name) }">
+            <label class="fe-check-cell" @click.stop>
+              <input type="checkbox" :checked="selected.has('d:'+d.name)"
+                     @change="toggle('d:'+d.name)" />
             </label>
-            <span class="fe-icon fe-icon--dir" @dblclick="enterDir(dir.dirname)">📁</span>
-            <span class="fe-name fe-name--dir" @dblclick="enterDir(dir.dirname)">{{ dir.dirname }}</span>
+            <span class="fe-icon fe-icon--dir" @dblclick="enterDir(d.name)">📁</span>
+            <span class="fe-name fe-name--dir" @dblclick="enterDir(d.name)">{{ d.name }}</span>
             <span class="fe-col-size">—</span>
-            <span class="fe-col-date">{{ fmtDate(dir.modified) }}</span>
+            <span class="fe-col-date">{{ fmtDate(d.modified) }}</span>
           </div>
 
-          <!-- Files -->
-          <div v-for="file in files" :key="'f:'+file.filename"
-               class="fe-row"
-               :class="{ 'fe-row--selected': selected.has('f:'+file.filename) }">
-            <label class="fe-check-wrap" @click.stop>
-              <input type="checkbox"
-                     :checked="selected.has('f:'+file.filename)"
-                     @change="toggleItem('f:'+file.filename)" />
+          <div v-for="f in files" :key="'f:'+f.name"
+               class="fe-row" :class="{ 'fe-row--sel': selected.has('f:'+f.name) }">
+            <label class="fe-check-cell" @click.stop>
+              <input type="checkbox" :checked="selected.has('f:'+f.name)"
+                     @change="toggle('f:'+f.name)" />
             </label>
-            <span class="fe-icon">{{ fileIcon(file.filename) }}</span>
-            <span class="fe-name">{{ file.filename }}</span>
-            <span class="fe-col-size">{{ fmtBytes(file.size) }}</span>
-            <span class="fe-col-date">{{ fmtDate(file.modified) }}</span>
+            <span class="fe-icon">{{ fileIcon(f.name) }}</span>
+            <span class="fe-name">{{ f.name }}</span>
+            <span class="fe-col-size">{{ fmtBytes(f.size) }}</span>
+            <span class="fe-col-date">{{ fmtDate(f.modified) }}</span>
           </div>
 
           <div v-if="dirs.length === 0 && files.length === 0" class="fe-empty">
-            Empty directory.
+            Empty.
           </div>
         </div>
       </template>
     </div>
 
-    <!-- ── Delete confirmation modal ──────────────────────── -->
-    <div v-if="deleteModal" class="fe-modal-backdrop" @click.self="deleteModal = false">
+    <!-- ── Delete modal ────────────────────────────────────── -->
+    <div v-if="deleteModal" class="fe-modal-bg" @click.self="deleteModal = false">
       <div class="fe-modal card">
         <div class="fe-modal-title">Confirm Delete</div>
-        <p class="fe-modal-body">
-          Delete {{ deleteTargets.length }} item(s)?<br/>
-          <span v-for="t in deleteTargets.slice(0,6)" :key="t" class="fe-modal-item">{{ t }}</span>
-          <span v-if="deleteTargets.length > 6">…and {{ deleteTargets.length - 6 }} more</span>
-        </p>
+        <div class="fe-modal-body">
+          Delete {{ deleteTargets.length }} item(s)?
+          <div v-for="t in deleteTargets.slice(0, 8)" :key="t" class="fe-modal-item">{{ t }}</div>
+          <div v-if="deleteTargets.length > 8" class="fe-modal-item fe-modal-item--more">
+            …and {{ deleteTargets.length - 8 }} more
+          </div>
+        </div>
         <div class="fe-modal-actions">
           <button class="btn btn-ghost btn-sm" @click="deleteModal = false">Cancel</button>
           <button class="btn btn-sm fe-btn--danger" @click="doDelete">Delete</button>
@@ -157,48 +151,42 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 
-// ── State ──────────────────────────────────────────────────────────────────────
-const safeMode     = ref(true)
-const loading      = ref(false)
-const listError    = ref(null)
+// ── Mode ───────────────────────────────────────────────────────────────────────
+const adv = ref(false)   // false = safe/Moonraker, true = advanced/bakesail
 
-// pathSegments: e.g. [] = virtual root, ['config'] = /config/, ['config','macros'] = /config/macros/
-const pathSegments = ref([])
-const dirs         = ref([])
-const files        = ref([])
-const availRoots   = ref([])  // from /server/files/roots
+// ── Path state ────────────────────────────────────────────────────────────────
+// Safe mode:    segments = [] → virtual root; ['config'] → /config/; etc.
+// Advanced mode: absPath = '/home/pi' absolute string
+const segments = ref([])         // safe mode
+const absPath  = ref('')         // advanced mode (filled on first switch)
 
-const selected     = ref(new Set())
+const displayPath = computed(() => {
+  if (adv.value) return absPath.value || '/'
+  return '/' + segments.value.join('/') + (segments.value.length ? '/' : '')
+})
 
-// Delete modal
-const deleteModal   = ref(false)
-const deleteTargets = ref([])
+const canGoUp = computed(() => {
+  if (adv.value) return absPath.value !== '/'
+  return segments.value.length > 0
+})
 
-// Search
-const searchTerm    = ref('')
-const searchOpen    = ref(false)
-const searchLoading = ref(false)
-const searchResults = ref([])
+// ── Directory content ─────────────────────────────────────────────────────────
+const dirs      = ref([])
+const files     = ref([])
+const loading   = ref(false)
+const listError = ref(null)
+const selected  = ref(new Set())
 
-// ── Computed ───────────────────────────────────────────────────────────────────
-const displayPath = computed(() => '/' + pathSegments.value.join('/') + (pathSegments.value.length ? '/' : ''))
-
-// Current Moonraker root (first segment) or null at virtual root
-const currentRoot = computed(() => pathSegments.value[0] ?? null)
-
-// Path string for Moonraker API: 'config/macros'
-const moonrakerPath = computed(() =>
-  pathSegments.value.length ? pathSegments.value.join('/') : null
-)
-
-// Can write: safe mode only allows config root, advanced allows all
+// ── Write guard ───────────────────────────────────────────────────────────────
 const canWrite = computed(() => {
-  if (!safeMode.value) return true
-  return currentRoot.value === 'config' || currentRoot.value === null
+  if (adv.value) return true
+  // Safe mode: only config root
+  const root = segments.value[0]
+  return root === 'config' || root === undefined
 })
 
 const allSelected = computed(() => {
-  const all = [...dirs.value.map(d => 'd:'+d.dirname), ...files.value.map(f => 'f:'+f.filename)]
+  const all = [...dirs.value.map(d=>'d:'+d.name), ...files.value.map(f=>'f:'+f.name)]
   return all.length > 0 && all.every(k => selected.value.has(k))
 })
 
@@ -206,7 +194,7 @@ const selectedFiles = computed(() =>
   [...selected.value].filter(k => k.startsWith('f:')).map(k => k.slice(2))
 )
 
-// ── Navigation ────────────────────────────────────────────────────────────────
+// ── Fetch directory ───────────────────────────────────────────────────────────
 async function fetchDir() {
   loading.value  = true
   listError.value = null
@@ -215,23 +203,10 @@ async function fetchDir() {
   selected.value = new Set()
 
   try {
-    if (pathSegments.value.length === 0) {
-      // Virtual root: list Moonraker roots as directories
-      const r = await fetch('/server/files/roots')
-      if (!r.ok) throw new Error(`HTTP ${r.status}`)
-      const d = await r.json()
-      availRoots.value = d.result ?? []
-      dirs.value  = availRoots.value.map(root => ({
-        dirname:  root.name,
-        modified: null,
-      }))
+    if (adv.value) {
+      await fetchAdv()
     } else {
-      const path = moonrakerPath.value
-      const r = await fetch(`/server/files/directory?path=${encodeURIComponent(path)}&extended=false`)
-      if (!r.ok) throw new Error(`HTTP ${r.status}`)
-      const d = await r.json()
-      dirs.value  = d.result?.dirs  ?? []
-      files.value = d.result?.files ?? []
+      await fetchSafe()
     }
   } catch (e) {
     listError.value = e.message
@@ -240,22 +215,79 @@ async function fetchDir() {
   }
 }
 
+async function fetchSafe() {
+  if (segments.value.length === 0) {
+    // Virtual root: list Moonraker roots
+    const r = await fetch('/server/files/roots')
+    if (!r.ok) throw new Error(`HTTP ${r.status}`)
+    const d = await r.json()
+    dirs.value  = (d.result ?? []).map(root => ({ name: root.name, modified: null }))
+    files.value = []
+  } else {
+    const path = segments.value.join('/')
+    const r = await fetch(`/server/files/directory?path=${encodeURIComponent(path)}`)
+    if (!r.ok) throw new Error(`HTTP ${r.status}`)
+    const d = await r.json()
+    dirs.value  = (d.result?.dirs  ?? []).map(e => ({ name: e.dirname,  modified: e.modified  ?? null }))
+    files.value = (d.result?.files ?? []).map(e => ({ name: e.filename, modified: e.modified  ?? null, size: e.size ?? 0 }))
+  }
+}
+
+async function fetchAdv() {
+  const r = await fetch(`/bakesail/list?path=${encodeURIComponent(absPath.value)}`)
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}))
+    throw new Error(e.error || `HTTP ${r.status}`)
+  }
+  const d = await r.json()
+  dirs.value  = d.dirs.map(e  => ({ name: e.name,  modified: e.modified }))
+  files.value = d.files.map(e => ({ name: e.name,  modified: e.modified, size: e.size }))
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────────
 function enterDir(name) {
-  pathSegments.value = [...pathSegments.value, name]
+  if (adv.value) {
+    absPath.value = absPath.value.replace(/\/$/, '') + '/' + name
+  } else {
+    segments.value = [...segments.value, name]
+  }
 }
 
 function goUp() {
-  pathSegments.value = pathSegments.value.slice(0, -1)
+  if (adv.value) {
+    const parts = absPath.value.split('/').filter(Boolean)
+    parts.pop()
+    absPath.value = '/' + parts.join('/')
+    if (!absPath.value) absPath.value = '/'
+  } else {
+    segments.value = segments.value.slice(0, -1)
+  }
 }
 
-watch(pathSegments, fetchDir, { deep: true })
+async function toggleMode() {
+  if (!adv.value) {
+    // Switching to advanced: fetch home dir from bakesail
+    try {
+      const r = await fetch('/bakesail/info')
+      const d = r.ok ? await r.json() : { home: '/home/pi' }
+      absPath.value = d.home || '/home/pi'
+    } catch {
+      absPath.value = '/home/pi'
+    }
+  } else {
+    segments.value = []
+  }
+  adv.value = !adv.value
+}
+
+// Watch path changes and refetch
+watch([segments, absPath, adv], fetchDir, { deep: true })
 onMounted(fetchDir)
 
 // ── Selection ─────────────────────────────────────────────────────────────────
-function toggleItem(key) {
+function toggle(key) {
   const s = new Set(selected.value)
-  if (s.has(key)) s.delete(key)
-  else s.add(key)
+  s.has(key) ? s.delete(key) : s.add(key)
   selected.value = s
 }
 
@@ -263,25 +295,29 @@ function toggleAll() {
   if (allSelected.value) {
     selected.value = new Set()
   } else {
-    const all = [
-      ...dirs.value.map(d => 'd:'+d.dirname),
-      ...files.value.map(f => 'f:'+f.filename),
-    ]
-    selected.value = new Set(all)
+    selected.value = new Set([
+      ...dirs.value.map(d => 'd:'+d.name),
+      ...files.value.map(f => 'f:'+f.name),
+    ])
   }
 }
 
 // ── Upload ────────────────────────────────────────────────────────────────────
 async function onUpload(e) {
   if (!canWrite.value) return
-  const root    = currentRoot.value ?? 'config'
-  const subPath = pathSegments.value.slice(1).join('/')
   for (const file of e.target.files) {
     const fd = new FormData()
     fd.append('file', file, file.name)
-    fd.append('root', root)
-    if (subPath) fd.append('path', subPath)
-    await fetch('/server/files/upload', { method: 'POST', body: fd })
+    if (adv.value) {
+      await fetch(`/bakesail/upload?dir=${encodeURIComponent(absPath.value)}`,
+                  { method: 'POST', body: fd })
+    } else {
+      const root    = segments.value[0] ?? 'config'
+      const subPath = segments.value.slice(1).join('/')
+      fd.append('root', root)
+      if (subPath) fd.append('path', subPath)
+      await fetch('/server/files/upload', { method: 'POST', body: fd })
+    }
   }
   e.target.value = ''
   await fetchDir()
@@ -290,9 +326,13 @@ async function onUpload(e) {
 // ── Download ──────────────────────────────────────────────────────────────────
 function downloadSelected() {
   for (const name of selectedFiles.value) {
-    const path = [...pathSegments.value, name].join('/')
     const a = document.createElement('a')
-    a.href = `/server/files/${path}`
+    if (adv.value) {
+      const fullPath = absPath.value.replace(/\/$/, '') + '/' + name
+      a.href = `/bakesail/download?path=${encodeURIComponent(fullPath)}`
+    } else {
+      a.href = `/server/files/${[...segments.value, name].join('/')}`
+    }
     a.download = name
     a.click()
   }
@@ -303,40 +343,52 @@ async function promptNewFile() {
   if (!canWrite.value) return
   const name = prompt('New file name:')
   if (!name) return
-  const root    = currentRoot.value ?? 'config'
-  const subPath = pathSegments.value.slice(1).join('/')
   const fd = new FormData()
   fd.append('file', new Blob([''], { type: 'text/plain' }), name)
-  fd.append('root', root)
-  if (subPath) fd.append('path', subPath)
-  await fetch('/server/files/upload', { method: 'POST', body: fd })
+  if (adv.value) {
+    await fetch(`/bakesail/upload?dir=${encodeURIComponent(absPath.value)}`,
+                { method: 'POST', body: fd })
+  } else {
+    const root    = segments.value[0] ?? 'config'
+    const subPath = segments.value.slice(1).join('/')
+    fd.append('root', root)
+    if (subPath) fd.append('path', subPath)
+    await fetch('/server/files/upload', { method: 'POST', body: fd })
+  }
   await fetchDir()
 }
 
-// ── New directory ─────────────────────────────────────────────────────────────
+// ── New dir ───────────────────────────────────────────────────────────────────
 async function promptNewDir() {
   if (!canWrite.value) return
   const name = prompt('New directory name:')
   if (!name) return
-  const path = [...pathSegments.value, name].join('/')
-  await fetch('/server/files/directory', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path }),
-  })
+  if (adv.value) {
+    const newPath = absPath.value.replace(/\/$/, '') + '/' + name
+    await fetch(`/bakesail/mkdir?path=${encodeURIComponent(newPath)}`, { method: 'POST' })
+  } else {
+    const path = [...segments.value, name].join('/')
+    await fetch('/server/files/directory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    })
+  }
   await fetchDir()
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────
+const deleteModal   = ref(false)
+const deleteTargets = ref([])
+
 function confirmDelete() {
   if (!canWrite.value || selected.value.size === 0) return
-  const inSafeMode = safeMode.value
-  deleteTargets.value = [...selected.value].map(k => k.slice(2))
-  // Safe mode: block directory deletes
-  if (inSafeMode) {
-    const hasDirs = [...selected.value].some(k => k.startsWith('d:'))
-    if (hasDirs) { alert('Safe mode: directory deletion is disabled. Switch to Advanced mode to delete directories.'); return }
+  // Safe mode blocks directory deletion
+  if (!adv.value && [...selected.value].some(k => k.startsWith('d:'))) {
+    alert('Safe mode: directory deletion is disabled.\nSwitch to Advanced mode to delete directories.')
+    return
   }
+  deleteTargets.value = [...selected.value].map(k => k.slice(2))
   deleteModal.value = true
 }
 
@@ -344,11 +396,17 @@ async function doDelete() {
   for (const key of selected.value) {
     const isDir = key.startsWith('d:')
     const name  = key.slice(2)
-    const path  = [...pathSegments.value, name].join('/')
-    if (isDir) {
-      await fetch(`/server/files/directory?path=${encodeURIComponent(path)}&force=false`, { method: 'DELETE' })
+    if (adv.value) {
+      const fullPath = absPath.value.replace(/\/$/, '') + '/' + name
+      await fetch(`/bakesail/delete?path=${encodeURIComponent(fullPath)}`, { method: 'DELETE' })
     } else {
-      await fetch(`/server/files/${path}`, { method: 'DELETE' })
+      const path = [...segments.value, name].join('/')
+      if (isDir) {
+        await fetch(`/server/files/directory?path=${encodeURIComponent(path)}&force=false`,
+                    { method: 'DELETE' })
+      } else {
+        await fetch(`/server/files/${path}`, { method: 'DELETE' })
+      }
     }
   }
   deleteModal.value = false
@@ -357,58 +415,85 @@ async function doDelete() {
 }
 
 // ── Search ────────────────────────────────────────────────────────────────────
+const searchTerm      = ref('')
+const lastSearchTerm  = ref('')
+const searchOpen      = ref(false)
+const searchLoading   = ref(false)
+const searchResults   = ref([])
+const searchTruncated = ref(false)
+
 async function runSearch() {
   if (!searchTerm.value.trim()) return
   searchOpen.value    = true
   searchLoading.value = true
   searchResults.value = []
+  lastSearchTerm.value = searchTerm.value.trim()
 
-  const q = searchTerm.value.trim().toLowerCase()
-  const root = currentRoot.value ?? ''
-
-  try {
-    // Fetch a flat recursive listing of the current root for searching
-    const apiPath = root || 'config'
-    const results = []
-    await searchRecursive(apiPath, apiPath, q, results)
-    searchResults.value = results
-  } catch (e) {
-    searchResults.value = []
-  } finally {
-    searchLoading.value = false
+  if (adv.value) {
+    try {
+      const r = await fetch(
+        `/bakesail/search?path=${encodeURIComponent(absPath.value)}&q=${encodeURIComponent(lastSearchTerm.value)}`)
+      if (r.ok) {
+        const d = await r.json()
+        searchResults.value = d.results.map(x => ({
+          path: x.path,
+          name: x.path.split('/').pop(),
+          is_dir: x.is_dir,
+        }))
+        searchTruncated.value = d.results.length >= 200
+      }
+    } catch { /* silent */ }
+  } else {
+    // Moonraker: recursive listing within current root
+    const root = segments.value[0] || 'config'
+    const q    = lastSearchTerm.value.toLowerCase()
+    const out  = []
+    await searchMoonraker(root, q, out)
+    searchResults.value = out
+    searchTruncated.value = out.length >= 200
   }
+
+  searchLoading.value = false
 }
 
-async function searchRecursive(moonPath, displayPrefix, q, out, depth = 0) {
-  if (depth > 4) return  // safety limit
+async function searchMoonraker(moonPath, q, out, depth = 0) {
+  if (depth > 4 || out.length >= 200) return
   try {
     const r = await fetch(`/server/files/directory?path=${encodeURIComponent(moonPath)}`)
     if (!r.ok) return
     const d = await r.json()
     for (const dir of d.result?.dirs ?? []) {
-      const p = `${displayPrefix}/${dir.dirname}`
       if (dir.dirname.toLowerCase().includes(q))
-        out.push({ path: p, moonrakerPath: `${moonPath}/${dir.dirname}`, isDir: true })
-      await searchRecursive(`${moonPath}/${dir.dirname}`, p, q, out, depth + 1)
+        out.push({ path: moonPath + '/' + dir.dirname, name: dir.dirname, is_dir: true })
+      await searchMoonraker(moonPath + '/' + dir.dirname, q, out, depth + 1)
     }
     for (const file of d.result?.files ?? []) {
       if (file.filename.toLowerCase().includes(q))
-        out.push({ path: `${displayPrefix}/${file.filename}`, moonrakerPath: `${moonPath}/${file.filename}`, isDir: false })
+        out.push({ path: moonPath + '/' + file.filename, name: file.filename, is_dir: false })
     }
-  } catch { /* skip inaccessible */ }
+  } catch { /* skip */ }
+}
+
+function closeSearch() {
+  searchOpen.value = false
 }
 
 function navigateToResult(r) {
-  // Navigate to the parent directory of the result
-  const parts = r.moonrakerPath.split('/')
-  if (!r.isDir) parts.pop()
-  pathSegments.value = parts
+  if (adv.value) {
+    const parts = r.path.split('/')
+    if (!r.is_dir) parts.pop()
+    absPath.value = parts.join('/') || '/'
+  } else {
+    const parts = r.path.split('/').filter(Boolean)
+    if (!r.is_dir) parts.pop()
+    segments.value = parts
+  }
   searchOpen.value = false
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmtBytes(b) {
-  if (b == null) return '—'
+  if (b == null || b === 0) return '—'
   if (b >= 1e6) return (b / 1e6).toFixed(1) + ' MB'
   if (b >= 1e3) return (b / 1e3).toFixed(0) + ' kB'
   return b + ' B'
@@ -416,47 +501,53 @@ function fmtBytes(b) {
 
 function fmtDate(ts) {
   if (!ts) return '—'
-  return new Date(ts * 1000).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return new Date(ts * 1000).toLocaleDateString([], {
+    month: 'short', day: 'numeric',
+  }) + ' ' + new Date(ts * 1000).toLocaleTimeString([], {
+    hour: '2-digit', minute: '2-digit',
+  })
 }
 
 function fileIcon(name) {
-  const ext = name.split('.').pop()?.toLowerCase()
+  const ext = (name.split('.').pop() || '').toLowerCase()
   if (['cfg', 'conf', 'ini'].includes(ext)) return '⚙'
-  if (['gcode', 'gc', 'g'].includes(ext)) return '◈'
-  if (['log', 'txt'].includes(ext)) return '📝'
-  if (['py'].includes(ext)) return '🐍'
-  if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) return '🖼'
+  if (['gcode', 'gc', 'g'].includes(ext))   return '◈'
+  if (['log', 'txt'].includes(ext))          return '📝'
+  if (['py'].includes(ext))                  return '🐍'
+  if (['sh', 'bash'].includes(ext))          return '⬡'
+  if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) return '🖼'
+  if (['json', 'yaml', 'yml'].includes(ext)) return '📋'
   return '📄'
 }
 </script>
 
 <style scoped>
-.fe-root { display: flex; flex-direction: column; gap: 10px; height: 100%; }
+.fe-root { display: flex; flex-direction: column; gap: 10px; }
+
+/* Mode bar */
+.fe-mode-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  flex-wrap: wrap;
+}
+.fe-mode-label {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+  padding: 2px 8px; border-radius: 3px; border: 1px solid; flex-shrink: 0;
+}
+.fe-mode--safe { color: var(--teal);  border-color: var(--teal); }
+.fe-mode--adv  { color: var(--amber); border-color: var(--amber); }
+.fe-mode-desc  { flex: 1; font-size: 12px; color: var(--text-muted); }
 
 /* Toolbar */
-.fe-toolbar {
-  display: flex; align-items: center; justify-content: space-between;
-  flex-wrap: wrap; gap: 8px;
-}
+.fe-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .fe-toolbar-left { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.fe-toolbar-right { display: flex; align-items: center; gap: 8px; }
-
 .fe-btn { flex-shrink: 0; }
 .fe-btn--danger { color: var(--red) !important; border-color: var(--red) !important; }
 .fe-btn--danger:hover { background: var(--red-glow) !important; }
-
-/* Mode toggle */
-.fe-mode-toggle {
-  display: flex; align-items: center; gap: 6px;
-  cursor: pointer; user-select: none;
-}
-.fe-mode-toggle input { cursor: pointer; accent-color: var(--amber); }
-.fe-mode-label {
-  font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
-  padding: 2px 8px; border-radius: 3px; border: 1px solid;
-}
-.fe-mode--safe { color: var(--teal); border-color: var(--teal); }
-.fe-mode--adv  { color: var(--amber); border-color: var(--amber); }
+.fe-btn--disabled { opacity: 0.4; pointer-events: none; }
 
 /* Path bar */
 .fe-path-bar {
@@ -467,8 +558,7 @@ function fileIcon(name) {
   padding: 5px 10px;
 }
 .fe-path-text {
-  flex: 1;
-  font-family: var(--font-mono); font-size: 12px; color: var(--text-dim);
+  flex: 1; font-family: var(--font-mono); font-size: 12px; color: var(--text-dim);
 }
 .fe-up-btn {
   background: transparent; border: 1px solid var(--border-2);
@@ -476,19 +566,18 @@ function fileIcon(name) {
   font-size: 13px; padding: 1px 7px; cursor: pointer;
   transition: background 0.1s;
 }
-.fe-up-btn:hover { background: var(--surface); color: var(--text); }
+.fe-up-btn:hover:not(:disabled) { background: var(--surface); color: var(--text); }
+.fe-up-btn:disabled { opacity: 0.35; cursor: default; }
 
 /* Search */
 .fe-search-bar { display: flex; gap: 8px; align-items: center; }
 .fe-search-input {
-  flex: 1;
-  background: var(--surface-2); border: 1px solid var(--border);
-  border-radius: var(--radius); color: var(--text);
-  font-size: 12px; padding: 5px 10px;
+  flex: 1; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text); font-size: 12px; padding: 5px 10px;
 }
 .fe-search-input:focus { outline: none; border-color: var(--border-2); }
 
-.fe-search-results { padding: 10px; }
+.fe-search-panel { padding: 10px; max-height: 260px; overflow-y: auto; }
 .fe-search-header {
   font-size: 11px; color: var(--text-muted); margin-bottom: 8px;
   display: flex; align-items: center; gap: 8px;
@@ -504,47 +593,54 @@ function fileIcon(name) {
 
 .fe-list-header {
   display: grid;
-  grid-template-columns: 28px 24px 1fr 80px 130px;
+  grid-template-columns: 28px 24px 1fr 80px 140px;
   align-items: center;
   padding: 6px 12px;
   border-bottom: 1px solid var(--border);
-  font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
-  color: var(--text-muted);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: var(--text-muted);
   background: var(--surface);
 }
 
-.fe-list { display: flex; flex-direction: column; }
+.fe-list { display: flex; flex-direction: column; overflow-y: auto; max-height: 55vh; }
 
 .fe-row {
   display: grid;
-  grid-template-columns: 28px 24px 1fr 80px 130px;
+  grid-template-columns: 28px 24px 1fr 80px 140px;
   align-items: center;
   padding: 5px 12px;
   border-bottom: 1px solid var(--border);
   font-size: 12px;
-  transition: background 0.1s;
+  transition: background 0.08s;
 }
+.fe-row--result {
+  display: flex; gap: 8px;
+  cursor: pointer;
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.fe-row--result:hover { background: rgba(255,255,255,0.03); }
 .fe-row:last-child { border-bottom: none; }
 .fe-row:hover { background: rgba(255,255,255,0.02); }
-.fe-row--selected { background: var(--amber-glow); }
+.fe-row--sel { background: var(--amber-glow); }
 
-.fe-check-wrap { display: flex; align-items: center; }
-.fe-check-wrap input { cursor: pointer; accent-color: var(--amber); }
+.fe-check-cell { display: flex; align-items: center; }
+.fe-check-cell input { cursor: pointer; accent-color: var(--amber); }
 
-.fe-icon { font-size: 14px; cursor: pointer; }
+.fe-icon { font-size: 14px; cursor: pointer; user-select: none; }
 .fe-icon--dir { cursor: pointer; }
 
 .fe-name {
   color: var(--text-dim); overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap;
-  cursor: default;
 }
 .fe-name--dir { color: var(--teal); cursor: pointer; }
 .fe-name--dir:hover { text-decoration: underline; }
+.fe-name--muted { color: var(--text-muted); font-size: 11px; }
 
-.fe-col-name { } /* flex 1 from grid */
 .fe-col-size { color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; }
 .fe-col-date { color: var(--text-muted); font-size: 11px; }
+.fe-col-name { }
 
 .fe-empty {
   padding: 24px 16px; text-align: center;
@@ -552,32 +648,19 @@ function fileIcon(name) {
 }
 .fe-empty--err { color: var(--red); }
 
-/* Search result rows */
-.fe-list--search .fe-row--search {
-  display: flex; gap: 8px; align-items: center;
-  padding: 5px 12px; cursor: pointer;
-  border-bottom: 1px solid var(--border);
-}
-.fe-list--search .fe-row--search:hover { background: rgba(255,255,255,0.03); }
-
 /* Delete modal */
-.fe-modal-backdrop {
+.fe-modal-bg {
   position: fixed; inset: 0; z-index: 9999;
   background: rgba(0,0,0,0.6);
   display: flex; align-items: center; justify-content: center;
 }
-.fe-modal {
-  width: 360px; padding: 20px;
-  display: flex; flex-direction: column; gap: 12px;
-}
+.fe-modal { width: 360px; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
 .fe-modal-title {
-  font-size: 12px; font-weight: 700;
+  font-size: 11px; font-weight: 700;
   letter-spacing: 0.10em; text-transform: uppercase; color: var(--red);
 }
-.fe-modal-body { font-size: 13px; color: var(--text-dim); line-height: 1.6; }
-.fe-modal-item {
-  display: block; font-family: var(--font-mono); font-size: 11px;
-  color: var(--text-muted);
-}
+.fe-modal-body { font-size: 13px; color: var(--text-dim); line-height: 1.7; }
+.fe-modal-item { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+.fe-modal-item--more { color: var(--text-muted); }
 .fe-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 </style>
