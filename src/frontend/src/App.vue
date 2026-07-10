@@ -56,21 +56,21 @@
           <!-- Quick actions: only meaningful when klippy is ready -->
           <template v-if="klippyState === 'ready'">
             <div class="topbar-divider"></div>
-            <!-- Home: lit (green) when all axes homed, dim when not -->
+            <!-- Home: blue when homed, dim blue when not -->
             <button class="topbar-btn topbar-btn--action"
-                    :class="isHomed ? 'topbar-btn--homed' : ''"
+                    :class="isHomed ? 'topbar-btn--home-set' : 'topbar-btn--home-unset'"
                     @click="topbarGcode('G28')" title="Home All">
 <i class="mdi mdi-home" style="font-size:15px;margin-right:3px;vertical-align:-2px"></i>Home
             </button>
-            <!-- QGL: lit (green) when leveled, dim when not. Klipper exposes z_tilt/quad_gantry_level applied state -->
+            <!-- QGL: pink when leveled, dim pink when not -->
             <button class="topbar-btn topbar-btn--action"
-                    :class="deviceStore.qglApplied ? 'topbar-btn--homed' : ''"
+                    :class="deviceStore.qglApplied ? 'topbar-btn--qgl-set' : 'topbar-btn--qgl-unset'"
                     @click="topbarGcode('QUAD_GANTRY_LEVEL')" title="Quad Gantry Level">
 <i class="mdi mdi-arrow-collapse-vertical" style="font-size:15px;margin-right:3px;vertical-align:-2px"></i>QGL
             </button>
-            <!-- Motors: lit when enabled, dim+strikethrough feel when disabled -->
+            <!-- Motors: yellow when on, dim yellow when off -->
             <button class="topbar-btn topbar-btn--action"
-                    :class="deviceStore.motorsEnabled ? 'topbar-btn--lit' : 'topbar-btn--motors-off'"
+                    :class="deviceStore.motorsEnabled ? 'topbar-btn--motors-on' : 'topbar-btn--motors-off'"
                     @click="topbarToggleMotors"
                     :title="deviceStore.motorsEnabled ? 'Disable motors' : 'Enable motors'">
 <i class="mdi mdi-engine-off" style="font-size:16px;vertical-align:-2px"></i>
@@ -797,30 +797,17 @@ a { color: inherit; text-decoration: none; }
   padding: 3px 10px;
 }
 
-.topbar-btn--lit {
-  color: var(--text);
-}
+.topbar-btn--home-unset { color: var(--teal); border-color: var(--teal); opacity: 0.35; }
+.topbar-btn--home-set   { color: var(--teal); border-color: var(--teal); }
+.topbar-btn--home-set:hover { background: var(--teal-glow); opacity: 1; }
 
-.topbar-btn--lit:hover {
-  color: var(--text);
-  border-color: var(--teal);
-}
+.topbar-btn--qgl-unset  { color: var(--amber); border-color: var(--amber); opacity: 0.35; }
+.topbar-btn--qgl-set    { color: var(--amber); border-color: var(--amber); }
+.topbar-btn--qgl-set:hover  { background: var(--amber-glow); opacity: 1; }
 
-.topbar-btn--homed {
-  color: var(--green);
-  border-color: var(--green);
-}
-
-.topbar-btn--homed:hover {
-  color: var(--green);
-  border-color: var(--green);
-  background: rgba(76,175,125,0.10);
-}
-
-.topbar-btn--motors-off {
-  color: var(--text-muted);
-  opacity: 0.45;
-}
+.topbar-btn--motors-on  { color: var(--yellow); border-color: var(--yellow); }
+.topbar-btn--motors-on:hover  { background: var(--yellow-glow); }
+.topbar-btn--motors-off { color: var(--yellow); border-color: var(--yellow); opacity: 0.35; }
 
 .topbar-btn--danger {
   border-color: var(--red);

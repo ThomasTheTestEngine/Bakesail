@@ -16,9 +16,9 @@
     - Left-drag on empty space → orbit.
 
   Coordinate mapping (Three.js Y-up):
-    Printer X  → Three.js X
-    Printer Y  → Three.js Z  (front of bed = positive Z toward camera)
-    Printer Z  → Three.js Y  (up)
+    Printer X  → Three.js  X   (unchanged)
+    Printer Y  → Three.js -Z   (negated so camera can sit at +Z giving correct right=+X)
+    Printer Z  → Three.js  Y   (up)
 
   Not-homed state: bed and Z-handle interactions are disabled; overlay shown.
 -->
@@ -152,15 +152,13 @@ function fmtN(n) { return n == null ? '?' : n.toFixed(1) }
 
 // ── Coordinate helpers ────────────────────────────────────────────────────────
 // Printer → Three.js:  pX→tX, pY→tZ, pZ→tY
-function toThree(px, py, pz) { return new THREE.Vector3(px, pz, py) }
-function printerX(v) { return v.x }
-function printerY(v) { return v.z }
-function printerZ(v) { return v.y }
+// Printer → Three.js:  pX→X, pY→-Z, pZ→Y
+function toThree(px, py, pz) { return new THREE.Vector3(px, pz, -py) }
 
 // ── Theme colours — matched to Bakesail CSS variables ─────────────────────────
 // --bg #0A0A0A  --surface #141414  --surface-2 #1C1C1C
 // --border #272727  --border-2 #333
-// --amber #F07FAA (pink/primary)  --teal #80B4E0 (blue)  --yellow #F0D87A
+// --amber #F07FAA (pink/primary)  --teal #80B4E0 (blue)  --yellow #F0D87A  --green #4CAF7D
 const C = {
   bg:       0x0A0A0A,   // --bg
   bed:      0x141414,   // --surface
@@ -169,7 +167,7 @@ const C = {
   frame:    0x2a2a2a,   // slightly lighter than border
   zRail:    0x1C1C1C,   // --surface-2
   zHandle:  0x80B4E0,   // --teal (blue)
-  cone:     0xF07FAA,   // --amber (pink)
+  head:     0x4CAF7D,   // --green for toolhead model
   dropLine: 0xE8E8E8,   // --text
   zSlice:   0x80B4E0,   // --teal
   rulerX:   0x80B4E0,   // --teal (blue)  — X axis (matches toolhead classic)
@@ -232,17 +230,19 @@ function initScene() {
 function positionCamera() {
   const { xMax, yMax, zMax } = limits
   const cx = xMax / 2
-  const cz = yMax / 2
+  const cz = -yMax / 2  // bed centre in new mapping (Printer Y → Three.js -Z)
 
-  controls.target.set(cx, 0, cz)  // orbit pivot at bed centre, on the surface
+  controls.target.set(cx, 0, cz)
 
-  const dist = Math.max(xMax, yMax, zMax) * 1.9
-  const azRad  = THREE.MathUtils.degToRad(-20)  // slight LEFT of straight-front so X=0 is at left
-  const elRad  = THREE.MathUtils.degToRad(30)   // 30° elevation
+  // Camera on POSITIVE-Z side so Three.js lookAt gives camera_right = +X,
+  // making X increase leftward → X=0 at left, X=max at right. ✓
+  const dist  = Math.max(xMax, yMax, zMax) * 2.2   // 15% zoom-out vs 1.9
+  const azRad = THREE.MathUtils.degToRad(20)        // slight right → 0,0 corner at lower-left
+  const elRad = THREE.MathUtils.degToRad(30)
   camera.position.set(
-    cx + dist * Math.sin(azRad) * Math.cos(elRad),
+    cx  + dist * Math.sin(azRad) * Math.cos(elRad),
     dist * Math.sin(elRad),
-    cz - dist * Math.cos(azRad) * Math.cos(elRad),
+    cz  + dist * Math.cos(azRad) * Math.cos(elRad),  // + = camera on +Z side
   )
   controls.update()
 }
@@ -252,76 +252,77 @@ function buildScene() {
   const { xMax, yMax, zMax } = limits
 
   // ── Bed surface (click target + visual) ────────────────────────────────────
+  // Printer Y → Three.js -Z, so bed spans Z: [0, -yMax]
   const bedGeo = new THREE.PlaneGeometry(xMax, yMax)
   bedGeo.rotateX(-Math.PI / 2)
   bedMesh = new THREE.Mesh(bedGeo, new THREE.MeshBasicMaterial({
     color: C.bed, side: THREE.FrontSide,
   }))
-  bedMesh.position.set(xMax / 2, 0, yMax / 2)
+  bedMesh.position.set(xMax / 2, 0, -yMax / 2)
   bedMesh.name = 'bed'
   scene.add(bedMesh)
 
   // ── Bed edge border ────────────────────────────────────────────────────────
   const edgePts = [
-    new THREE.Vector3(0, 0, 0),
-    new THREE.Vector3(xMax, 0, 0),
-    new THREE.Vector3(xMax, 0, yMax),
-    new THREE.Vector3(0, 0, yMax),
-    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(0,    0,    0),
+    new THREE.Vector3(xMax, 0,    0),
+    new THREE.Vector3(xMax, 0, -yMax),
+    new THREE.Vector3(0,    0, -yMax),
+    new THREE.Vector3(0,    0,    0),
   ]
-  const edgeGeo = new THREE.BufferGeometry().setFromPoints(edgePts)
-  scene.add(new THREE.Line(edgeGeo,
-    new THREE.LineBasicMaterial({ color: C.bedEdge, linewidth: 1 })))
+  scene.add(new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(edgePts),
+    new THREE.LineBasicMaterial({ color: C.bedEdge }),
+  ))
 
   // ── Bed grid ───────────────────────────────────────────────────────────────
   const gridStep = gridStepForSize(Math.max(xMax, yMax))
   const gridVerts = []
   for (let x = 0; x <= xMax + 0.5; x += gridStep) {
     const xc = Math.min(x, xMax)
-    gridVerts.push(xc, 0, 0,  xc, 0, yMax)
+    gridVerts.push(xc, 0, 0,   xc, 0, -yMax)   // lines along -Z (printer Y direction)
   }
   for (let y = 0; y <= yMax + 0.5; y += gridStep) {
     const yc = Math.min(y, yMax)
-    gridVerts.push(0, 0, yc,  xMax, 0, yc)
+    gridVerts.push(0, 0, -yc,  xMax, 0, -yc)   // cross lines at -yc
   }
   const gridGeo = new THREE.BufferGeometry()
   gridGeo.setAttribute('position', new THREE.Float32BufferAttribute(gridVerts, 3))
   scene.add(new THREE.LineSegments(gridGeo,
     new THREE.LineBasicMaterial({ color: C.grid, transparent: true, opacity: 0.7 })))
 
-  // ── Printer frame pillars (ghosted vertical lines at corners) ──────────────
+  // ── Printer frame pillars ──────────────────────────────────────────────────
   const frameH = zMax
-  const pillars = [[0,0],[xMax,0],[xMax,yMax],[0,yMax]]
+  const pillars = [[0,0],[xMax,0],[xMax,-yMax],[0,-yMax]]  // [px, pz] in Three.js
   for (const [px, pz] of pillars) {
     const pts = [new THREE.Vector3(px, 0, pz), new THREE.Vector3(px, frameH, pz)]
-    const g = new THREE.BufferGeometry().setFromPoints(pts)
-    scene.add(new THREE.Line(g, new THREE.LineBasicMaterial({
-      color: C.frame, transparent: true, opacity: 0.35,
-    })))
+    scene.add(new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(pts),
+      new THREE.LineBasicMaterial({ color: C.frame, transparent: true, opacity: 0.35 }),
+    ))
   }
-  // Top frame edges
   const topEdgePts = [
-    new THREE.Vector3(0,    frameH, 0),
-    new THREE.Vector3(xMax, frameH, 0),
-    new THREE.Vector3(xMax, frameH, yMax),
-    new THREE.Vector3(0,    frameH, yMax),
-    new THREE.Vector3(0,    frameH, 0),
+    new THREE.Vector3(0,    frameH,    0),
+    new THREE.Vector3(xMax, frameH,    0),
+    new THREE.Vector3(xMax, frameH, -yMax),
+    new THREE.Vector3(0,    frameH, -yMax),
+    new THREE.Vector3(0,    frameH,    0),
   ]
   scene.add(new THREE.Line(
     new THREE.BufferGeometry().setFromPoints(topEdgePts),
     new THREE.LineBasicMaterial({ color: C.frame, transparent: true, opacity: 0.35 }),
   ))
 
-  // ── Z rail — at the (X=0, Y=0) corner, just outside the bed ─────────────
-  // In Three.js coords that's (0, *, 0). Offset slightly outside bed edge.
+  // ── Z rail — at (X=0, Y=0) corner, just outside bed ──────────────────────
+  // Printer Y=0 → Three.js Z=0; "outside Y=0" is at Three.js Z=+12 (positive)
   const railX = -12
-  const railZ = -12
+  const railZ = 12   // positive Z = outside the front edge in new mapping
   const railGeo = new THREE.CylinderGeometry(2.5, 2.5, zMax, 8)
   zRailMesh = new THREE.Mesh(railGeo, new THREE.MeshBasicMaterial({ color: C.zRail }))
   zRailMesh.position.set(railX, zMax / 2, railZ)
   scene.add(zRailMesh)
 
-  // Z tick marks on rail
+  // Z tick marks
   const tickLen = 8
   for (let z = 0; z <= zMax; z += gridStep) {
     const pts = [
@@ -341,10 +342,32 @@ function buildScene() {
   zHandleMesh.name = 'zHandle'
   scene.add(zHandleMesh)
 
-  // ── Toolhead cone (downward-pointing) ─────────────────────────────────────
-  const coneGeo = new THREE.ConeGeometry(8, 22, 16)
-  coneGeo.rotateX(Math.PI) // flip so tip points down
-  toolheadMesh = new THREE.Mesh(coneGeo, new THREE.MeshBasicMaterial({ color: C.cone }))
+  // ── Composite toolhead model (motor + carriage + nozzle) ──────────────────
+  // Modeled after Fluidd's toolhead icon. Group origin = top of model;
+  // nozzle tip is 25 units below origin; caller positions at z+25.
+  const mat = new THREE.MeshBasicMaterial({ color: C.head })
+  const headGroup = new THREE.Group()
+
+  // Motor cylinder
+  const motorGeo = new THREE.CylinderGeometry(6, 6, 16, 16)
+  const motorMesh = new THREE.Mesh(motorGeo, mat)
+  motorMesh.position.y = 0  // centered, spans y ±8 from group origin
+  headGroup.add(motorMesh)
+
+  // Carriage / fan-duct block (wider than motor)
+  const carriageGeo = new THREE.BoxGeometry(20, 8, 14)
+  const carriageMesh = new THREE.Mesh(carriageGeo, mat)
+  carriageMesh.position.y = -10  // just below motor
+  headGroup.add(carriageMesh)
+
+  // Nozzle (inverted cone, tip points down)
+  const nozzleGeo = new THREE.ConeGeometry(5, 12, 12)
+  const nozzleMesh = new THREE.Mesh(nozzleGeo, mat)
+  nozzleMesh.rotation.x = Math.PI   // flip tip downward
+  nozzleMesh.position.y = -19        // below carriage; tip at -19-6 = -25
+  headGroup.add(nozzleMesh)
+
+  toolheadMesh = headGroup
   toolheadMesh.name = 'toolhead'
   scene.add(toolheadMesh)
 
@@ -358,14 +381,14 @@ function buildScene() {
   dropLine.renderOrder = 1
   scene.add(dropLine)
 
-  // ── Z slice plane (shown during Z drag) ───────────────────────────────────
+  // ── Z slice plane (shown during Z drag / XY drag) ─────────────────────────
   const margin = 30
   const sliceGeo = new THREE.PlaneGeometry(xMax + margin * 2, yMax + margin * 2)
   sliceGeo.rotateX(-Math.PI / 2)
   zSliceMesh = new THREE.Mesh(sliceGeo, new THREE.MeshBasicMaterial({
     color: C.zSlice, transparent: true, opacity: 0.15, side: THREE.DoubleSide,
   }))
-  zSliceMesh.position.set(xMax / 2, 0, yMax / 2)
+  zSliceMesh.position.set(xMax / 2, 0, -yMax / 2)  // centred on bed
   zSliceMesh.visible = false
   scene.add(zSliceMesh)
 }
@@ -383,7 +406,9 @@ function syncToolhead() {
   const x = pos.x ?? limits.xMax / 2
   const y = pos.y ?? limits.yMax / 2
   const z = pos.z ?? 0
-  toolheadMesh.position.set(x, z + 11, y)  // +11 = half cone height, so tip is at z
+  // Group origin is motor centre; nozzle tip is 25 units below.
+  // Position group so tip is at printer Z height. Printer Y → Three.js -Z.
+  toolheadMesh.position.set(x, z + 25, -y)
   if (zHandleMesh) zHandleMesh.position.y = z
 }
 
@@ -400,7 +425,7 @@ function drawOverlay() {
   ctx.font = '10px monospace'
   ctx.textBaseline = 'middle'
 
-  // ── X-axis ruler (ticks along the front edge of bed, y=0 in printer = z=0 in Three.js) ──
+  // ── X-axis ruler (ticks along Y=0 edge of bed, Three.js Z=0) ─────────────
   ctx.fillStyle = `rgba(128,180,224,0.9)` // blue (--teal) — X
   for (let x = 0; x <= xMax; x += step) {
     const sp = projectToScreen(new THREE.Vector3(x, 0, 0))
@@ -408,18 +433,18 @@ function drawOverlay() {
     ctx.fillText(String(x), sp.x + 3, sp.y - 2)
   }
 
-  // ── Y-axis ruler (ticks along left edge of bed, x=0) ──────────────────────
+  // ── Y-axis ruler (ticks along X=0 edge: Three.js Z = -y) ─────────────────
   ctx.fillStyle = `rgba(240,127,170,0.9)` // pink (--amber) — Y
   for (let y = 0; y <= yMax; y += step) {
-    const sp = projectToScreen(new THREE.Vector3(0, 0, y))
+    const sp = projectToScreen(new THREE.Vector3(0, 0, -y))  // Printer Y → Three.js -Z
     if (!sp) continue
     ctx.fillText(String(y), sp.x + 3, sp.y)
   }
 
-  // ── Z-axis ruler (ticks along the Z rail at 0X 0Y corner) ────────────────
+  // ── Z-axis ruler (ticks along the Z rail at 0X 0Y corner) ─────────────────
   ctx.fillStyle = `rgba(240,216,122,0.9)` // yellow (--yellow) — Z
   const railX = -12
-  const railZ = -12
+  const railZ = 12   // positive Z with new mapping
   for (let z = 0; z <= zMax; z += step) {
     const sp = projectToScreen(new THREE.Vector3(railX - 6, z, railZ))
     if (!sp) continue
@@ -485,8 +510,8 @@ function onPointerDown(e) {
     controls.enabled = false
     dragMode = 'xy'
     isDragging.value = true
-    dragTarget.x = Math.max(0, Math.min(limits.xMax, hit.point.x))
-    dragTarget.y = Math.max(0, Math.min(limits.yMax, hit.point.z))
+    dragTarget.x = Math.max(0, Math.min(limits.xMax,  hit.point.x))
+    dragTarget.y = Math.max(0, Math.min(limits.yMax, -hit.point.z))  // Printer Y = -Three.js Z
     dragTarget.z = pos.z ?? 0
     updateDropLine()
     e.preventDefault()
@@ -498,7 +523,7 @@ function onPointerDown(e) {
     dragTarget.x = pos.x ?? 0
     dragTarget.y = pos.y ?? 0
     dragTarget.z = pos.z ?? 0
-    const railPos = new THREE.Vector3(-12, 0, -12)
+    const railPos = new THREE.Vector3(-12, 0, 12)  // positive Z with new mapping
     const toCamera = new THREE.Vector3(
       camera.position.x - railPos.x, 0, camera.position.z - railPos.z,
     ).normalize()
@@ -517,8 +542,8 @@ function onPointerMove(e) {
   if (dragMode === 'xy') {
     const hitPt = new THREE.Vector3()
     if (raycaster.ray.intersectPlane(bedPlane, hitPt)) {
-      dragTarget.x = Math.max(0, Math.min(limits.xMax, hitPt.x))
-      dragTarget.y = Math.max(0, Math.min(limits.yMax, hitPt.z))
+      dragTarget.x = Math.max(0, Math.min(limits.xMax,  hitPt.x))
+      dragTarget.y = Math.max(0, Math.min(limits.yMax, -hitPt.z))  // Printer Y = -Three.js Z
       updateDropLine()
     }
   } else if (dragMode === 'z') {
@@ -553,17 +578,17 @@ function updateDropLine() {
   const { x, y } = dragTarget
   const z = pos.z ?? 0
 
-  // Move cone live to the drag position
-  if (toolheadMesh) toolheadMesh.position.set(x, z + 11, y)
+  // Move toolhead group live to drag position. Printer Y → Three.js -Z.
+  if (toolheadMesh) toolheadMesh.position.set(x, z + 25, -y)
 
-  // Vertical drop-line from cone tip to bed
+  // Vertical drop-line: from nozzle tip down to bed
   const attr = dropLine.geometry.attributes.position
-  attr.setXYZ(0, x, z, y)
-  attr.setXYZ(1, x, 0, y)
+  attr.setXYZ(0, x, z,  -y)
+  attr.setXYZ(1, x, 0,  -y)
   attr.needsUpdate = true
   dropLine.visible = true
 
-  // Also show Z slice at current height so user can see the XY plane they're moving in
+  // Show Z slice at current height so user sees the XY plane the head is in
   if (zSliceMesh) {
     zSliceMesh.position.y = z
     zSliceMesh.visible = true

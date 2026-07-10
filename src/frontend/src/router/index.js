@@ -11,6 +11,7 @@ import Alignment       from '../views/Alignment.vue'
 import Settings        from '../views/Settings.vue'
 import JobQueue        from '../views/JobQueue.vue'
 import MaterialLibrary from '../views/MaterialLibrary.vue'
+import PrinterJobManager from '../views/PrinterJobManager.vue'
 
 export const routes_extra = [
   { path: '/wizard', name: 'wizard', component: SetupWizard },
@@ -34,7 +35,7 @@ export const ALL_TABS = [
     label: 'Profile Manager',
     icon: '⊞',
     component: ProfileManager,
-    hiddenFor: ['laser_plotter'],
+    hiddenFor: ['laser_plotter', '3d_printer'],  // 3d_printer gets Job Manager instead
   },
   {
     path: '/job-queue',
@@ -43,6 +44,14 @@ export const ALL_TABS = [
     icon: '⊡',
     component: JobQueue,
     onlyFor: ['laser_plotter'],
+  },
+  {
+    path: '/printer-jobs',
+    name: 'printer-jobs',
+    label: 'Job Manager',
+    icon: '⊡',
+    component: PrinterJobManager,
+    onlyFor: ['3d_printer'],
   },
   {
     path: '/material-library',
