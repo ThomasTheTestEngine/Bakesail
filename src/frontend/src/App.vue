@@ -73,7 +73,7 @@
                     :class="deviceStore.motorsEnabled ? 'topbar-btn--lit' : 'topbar-btn--motors-off'"
                     @click="topbarToggleMotors"
                     :title="deviceStore.motorsEnabled ? 'Disable motors' : 'Enable motors'">
-<i class="mdi mdi-cog" style="font-size:16px;vertical-align:-2px"></i>
+<i class="mdi mdi-engine-off" style="font-size:16px;vertical-align:-2px"></i>
             </button>
           </template>
         </div>

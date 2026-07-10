@@ -35,9 +35,9 @@
       <!-- 2D overlay for ruler labels — drawn each frame after Three.js render -->
       <canvas ref="overlayCanvas" class="th3d-overlay" />
 
-      <!-- Not-homed banner -->
-      <div v-if="!isHomed" class="th3d-not-homed">
-        <span class="th3d-not-homed-text">NOT HOMED</span>
+      <!-- Not-homed / homing button -->
+      <div v-if="!isHomed" class="th3d-not-homed" @click="doHome">
+        <span class="th3d-not-homed-text">{{ isHoming ? 'HOMING…' : 'NOT HOMED' }}</span>
       </div>
 
       <!-- Live coordinate readout strip (always visible, highlights during drag) -->
@@ -77,11 +77,21 @@ function handleStatus(data) {
 }
 
 // ── Homing state ──────────────────────────────────────────────────────────────
-const isHomed = computed(() =>
+const isHomed  = computed(() =>
   homedAxes.value.includes('x') &&
   homedAxes.value.includes('y') &&
   homedAxes.value.includes('z')
 )
+const isHoming = ref(false)
+
+function doHome() {
+  if (isHoming.value) return
+  isHoming.value = true
+  sendGcode('G28').catch(() => { isHoming.value = false })
+}
+
+// Clear isHoming whenever the printer reports it is homed (G28 done from anywhere)
+watch(isHomed, (homed) => { if (homed) isHoming.value = false })
 
 // ── Printer limits ────────────────────────────────────────────────────────────
 const limits     = reactive({ xMax: 200, yMax: 200, zMax: 200 })
@@ -162,9 +172,9 @@ const C = {
   cone:     0xF07FAA,   // --amber (pink)
   dropLine: 0xE8E8E8,   // --text
   zSlice:   0x80B4E0,   // --teal
-  rulerX:   0xF07FAA,   // --amber (pink) — X axis
-  rulerY:   0xF0D87A,   // --yellow       — Y axis
-  rulerZ:   0x80B4E0,   // --teal (blue)  — Z axis
+  rulerX:   0x80B4E0,   // --teal (blue)  — X axis (matches toolhead classic)
+  rulerY:   0xF07FAA,   // --amber (pink) — Y axis
+  rulerZ:   0xF0D87A,   // --yellow       — Z axis
 }
 
 // ── Scene init ────────────────────────────────────────────────────────────────
@@ -227,7 +237,7 @@ function positionCamera() {
   controls.target.set(cx, 0, cz)  // orbit pivot at bed centre, on the surface
 
   const dist = Math.max(xMax, yMax, zMax) * 1.9
-  const azRad  = THREE.MathUtils.degToRad(20)   // slight right of straight-front
+  const azRad  = THREE.MathUtils.degToRad(-20)  // slight LEFT of straight-front so X=0 is at left
   const elRad  = THREE.MathUtils.degToRad(30)   // 30° elevation
   camera.position.set(
     cx + dist * Math.sin(azRad) * Math.cos(elRad),
@@ -391,7 +401,7 @@ function drawOverlay() {
   ctx.textBaseline = 'middle'
 
   // ── X-axis ruler (ticks along the front edge of bed, y=0 in printer = z=0 in Three.js) ──
-  ctx.fillStyle = `rgba(77,207,186,0.9)` // teal
+  ctx.fillStyle = `rgba(128,180,224,0.9)` // blue (--teal) — X
   for (let x = 0; x <= xMax; x += step) {
     const sp = projectToScreen(new THREE.Vector3(x, 0, 0))
     if (!sp) continue
@@ -399,7 +409,7 @@ function drawOverlay() {
   }
 
   // ── Y-axis ruler (ticks along left edge of bed, x=0) ──────────────────────
-  ctx.fillStyle = `rgba(240,216,122,0.9)` // amber
+  ctx.fillStyle = `rgba(240,127,170,0.9)` // pink (--amber) — Y
   for (let y = 0; y <= yMax; y += step) {
     const sp = projectToScreen(new THREE.Vector3(0, 0, y))
     if (!sp) continue
@@ -407,7 +417,7 @@ function drawOverlay() {
   }
 
   // ── Z-axis ruler (ticks along the Z rail at 0X 0Y corner) ────────────────
-  ctx.fillStyle = `rgba(128,180,224,0.9)` // blue
+  ctx.fillStyle = `rgba(240,216,122,0.9)` // yellow (--yellow) — Z
   const railX = -12
   const railZ = -12
   for (let z = 0; z <= zMax; z += step) {
@@ -590,6 +600,17 @@ let unsubStatus
 onMounted(async () => {
   unsubStatus = subscribeToStatus(handleStatus)
   await fetchLimits()
+
+  // Widget only receives status diffs going forward, not current state.
+  // Fetch current toolhead state now so homed_axes and position are correct
+  // from the moment the widget mounts rather than waiting for the next update.
+  try {
+    const r = await send('printer.objects.query', {
+      objects: { toolhead: ['position', 'homed_axes'] }
+    })
+    if (r?.status?.toolhead) handleStatus({ toolhead: r.status.toolhead })
+  } catch { /* degrade gracefully */ }
+
   // fetchLimits sets limitsReady which makes wrapEl render, so wait a tick
   await new Promise(r => setTimeout(r, 30))
   if (!glCanvas.value) return
@@ -678,7 +699,7 @@ watch(() => [pos.x, pos.y, pos.z], () => {
   pointer-events: none;
 }
 
-/* Not-homed banner */
+/* Not-homed / homing button */
 .th3d-not-homed {
   position: absolute;
   inset: 0;
@@ -686,7 +707,7 @@ watch(() => [pos.x, pos.y, pos.z], () => {
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.45);
-  pointer-events: none;
+  cursor: pointer;
 }
 .th3d-not-homed-text {
   font-family: var(--font-mono);
@@ -723,9 +744,9 @@ watch(() => [pos.x, pos.y, pos.z], () => {
 
 .th3d-ax { color: var(--text-dim); }
 .th3d-ax em { font-style: normal; font-weight: 600; }
-.th3d-ax--x em { color: #4dcfba; }
-.th3d-ax--y em { color: #F0D87A; }
-.th3d-ax--z em { color: #80B4E0; }
+.th3d-ax--x em { color: #80B4E0; }   /* --teal, blue */
+.th3d-ax--y em { color: #F07FAA; }   /* --amber, pink */
+.th3d-ax--z em { color: #F0D87A; }   /* --yellow */
 
 .th3d-drag-hint {
   margin-left: auto;
