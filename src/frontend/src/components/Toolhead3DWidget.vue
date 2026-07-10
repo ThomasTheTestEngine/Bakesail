@@ -200,7 +200,7 @@ function initScene() {
 
   raycaster  = new THREE.Raycaster()
   bedPlane   = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
-  zDragPlane = new THREE.Plane(new THREE.Vector3(1, 0, 0), -(limits.xMax + 24))
+  zDragPlane = new THREE.Plane()  // recomputed camera-relative at drag start
 
   buildScene()
   syncToolhead()
@@ -219,19 +219,18 @@ function positionCamera() {
   const { xMax, yMax, zMax } = limits
   const cx = xMax / 2
   const cz = yMax / 2
-  const cy = 0  // orbit pivot on the bed surface
 
-  controls?.target.set(cx, cy, cz)
+  controls.target.set(cx, 0, cz)  // bed centre, on the bed surface
 
   const dist = Math.max(xMax, yMax, zMax) * 1.8
   const azRad  = THREE.MathUtils.degToRad(45)   // 45° to the right from front
   const elRad  = THREE.MathUtils.degToRad(22)   // ~20° up
   camera.position.set(
     cx + dist * Math.sin(azRad) * Math.cos(elRad),
-    cy + dist * Math.sin(elRad),
-    cz - dist * Math.cos(azRad) * Math.cos(elRad),  // negative Z = in front
+    dist * Math.sin(elRad),
+    cz - dist * Math.cos(azRad) * Math.cos(elRad),
   )
-  camera.lookAt(cx, cy, cz)
+  controls.update()  // commits target + position into OrbitControls internal state
 }
 
 // ── Build the static geometry ──────────────────────────────────────────────────
@@ -299,15 +298,16 @@ function buildScene() {
     new THREE.LineBasicMaterial({ color: C.frame, transparent: true, opacity: 0.35 }),
   ))
 
-  // ── Z rail (right side, outside the build volume) ─────────────────────────
-  const railX = xMax + 24
-  const railZ = yMax / 2
+  // ── Z rail — at the (X=0, Y=0) corner, just outside the bed ─────────────
+  // In Three.js coords that's (0, *, 0). Offset slightly outside bed edge.
+  const railX = -12
+  const railZ = -12
   const railGeo = new THREE.CylinderGeometry(2.5, 2.5, zMax, 8)
   zRailMesh = new THREE.Mesh(railGeo, new THREE.MeshBasicMaterial({ color: C.zRail }))
   zRailMesh.position.set(railX, zMax / 2, railZ)
   scene.add(zRailMesh)
 
-  // Z tick marks on rail (3D lines at every gridStep)
+  // Z tick marks on rail
   const tickLen = 8
   for (let z = 0; z <= zMax; z += gridStep) {
     const pts = [
@@ -354,9 +354,6 @@ function buildScene() {
   zSliceMesh.position.set(xMax / 2, 0, yMax / 2)
   zSliceMesh.visible = false
   scene.add(zSliceMesh)
-
-  // Update the zDragPlane to match the actual rail X
-  zDragPlane = new THREE.Plane(new THREE.Vector3(1, 0, 0), -railX)
 }
 
 function gridStepForSize(size) {
@@ -405,15 +402,17 @@ function drawOverlay() {
     ctx.fillText(String(y), sp.x + 3, sp.y)
   }
 
-  // ── Z-axis ruler (ticks along the Z rail) ─────────────────────────────────
+  // ── Z-axis ruler (ticks along the Z rail at 0X 0Y corner) ────────────────
   ctx.fillStyle = `rgba(128,180,224,0.9)` // blue
-  const railX = limits.xMax + 24
-  const railZ = limits.yMax / 2
+  const railX = -12
+  const railZ = -12
   for (let z = 0; z <= zMax; z += step) {
-    const sp = projectToScreen(new THREE.Vector3(railX + 6, z, railZ))
+    const sp = projectToScreen(new THREE.Vector3(railX - 6, z, railZ))
     if (!sp) continue
+    ctx.textAlign = 'right'
     ctx.fillText(String(z), sp.x, sp.y)
   }
+  ctx.textAlign = 'left'
 }
 
 /**
@@ -478,6 +477,13 @@ function onMouseDown(e) {
     dragTarget.x = pos.x ?? 0
     dragTarget.y = pos.y ?? 0
     dragTarget.z = pos.z ?? 0
+    // Build a vertical plane through the rail that faces the camera.
+    // This makes Z dragging correct regardless of current orbit angle.
+    const railPos = new THREE.Vector3(-12, 0, -12)
+    const toCamera = new THREE.Vector3(
+      camera.position.x - railPos.x, 0, camera.position.z - railPos.z,
+    ).normalize()
+    zDragPlane.setFromNormalAndCoplanarPoint(toCamera, railPos)
     updateZSlice()
     e.preventDefault()
     e.stopPropagation()
