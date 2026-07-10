@@ -219,7 +219,7 @@ function positionCamera() {
   const { xMax, yMax, zMax } = limits
   const cx = xMax / 2
   const cz = yMax / 2
-  const cy = zMax * 0.15
+  const cy = 0  // orbit pivot on the bed surface
 
   controls?.target.set(cx, cy, cz)
 
@@ -510,7 +510,8 @@ function onMouseUp(e) {
   if (!isDragging.value) return
 
   if (dragMode === 'xy') {
-    dropLine.visible = false
+    dropLine.visible   = false
+    zSliceMesh.visible = false
     sendGcode(`G90\nG0 X${dragTarget.x.toFixed(3)} Y${dragTarget.y.toFixed(3)} F3000`)
   } else if (dragMode === 'z') {
     zSliceMesh.visible = false
@@ -526,12 +527,22 @@ function updateDropLine() {
   if (!dropLine) return
   const { x, y } = dragTarget
   const z = pos.z ?? 0
+
+  // Move cone live to the drag position
+  if (toolheadMesh) toolheadMesh.position.set(x, z + 11, y)
+
+  // Vertical drop-line from cone tip to bed
   const attr = dropLine.geometry.attributes.position
-  // From toolhead tip down to bed
   attr.setXYZ(0, x, z, y)
   attr.setXYZ(1, x, 0, y)
   attr.needsUpdate = true
   dropLine.visible = true
+
+  // Also show Z slice at current height so user can see the XY plane they're moving in
+  if (zSliceMesh) {
+    zSliceMesh.position.y = z
+    zSliceMesh.visible = true
+  }
 }
 
 function updateZSlice() {
