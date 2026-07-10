@@ -336,7 +336,7 @@
           <div class="section-title">Cameras</div>
           <p class="section-note">
             Add each USB camera individually. Run <code>ls /dev/video*</code> over SSH to list connected video devices.
-            Use the TEST button to add a placeholder camera with no real device — useful for dashboard layout without hardware.
+            <template v-if="!is3dPrinter">Use the TEST button to add a placeholder camera with no real device — useful for dashboard layout without hardware.</template>
           </p>
 
           <div class="item-list" style="margin-top:14px">
@@ -352,17 +352,31 @@
                      placeholder="/dev/video0" style="width:120px;flex:none" />
               <span v-if="cam.test" class="cam-test-badge">TEST</span>
 
-              <!-- Type dropdown -->
-              <select class="field-select cam-type-select" v-model="cam.type">
-                <option value="bga_grid">BGA Grid</option>
-                <option value="alignment_chip">Alignment - Chip</option>
-                <option value="alignment_board">Alignment - Board</option>
-                <option value="custom">Custom</option>
+              <!-- Type dropdown — 3d_printer has its own set -->
+              <select class="field-select cam-type-select" v-model="cam.type"
+                      @change="onCamTypeChange(cam)">
+                <template v-if="is3dPrinter">
+                  <option value="printer">Printer</option>
+                  <option value="nozzle">Nozzle</option>
+                  <option value="bed">Bed</option>
+                  <option value="filament">Filament</option>
+                  <option value="door">Door</option>
+                  <option value="custom">Custom</option>
+                </template>
+                <template v-else>
+                  <option value="bga_grid">BGA Grid</option>
+                  <option value="alignment_chip">Alignment - Chip</option>
+                  <option value="alignment_board">Alignment - Board</option>
+                  <option value="custom">Custom</option>
+                </template>
               </select>
 
-              <!-- Name input -->
-              <input class="field-input cam-name-input" v-model="cam.name"
-                     :placeholder="camTypeLabel(cam.type)" />
+              <!-- Name input — only for 'custom' type -->
+              <input v-if="cam.type === 'custom'" class="field-input cam-name-input" v-model="cam.name"
+                     placeholder="Custom name…" />
+
+              <!-- Crowsnest gear (3d_printer only, non-test cameras) -->
+              <CrowsnestSettingsPopover v-if="is3dPrinter && !cam.test" :cam="cam" />
 
               <button class="item-remove" @click="settings.removeCamera(cam.id)">×</button>
             </div>
@@ -374,7 +388,7 @@
 
           <div style="display:flex;gap:10px;margin-top:14px">
             <button class="btn btn-ghost btn-sm" @click="settings.addCamera(false)">+ Add Camera</button>
-            <button class="btn btn-ghost btn-sm" @click="settings.addCamera(true)">+ TEST Camera</button>
+            <button v-if="!is3dPrinter" class="btn btn-ghost btn-sm" @click="settings.addCamera(true)">+ TEST Camera</button>
           </div>
         </template>
 
@@ -619,6 +633,7 @@ import { useTestPins } from '../composables/useTestPins.js'
 import { saveBakesailCfg, ensurePrinterCfgInclude, generateBakesailCfg } from '../utils/configWriter.js'
 import { useMoonraker } from '../composables/useMoonraker.js'
 import { cameraTypeLabel } from '../utils/cameraTypes.js'
+import CrowsnestSettingsPopover from '../components/CrowsnestSettingsPopover.vue'
 
 const router   = useRouter()
 const settings = useSettingsStore()
@@ -627,6 +642,7 @@ const zoneTypes = ZONE_TYPES
 
 // ── Camera helpers ─────────────────────────────────────────────
 function camTypeLabel(type) { return cameraTypeLabel(type) }
+function onCamTypeChange(cam) { if (cam.type !== 'custom') cam.name = '' }
 
 // Probe /dev/video* devices via a simple fetch to Moonraker's system info,
 // falling back to a static list of common paths if unavailable.
@@ -779,7 +795,8 @@ async function doRevert() {
 }
 
 const sections = computed(() => {
-  const isLaser = settings.deviceType === 'laser_plotter'
+  const isLaser     = settings.deviceType === 'laser_plotter'
+  const is3dPrinter = settings.deviceType === '3d_printer'
   const base = [
     { id: 'device',       label: 'Device' },
     ...(!isLaser ? [
