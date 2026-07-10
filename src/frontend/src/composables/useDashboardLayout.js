@@ -55,11 +55,11 @@ export function useDashboardLayout(dashboardId, defaultLayout) {
   // or an adjacent widget's edge, then clamps everything within bounds.
   // Works iteratively: clamp first, then inflate right/bottom edges,
   // then inflate left/top edges (moving origin requires adjusting size too).
-  function fitScreen(canvasWidth) {
+  function fitScreen(canvasWidth, canvasHeight) {
     if (!canvasWidth || canvasWidth <= 0) return
-    const ws = widgets.value.map(w => ({ ...w }))  // shallow copies to mutate
+    const ws = widgets.value.map(w => ({ ...w }))
 
-    // ── Step 1: clamp all widgets to canvas bounds ─────────────
+    // ── Step 1: clamp all widgets within canvas bounds ─────────────
     for (const w of ws) {
       w.x = Math.max(0, w.x)
       w.y = Math.max(0, w.y)
@@ -68,11 +68,9 @@ export function useDashboardLayout(dashboardId, defaultLayout) {
       w.h = Math.max(MIN_H, w.h)
     }
 
-    // ── Step 2: inflate right edge → nearest left edge or canvas ──
+    // ── Step 2: inflate right edge ─────────────────────────────────
     for (const w of ws) {
       const myRight = w.x + w.w
-      // Find the closest left edge of another widget that's to the right
-      // and overlaps vertically with this one
       let nearest = canvasWidth
       for (const o of ws) {
         if (o.id === w.id) continue
@@ -82,11 +80,13 @@ export function useDashboardLayout(dashboardId, defaultLayout) {
       w.w = nearest - w.x
     }
 
-    // ── Step 3: inflate bottom edge → nearest top edge or canvas bottom ──
-    const canvasH = ws.reduce((m, w) => Math.max(m, w.y + w.h), 0) + 200
+    // ── Step 3: inflate bottom edge — capped at visible canvas height ─
+    // If canvasHeight is provided, never push widgets past the bottom of the
+    // viewport; users can manually resize if they want a scrolling layout.
+    const bottomBound = canvasHeight ?? ws.reduce((m, w) => Math.max(m, w.y + w.h), 0)
     for (const w of ws) {
       const myBottom = w.y + w.h
-      let nearest = canvasH
+      let nearest = bottomBound
       for (const o of ws) {
         if (o.id === w.id) continue
         if (!horizOverlap(w, o)) continue
@@ -95,7 +95,7 @@ export function useDashboardLayout(dashboardId, defaultLayout) {
       w.h = nearest - w.y
     }
 
-    // ── Step 4: inflate left edge → nearest right edge or 0 ──────
+    // ── Step 4: inflate left edge ──────────────────────────────────
     for (const w of ws) {
       let nearest = 0
       for (const o of ws) {
@@ -109,7 +109,7 @@ export function useDashboardLayout(dashboardId, defaultLayout) {
       w.x  = newX
     }
 
-    // ── Step 5: inflate top edge → nearest bottom edge or 0 ──────
+    // ── Step 5: inflate top edge ───────────────────────────────────
     for (const w of ws) {
       let nearest = 0
       for (const o of ws) {
@@ -123,7 +123,7 @@ export function useDashboardLayout(dashboardId, defaultLayout) {
       w.y  = newY
     }
 
-    // ── Step 6: write back (snap to grid) ─────────────────────
+    // ── Step 6: write back with grid snap ──────────────────────────
     for (const w of ws) {
       const target = widgets.value.find(t => t.id === w.id)
       if (!target) continue

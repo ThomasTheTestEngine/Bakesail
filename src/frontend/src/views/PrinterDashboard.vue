@@ -1011,7 +1011,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.pd-root { position: relative; min-height: 100%; padding-bottom: 40px; }
+.pd-root { position: relative; min-height: 100%; }
 
 .pd-offline { display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin-bottom: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; color: var(--text-dim); }
 .pd-offline-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); opacity: 0.5; animation: pulse 1.2s ease-in-out infinite; }

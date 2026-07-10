@@ -100,9 +100,11 @@ function doRevert() {
 }
 
 function doFitScreen() {
-  const canvas = document.querySelector('.pd-root, .td-root, .ld-root')
-  const availW = canvas ? canvas.offsetWidth - 32 : window.innerWidth - 280
-  props.layout.fitScreen(availW)
+  const content = document.querySelector('.content')
+  const canvas  = document.querySelector('.pd-root, .td-root, .ld-root, .dashboard-root')
+  const availW  = canvas  ? canvas.offsetWidth   : (content?.offsetWidth   ?? window.innerWidth  - 220)
+  const availH  = content ? content.offsetHeight  : window.innerHeight
+  props.layout.fitScreen(availW, availH)
 }
 
 // ── Add widget dropdown ──────────────────────────────────────────
