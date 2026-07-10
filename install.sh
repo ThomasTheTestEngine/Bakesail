@@ -326,8 +326,22 @@ configure_nginx() {
     local nginx_src="${BAKESAIL_DIR}/config/nginx/bakesail.nginx.conf"
     [[ -f "${nginx_src}" ]] || die "Bakesail nginx config not found at ${nginx_src}."
 
-    sed "s|BAKESAIL_DIST_PATH|${BAKESAIL_DIR}/src/frontend/dist|g" \
-        "${nginx_src}" | sudo tee "${NGINX_BAKESAIL_CONF}" > /dev/null
+    if [[ -f "${NGINX_BAKESAIL_CONF}" ]] && ! grep -q "BAKESAIL_DIST_PATH" "${NGINX_BAKESAIL_CONF}"; then
+        # Config already installed with a real path — patch individual blocks
+        # rather than replacing the whole file (avoids clobbering the dist path).
+        info "Patching existing nginx config (preserving dist path)…"
+
+        # Add /bakesail/ location if not already present
+        if ! grep -q "location /bakesail/" "${NGINX_BAKESAIL_CONF}"; then
+            sudo sed -i '/location \/ {/i\    # Bakesail FS server — file browser API (advanced mode)\n    location \/bakesail\/ {\n        proxy_pass http:\/\/127.0.0.1:7127\/;\n        client_max_body_size 500M;\n        proxy_request_buffering off;\n    }\n' \
+                "${NGINX_BAKESAIL_CONF}"
+            info "Added /bakesail/ proxy to existing nginx config."
+        fi
+    else
+        # First install or placeholder still present — write the full config
+        sed "s|BAKESAIL_DIST_PATH|${BAKESAIL_DIR}/src/frontend/dist|g" \
+            "${nginx_src}" | sudo tee "${NGINX_BAKESAIL_CONF}" > /dev/null
+    fi
 
     if [[ ! -L "${NGINX_ENABLED}/bakesail" ]]; then
         sudo ln -s "${NGINX_BAKESAIL_CONF}" "${NGINX_ENABLED}/bakesail"
