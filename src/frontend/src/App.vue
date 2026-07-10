@@ -1074,6 +1074,13 @@ a { color: inherit; text-decoration: none; }
   overflow-y: auto;
   padding: 12px 16px;
 }
+/* Dashboard views need zero padding so widgets reach all edges */
+.content:has(.pd-root),
+.content:has(.ld-root),
+.content:has(.td-root),
+.content:has(.dashboard-root) {
+  padding: 0;
+}
 
 /* ── Console bar ────────────────────────────────────────────── */
 .cbar {
