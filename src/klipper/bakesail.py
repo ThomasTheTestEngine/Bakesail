@@ -306,7 +306,7 @@ class Bakesail:
         try:
             _start_fs_server()
         except Exception as e:
-            logging.warning("Bakesail: could not start FS server: %s", e)
+            logging.error("Bakesail: FS server failed to start: %s", e)
 
     # =========================================================================
     # Configuration parsing
@@ -740,7 +740,6 @@ class Bakesail:
 #   GET  /search?path=…&q=…  → {"results":[{"path":…,"is_dir":…}…]}
 # =============================================================================
 
-import socketserver
 import http.server
 import threading
 import email.parser
@@ -931,9 +930,10 @@ def _start_fs_server():
     global _fs_thread
     if _fs_thread is not None and _fs_thread.is_alive():
         return
-    socketserver.TCPServer.allow_reuse_address = True
-    srv = socketserver.TCPServer(('127.0.0.1', FS_PORT), _FSHandler)
-    _fs_thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    # http.server.HTTPServer is a TCPServer subclass with allow_reuse_address=True
+    srv = http.server.HTTPServer(('127.0.0.1', FS_PORT), _FSHandler)
+    _fs_thread = threading.Thread(target=srv.serve_forever, daemon=True,
+                                  name='bakesail-fs')
     _fs_thread.start()
     logging.info("Bakesail: FS server listening on 127.0.0.1:%d", FS_PORT)
 
