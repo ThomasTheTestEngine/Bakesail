@@ -15,7 +15,7 @@
       >
         <div class="cam-card-header">
           <div class="cam-card-title">{{ displayName(cam) }}</div>
-          <CrowsnestSettingsPopover v-if="isPrinter" :cam="cam" />
+          <CrowsnestSettingsPopover :cam="cam" />
         </div>
         <div class="cam-card-feed">
           <CameraFeed :cam="cam" :showLabel="false" />

@@ -376,7 +376,7 @@
                      placeholder="Custom name…" />
 
               <!-- Crowsnest gear (3d_printer only, non-test cameras) -->
-              <CrowsnestSettingsPopover v-if="is3dPrinter && !cam.test" :cam="cam" />
+              <CrowsnestSettingsPopover v-if="!cam.test" :cam="cam" />
 
               <button class="item-remove" @click="settings.removeCamera(cam.id)">×</button>
             </div>
@@ -795,8 +795,8 @@ async function doRevert() {
 }
 
 const sections = computed(() => {
-  const isLaser     = settings.deviceType === 'laser_plotter'
-  const is3dPrinter = settings.deviceType === '3d_printer'
+  const isLaser     = computed(() => settings.deviceType === 'laser_plotter')
+  const is3dPrinter = computed(() => settings.deviceType === '3d_printer')
   const base = [
     { id: 'device',       label: 'Device' },
     ...(!isLaser ? [
