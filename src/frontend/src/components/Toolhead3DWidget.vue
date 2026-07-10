@@ -147,21 +147,24 @@ function printerX(v) { return v.x }
 function printerY(v) { return v.z }
 function printerZ(v) { return v.y }
 
-// ── Theme colours (matching Bakesail dark palette) ────────────────────────────
+// ── Theme colours — matched to Bakesail CSS variables ─────────────────────────
+// --bg #0A0A0A  --surface #141414  --surface-2 #1C1C1C
+// --border #272727  --border-2 #333
+// --amber #F07FAA (pink/primary)  --teal #80B4E0 (blue)  --yellow #F0D87A
 const C = {
-  bg:       0x0d1117,
-  bed:      0x151e2c,
-  bedEdge:  0x1e3048,
-  grid:     0x1d2e42,
-  frame:    0x2a3f55,
-  zRail:    0x243448,
-  zHandle:  0x80B4E0,
-  cone:     0xF07FAA,
-  dropLine: 0xffffff,
-  zSlice:   0x80B4E0,
-  rulerX:   0x4dcfba,   // teal for X
-  rulerY:   0xF0D87A,   // amber for Y
-  rulerZ:   0x80B4E0,   // blue for Z
+  bg:       0x0A0A0A,   // --bg
+  bed:      0x141414,   // --surface
+  bedEdge:  0x333333,   // --border-2
+  grid:     0x222222,   // between surface and border
+  frame:    0x2a2a2a,   // slightly lighter than border
+  zRail:    0x1C1C1C,   // --surface-2
+  zHandle:  0x80B4E0,   // --teal (blue)
+  cone:     0xF07FAA,   // --amber (pink)
+  dropLine: 0xE8E8E8,   // --text
+  zSlice:   0x80B4E0,   // --teal
+  rulerX:   0xF07FAA,   // --amber (pink) — X axis
+  rulerY:   0xF0D87A,   // --yellow       — Y axis
+  rulerZ:   0x80B4E0,   // --teal (blue)  — Z axis
 }
 
 // ── Scene init ────────────────────────────────────────────────────────────────
@@ -221,17 +224,17 @@ function positionCamera() {
   const cx = xMax / 2
   const cz = yMax / 2
 
-  controls.target.set(cx, 0, cz)  // bed centre, on the bed surface
+  controls.target.set(cx, 0, cz)  // orbit pivot at bed centre, on the surface
 
-  const dist = Math.max(xMax, yMax, zMax) * 1.8
-  const azRad  = THREE.MathUtils.degToRad(45)   // 45° to the right from front
-  const elRad  = THREE.MathUtils.degToRad(22)   // ~20° up
+  const dist = Math.max(xMax, yMax, zMax) * 1.9
+  const azRad  = THREE.MathUtils.degToRad(20)   // slight right of straight-front
+  const elRad  = THREE.MathUtils.degToRad(30)   // 30° elevation
   camera.position.set(
     cx + dist * Math.sin(azRad) * Math.cos(elRad),
     dist * Math.sin(elRad),
     cz - dist * Math.cos(azRad) * Math.cos(elRad),
   )
-  controls.update()  // commits target + position into OrbitControls internal state
+  controls.update()
 }
 
 // ── Build the static geometry ──────────────────────────────────────────────────
@@ -432,7 +435,12 @@ function projectToScreen(worldPos) {
   }
 }
 
-// ── Mouse interaction ─────────────────────────────────────────────────────────
+// ── Pointer interaction ───────────────────────────────────────────────────────
+// Using pointer events (not mouse) so we can detect multi-finger gestures.
+// activePointerIds lets us skip our custom handler when two fingers are down,
+// letting OrbitControls take the event (two-finger = orbit, not XY move).
+const activePointerIds = new Set()
+
 function getNDC(e) {
   const rect = glCanvas.value.getBoundingClientRect()
   return {
@@ -455,9 +463,11 @@ function raycastScene(e) {
   return { type: 'none' }
 }
 
-function onMouseDown(e) {
-  if (e.button !== 0) return   // only left-click for our interactions
-  if (!isHomed.value) return   // disable when not homed
+function onPointerDown(e) {
+  activePointerIds.add(e.pointerId)
+  if (e.button !== 0) return              // right-click / two-finger-click → OrbitControls
+  if (activePointerIds.size > 1) return   // two fingers down → OrbitControls
+  if (!isHomed.value) return
 
   const hit = raycastScene(e)
 
@@ -478,8 +488,6 @@ function onMouseDown(e) {
     dragTarget.x = pos.x ?? 0
     dragTarget.y = pos.y ?? 0
     dragTarget.z = pos.z ?? 0
-    // Build a vertical plane through the rail that faces the camera.
-    // This makes Z dragging correct regardless of current orbit angle.
     const railPos = new THREE.Vector3(-12, 0, -12)
     const toCamera = new THREE.Vector3(
       camera.position.x - railPos.x, 0, camera.position.z - railPos.z,
@@ -489,10 +497,9 @@ function onMouseDown(e) {
     e.preventDefault()
     e.stopPropagation()
   }
-  // else: fall through to OrbitControls naturally
 }
 
-function onMouseMove(e) {
+function onPointerMove(e) {
   if (!isDragging.value) return
   const ndc = getNDC(e)
   raycaster.setFromCamera(ndc, camera)
@@ -513,7 +520,8 @@ function onMouseMove(e) {
   }
 }
 
-function onMouseUp(e) {
+function onPointerUp(e) {
+  activePointerIds.delete(e.pointerId)
   if (!isDragging.value) return
 
   if (dragMode === 'xy') {
@@ -595,10 +603,10 @@ onMounted(async () => {
 
   initScene()
 
-  // Mouse listeners on GL canvas
-  glCanvas.value.addEventListener('mousedown',  onMouseDown)
-  glCanvas.value.addEventListener('mousemove',  onMouseMove)
-  window.addEventListener('mouseup', onMouseUp)
+  // Pointer listeners on GL canvas
+  glCanvas.value.addEventListener('pointerdown', onPointerDown)
+  glCanvas.value.addEventListener('pointermove', onPointerMove)
+  window.addEventListener('pointerup', onPointerUp)
 
   // ResizeObserver
   resizeObserver = new ResizeObserver(onResize)
@@ -609,9 +617,9 @@ onUnmounted(() => {
   if (unsubStatus) unsubStatus()
   cancelAnimationFrame(animFrameId)
   resizeObserver?.disconnect()
-  glCanvas.value?.removeEventListener('mousedown', onMouseDown)
-  glCanvas.value?.removeEventListener('mousemove', onMouseMove)
-  window.removeEventListener('mouseup', onMouseUp)
+  glCanvas.value?.removeEventListener('pointerdown', onPointerDown)
+  glCanvas.value?.removeEventListener('pointermove', onPointerMove)
+  window.removeEventListener('pointerup', onPointerUp)
   controls?.dispose()
   renderer?.dispose()
 })
