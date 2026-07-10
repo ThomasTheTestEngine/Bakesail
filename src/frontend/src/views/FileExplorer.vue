@@ -39,6 +39,12 @@
         </label>
         <button class="btn btn-ghost btn-sm fe-btn" @click="downloadSelected"
                 :disabled="selectedFiles.length === 0">↓ Download</button>
+        <button class="btn btn-ghost btn-sm fe-btn" @click="editSelected"
+                :disabled="selectedFiles.length !== 1">✎ Edit</button>
+        <button class="btn btn-ghost btn-sm fe-btn" @click="duplicateSelected"
+                :disabled="selectedFiles.length !== 1 || !canWrite">⧉ Dupe</button>
+        <button class="btn btn-ghost btn-sm fe-btn" @click="promptRename"
+                :disabled="selected.size !== 1 || !canWrite">✏ Rename</button>
         <button class="btn btn-ghost btn-sm fe-btn" @click="promptNewFile"
                 :disabled="!canWrite">+ File</button>
         <button class="btn btn-ghost btn-sm fe-btn" @click="promptNewDir"
@@ -145,11 +151,23 @@
       </div>
     </div>
 
+    <!-- ── Text editor modal ───────────────────────────────── -->
+    <FileEditorModal
+      v-if="editorOpen"
+      :filePath="editorFilePath"
+      :fileName="editorFileName"
+      :advMode="adv"
+      :moonraker="editorMoonraker"
+      @close="editorOpen = false"
+      @saved="onEditorSaved"
+    />
+
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import FileEditorModal from '../components/FileEditorModal.vue'
 
 // ── Mode ───────────────────────────────────────────────────────────────────────
 const adv = ref(false)   // false = safe/Moonraker, true = advanced/bakesail
@@ -414,7 +432,88 @@ async function doDelete() {
   await fetchDir()
 }
 
-// ── Search ────────────────────────────────────────────────────────────────────
+// ── Editor ────────────────────────────────────────────────────────────────────
+const editorOpen      = ref(false)
+const editorFilePath  = ref('')
+const editorFileName  = ref('')
+const editorMoonraker = ref(null)
+
+function editSelected() {
+  if (selectedFiles.value.length !== 1) return
+  const name = selectedFiles.value[0]
+  editorFileName.value = name
+  if (adv.value) {
+    editorFilePath.value  = absPath.value.replace(/\/$/, '') + '/' + name
+    editorMoonraker.value = null
+  } else {
+    // Moonraker path used for both read URL and re-upload
+    editorFilePath.value  = [...segments.value, name].join('/')
+    editorMoonraker.value = {
+      root:    segments.value[0] ?? 'config',
+      subPath: segments.value.slice(1).join('/'),
+    }
+  }
+  editorOpen.value = true
+}
+
+function onEditorSaved() {
+  // Refresh listing in case file size changed
+  fetchDir()
+}
+
+// ── Duplicate ─────────────────────────────────────────────────────────────────
+async function duplicateSelected() {
+  if (selectedFiles.value.length !== 1 || !canWrite.value) return
+  const name = selectedFiles.value[0]
+  if (adv.value) {
+    const fullPath = absPath.value.replace(/\/$/, '') + '/' + name
+    await fetch(`/bakesail/duplicate?path=${encodeURIComponent(fullPath)}`, { method: 'POST' })
+  } else {
+    // Moonraker: download then re-upload with new name
+    const path  = [...segments.value, name].join('/')
+    const root  = segments.value[0] ?? 'config'
+    const sub   = segments.value.slice(1).join('/')
+    const r     = await fetch(`/server/files/${path}`)
+    if (!r.ok) return
+    const blob  = await r.blob()
+    const base  = name.includes('.') ? name.slice(0, name.lastIndexOf('.')) : name
+    const ext   = name.includes('.') ? name.slice(name.lastIndexOf('.')) : ''
+    // Find an unused name
+    let n = 2, destName
+    const existing = new Set(files.value.map(f => f.name))
+    do { destName = `${base}_${n}${ext}`; n++ } while (existing.has(destName))
+    const fd = new FormData()
+    fd.append('file', blob, destName)
+    fd.append('root', root)
+    if (sub) fd.append('path', sub)
+    await fetch('/server/files/upload', { method: 'POST', body: fd })
+  }
+  await fetchDir()
+}
+
+// ── Rename ────────────────────────────────────────────────────────────────────
+async function promptRename() {
+  if (selected.value.size !== 1 || !canWrite.value) return
+  const key    = [...selected.value][0]
+  const oldName = key.slice(2)
+  const newName = prompt('Rename to:', oldName)
+  if (!newName || newName === oldName) return
+
+  if (adv.value) {
+    const fullPath = absPath.value.replace(/\/$/, '') + '/' + oldName
+    await fetch(`/bakesail/rename?path=${encodeURIComponent(fullPath)}&name=${encodeURIComponent(newName)}`,
+                { method: 'POST' })
+  } else {
+    const oldPath = [...segments.value, oldName].join('/')
+    const newPath = [...segments.value, newName].join('/')
+    await fetch('/server/files/move', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ source: oldPath, dest: newPath }),
+    })
+  }
+  await fetchDir()
+}
 const searchTerm      = ref('')
 const lastSearchTerm  = ref('')
 const searchOpen      = ref(false)

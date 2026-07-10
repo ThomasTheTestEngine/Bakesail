@@ -42,11 +42,12 @@ class FSHandler(http.server.BaseHTTPRequestHandler):
         get = lambda k, d='': qs.get(k, [d])[0]
         ep  = p.rstrip('/')
 
-        if   ep == '/info':     self._info()
-        elif ep == '/list':     self._list(get('path', os.path.expanduser('~')))
-        elif ep == '/download': self._download(get('path'))
-        elif ep == '/search':   self._search(get('path', '/'), get('q', ''))
-        else:                   self._err(404, 'Not found')
+        if   ep == '/info':      self._info()
+        elif ep == '/list':      self._list(get('path', os.path.expanduser('~')))
+        elif ep == '/download':  self._download(get('path'))
+        elif ep == '/read':      self._read(get('path'))
+        elif ep == '/search':    self._search(get('path', '/'), get('q', ''))
+        else:                    self._err(404, 'Not found')
 
     def do_POST(self):
         p, _, qs_raw = self.path.partition('?')
@@ -54,10 +55,13 @@ class FSHandler(http.server.BaseHTTPRequestHandler):
         get = lambda k, d='': qs.get(k, [d])[0]
         ep  = p.rstrip('/')
 
-        if   ep == '/upload': self._upload(get('dir', os.path.expanduser('~')))
-        elif ep == '/mkdir':  self._mkdir(get('path'))
-        elif ep == '/delete': self._delete(get('path'))
-        else:                 self._err(404, 'Not found')
+        if   ep == '/upload':    self._upload(get('dir', os.path.expanduser('~')))
+        elif ep == '/mkdir':     self._mkdir(get('path'))
+        elif ep == '/delete':    self._delete(get('path'))
+        elif ep == '/duplicate': self._duplicate(get('path'))
+        elif ep == '/rename':    self._rename(get('path'), get('name'))
+        elif ep == '/write':     self._write(get('path'))
+        else:                    self._err(404, 'Not found')
 
     def do_DELETE(self):
         _, _, qs_raw = self.path.partition('?')
@@ -153,6 +157,67 @@ class FSHandler(http.server.BaseHTTPRequestHandler):
             else:
                 os.unlink(path)
             self._json({'deleted': path})
+        except Exception as e:
+            self._err(500, str(e))
+
+    def _read(self, path):
+        """Return file contents as text for the editor."""
+        path = os.path.realpath(os.path.expanduser(path))
+        if not os.path.isfile(path):
+            return self._err(404, 'File not found: ' + path)
+        try:
+            size = os.path.getsize(path)
+            if size > 5 * 1024 * 1024:  # 5 MB safety limit for editor
+                return self._err(400, 'File too large for editor (>5 MB)')
+            with open(path, 'r', errors='replace') as f:
+                content = f.read()
+            self._json({'path': path, 'content': content})
+        except Exception as e:
+            self._err(500, str(e))
+
+    def _write(self, path):
+        """Write text body to file (editor save)."""
+        path = os.path.realpath(os.path.expanduser(path))
+        cl   = int(self.headers.get('Content-Length', 0) or 0)
+        body = self.rfile.read(cl)
+        try:
+            with open(path, 'wb') as f:
+                f.write(body)
+            self._json({'saved': path})
+        except Exception as e:
+            self._err(500, str(e))
+
+    def _duplicate(self, path):
+        """Copy a file, appending _2, _3, … before the extension until unique."""
+        path = os.path.realpath(os.path.expanduser(path))
+        if not os.path.isfile(path):
+            return self._err(404, 'File not found: ' + path)
+        base, ext = os.path.splitext(path)
+        n = 2
+        while True:
+            dest = f'{base}_{n}{ext}'
+            if not os.path.exists(dest):
+                break
+            n += 1
+        try:
+            shutil.copy2(path, dest)
+            self._json({'original': path, 'copy': dest})
+        except Exception as e:
+            self._err(500, str(e))
+
+    def _rename(self, path, new_name):
+        """Rename a file or directory within the same parent directory."""
+        path = os.path.realpath(os.path.expanduser(path))
+        if not os.path.exists(path):
+            return self._err(404, 'Not found: ' + path)
+        if not new_name or '/' in new_name or new_name in ('.', '..'):
+            return self._err(400, 'Invalid name: ' + new_name)
+        dest = os.path.join(os.path.dirname(path), new_name)
+        if os.path.exists(dest):
+            return self._err(409, 'Already exists: ' + dest)
+        try:
+            os.rename(path, dest)
+            self._json({'renamed': dest})
         except Exception as e:
             self._err(500, str(e))
 

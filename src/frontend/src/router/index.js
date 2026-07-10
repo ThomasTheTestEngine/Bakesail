@@ -79,7 +79,7 @@ export const ALL_TABS = [
   {
     path: '/files',
     name: 'files',
-    label: 'Files',
+    label: 'File Manager',
     icon: '◫',
     component: FileExplorer,
   },
