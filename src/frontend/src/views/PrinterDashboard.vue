@@ -765,7 +765,7 @@ function buildDefaultLayout() {
   const tempsH    = Math.round((monitorH - gap) / 2)
 
   return [
-    { id: 'toolhead',  type: 'toolhead',  x: 0,          y: 0,        w: colW,      h: monitorY - gap, config: {} },
+    { id: 'toolhead',  type: 'toolhead3d', x: 0,          y: 0,        w: colW,      h: monitorY - gap, config: {} },
     ...(hasCam ? [{ id: 'camera', type: 'camera', x: colW + gap, y: 0, w: camW, h: monitorY - gap, config: {} }] : []),
     { id: 'speedflow', type: 'speedflow', x: rightColX,  y: 0,        w: colW,      h: extruderH,      config: {} },
     { id: 'chart',     type: 'chart',     x: 0,          y: monitorY, w: chartW,    h: monitorH,       config: {} },

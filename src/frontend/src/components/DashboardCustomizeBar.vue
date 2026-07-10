@@ -50,6 +50,7 @@
 
       <button class="btn btn-ghost btn-sm" @click="promptSaveAs">Save As…</button>
       <button class="btn btn-ghost btn-sm" @click="doRevert">↺ Reset</button>
+      <button class="btn btn-ghost btn-sm" @click="doFitScreen" title="Expand all widget edges to fill gaps and reach canvas boundary">⤢ Fit Screen</button>
       <span v-if="layout.saveMsg.value" class="dt-save-msg">{{ layout.saveMsg.value }}</span>
 
       <div class="add-widget-wrap" @click.stop>
@@ -96,6 +97,12 @@ function exitCustomize() {
 function doRevert() {
   if (props.getDefaultLayout) props.layout.revertToDefault(props.getDefaultLayout())
   else props.layout.revertToDefault()
+}
+
+function doFitScreen() {
+  const canvas = document.querySelector('.pd-root, .td-root, .ld-root')
+  const availW = canvas ? canvas.offsetWidth - 32 : window.innerWidth - 280
+  props.layout.fitScreen(availW)
 }
 
 // ── Add widget dropdown ──────────────────────────────────────────

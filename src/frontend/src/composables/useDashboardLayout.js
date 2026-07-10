@@ -50,8 +50,98 @@ export function useDashboardLayout(dashboardId, defaultLayout) {
   }
   function closeWidgetSettings() { openWidgetSettings.value = null }
 
-  // ── Grid snap ──────────────────────────────────────────────
-  const gridSize = computed(() => settings.dashboardGridSnap ? (settings.dashboardGridSize || 20) : 1)
+  // ── Fit Screen ─────────────────────────────────────────────
+  // Expands each widget's edges outward until they meet the canvas boundary
+  // or an adjacent widget's edge, then clamps everything within bounds.
+  // Works iteratively: clamp first, then inflate right/bottom edges,
+  // then inflate left/top edges (moving origin requires adjusting size too).
+  function fitScreen(canvasWidth) {
+    if (!canvasWidth || canvasWidth <= 0) return
+    const ws = widgets.value.map(w => ({ ...w }))  // shallow copies to mutate
+
+    // ── Step 1: clamp all widgets to canvas bounds ─────────────
+    for (const w of ws) {
+      w.x = Math.max(0, w.x)
+      w.y = Math.max(0, w.y)
+      if (w.x + w.w > canvasWidth) w.w = canvasWidth - w.x
+      w.w = Math.max(MIN_W, w.w)
+      w.h = Math.max(MIN_H, w.h)
+    }
+
+    // ── Step 2: inflate right edge → nearest left edge or canvas ──
+    for (const w of ws) {
+      const myRight = w.x + w.w
+      // Find the closest left edge of another widget that's to the right
+      // and overlaps vertically with this one
+      let nearest = canvasWidth
+      for (const o of ws) {
+        if (o.id === w.id) continue
+        if (!vertOverlap(w, o)) continue
+        if (o.x >= myRight) nearest = Math.min(nearest, o.x)
+      }
+      w.w = nearest - w.x
+    }
+
+    // ── Step 3: inflate bottom edge → nearest top edge or canvas bottom ──
+    const canvasH = ws.reduce((m, w) => Math.max(m, w.y + w.h), 0) + 200
+    for (const w of ws) {
+      const myBottom = w.y + w.h
+      let nearest = canvasH
+      for (const o of ws) {
+        if (o.id === w.id) continue
+        if (!horizOverlap(w, o)) continue
+        if (o.y >= myBottom) nearest = Math.min(nearest, o.y)
+      }
+      w.h = nearest - w.y
+    }
+
+    // ── Step 4: inflate left edge → nearest right edge or 0 ──────
+    for (const w of ws) {
+      let nearest = 0
+      for (const o of ws) {
+        if (o.id === w.id) continue
+        if (!vertOverlap(w, o)) continue
+        const oRight = o.x + o.w
+        if (oRight <= w.x) nearest = Math.max(nearest, oRight)
+      }
+      const newX = nearest
+      w.w += w.x - newX
+      w.x  = newX
+    }
+
+    // ── Step 5: inflate top edge → nearest bottom edge or 0 ──────
+    for (const w of ws) {
+      let nearest = 0
+      for (const o of ws) {
+        if (o.id === w.id) continue
+        if (!horizOverlap(w, o)) continue
+        const oBot = o.y + o.h
+        if (oBot <= w.y) nearest = Math.max(nearest, oBot)
+      }
+      const newY = nearest
+      w.h += w.y - newY
+      w.y  = newY
+    }
+
+    // ── Step 6: write back (snap to grid) ─────────────────────
+    for (const w of ws) {
+      const target = widgets.value.find(t => t.id === w.id)
+      if (!target) continue
+      target.x = snap(Math.max(0, w.x))
+      target.y = snap(Math.max(0, w.y))
+      target.w = Math.max(MIN_W, snap(w.w))
+      target.h = Math.max(MIN_H, snap(w.h))
+    }
+  }
+
+  // vertical overlap: do the two widgets share any Y range?
+  function vertOverlap(a, b) {
+    return a.y < b.y + b.h && a.y + a.h > b.y
+  }
+  // horizontal overlap: do the two widgets share any X range?
+  function horizOverlap(a, b) {
+    return a.x < b.x + b.w && a.x + a.w > b.x
+  }
 
   function snap(v) {
     const g = gridSize.value
@@ -273,6 +363,7 @@ export function useDashboardLayout(dashboardId, defaultLayout) {
     revertToDefault,
     saveLayout, loadLayout, fetchAvailableLayouts,
     applyLayout,
+    fitScreen,
     tryAutoLoad,
 
     // Helpers
