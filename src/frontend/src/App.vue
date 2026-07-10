@@ -479,7 +479,10 @@ watch(cbarOpen, async (isOpen) => {
 const host = window.location.hostname
 
 const deviceStore = useDeviceStore()
-const visibleTabs = computed(() => tabsForDevice(settings.deviceType || 'oven'))
+const visibleTabs = computed(() => {
+  if (!settings._loaded) return []
+  return tabsForDevice(settings.deviceType || 'oven')
+})
 
 // ── Topbar status ──────────────────────────────────────────────
 // Priority: klippy offline > klippy state > printer state > idle_timeout

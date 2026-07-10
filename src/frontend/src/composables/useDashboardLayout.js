@@ -148,6 +148,8 @@ export function useDashboardLayout(dashboardId, defaultLayout) {
     return Math.round(v / g) * g
   }
 
+  const gridSize = computed(() => settings.dashboardGridSnap ? (settings.dashboardGridSize || 20) : 1)
+
   // ── Drag ──────────────────────────────────────────────────
   let _drag = null
 
