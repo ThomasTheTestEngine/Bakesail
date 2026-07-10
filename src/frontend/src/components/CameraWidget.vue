@@ -49,7 +49,7 @@ const label = computed(() => cameraDisplayName(cam.value))
 
 <style scoped>
 .w-camera     { display: flex; flex-direction: column; gap: 6px; height: 100%; }
-.wc-cam-title { font-size: 10px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: var(--text-muted); flex-shrink: 0; }
+.wc-cam-title { font-size: 10px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: var(--text-muted); flex-shrink: 0; text-align: center; }
 .wc-cam-feed  { flex: 1; border-radius: var(--radius); overflow: hidden; min-height: 0; }
 .wc-cam-empty { font-size: 11px; color: var(--text-muted); font-style: italic; }
 </style>

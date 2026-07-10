@@ -209,6 +209,23 @@ export function useDashboardLayout(dashboardId, defaultLayout) {
     window.addEventListener('pointerup', onResizeEnd)
   }
 
+  const EDGE_SNAP_PX = 25  // snap threshold in px
+
+  // Find nearest widget edge within threshold; return it or grid-snap fallback
+  function snapToNearestEdge(value, widgetId, axis) {
+    let best = null
+    let bestDist = EDGE_SNAP_PX
+    for (const o of widgets.value) {
+      if (o.id === widgetId) continue
+      const edges = axis === 'x' ? [o.x, o.x + o.w] : [o.y, o.y + o.h]
+      for (const e of edges) {
+        const d = Math.abs(value - e)
+        if (d < bestDist) { bestDist = d; best = e }
+      }
+    }
+    return best !== null ? best : snap(value)
+  }
+
   function onResizeMove(e) {
     if (!_resize) return
     const widget = widgets.value.find(w => w.id === _resize.widgetId)
@@ -217,16 +234,28 @@ export function useDashboardLayout(dashboardId, defaultLayout) {
     const dy = e.clientY - _resize.startY
     const { handle } = _resize
 
-    if (handle.includes('e')) widget.w = Math.max(MIN_W, snap(_resize.origW + dx))
-    if (handle.includes('s')) widget.h = Math.max(MIN_H, snap(_resize.origH + dy))
+    if (handle.includes('e')) {
+      const rawRight = _resize.origX + _resize.origW + dx
+      const snappedRight = snapToNearestEdge(rawRight, widget.id, 'x')
+      widget.w = Math.max(MIN_W, snappedRight - widget.x)
+    }
+    if (handle.includes('s')) {
+      const rawBottom = _resize.origY + _resize.origH + dy
+      const snappedBottom = snapToNearestEdge(rawBottom, widget.id, 'y')
+      widget.h = Math.max(MIN_H, snappedBottom - widget.y)
+    }
     if (handle.includes('w')) {
-      const newW = Math.max(MIN_W, snap(_resize.origW - dx))
-      widget.x = snap(_resize.origX + (_resize.origW - newW))
+      const rawLeft = _resize.origX + dx
+      const snappedLeft = snapToNearestEdge(rawLeft, widget.id, 'x')
+      const newW = Math.max(MIN_W, _resize.origX + _resize.origW - snappedLeft)
+      widget.x = _resize.origX + _resize.origW - newW
       widget.w = newW
     }
     if (handle.includes('n')) {
-      const newH = Math.max(MIN_H, snap(_resize.origH - dy))
-      widget.y = Math.max(0, snap(_resize.origY + (_resize.origH - newH)))
+      const rawTop = _resize.origY + dy
+      const snappedTop = snapToNearestEdge(rawTop, widget.id, 'y')
+      const newH = Math.max(MIN_H, _resize.origY + _resize.origH - snappedTop)
+      widget.y = Math.max(0, _resize.origY + _resize.origH - newH)
       widget.h = newH
     }
   }

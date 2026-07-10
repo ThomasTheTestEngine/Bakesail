@@ -561,8 +561,26 @@ const printer = reactive({
   extrudeFeedrate: 5,
 })
 
-const HISTORY_LEN = 300
+const HISTORY_LEN = 600  // 600 × 2s ≈ 20 min
 const tempHistory = reactive({ hotend: [], bed: [] })
+
+// Uniform 2s sampler — Klipper diffs omit unchanged temps, so status-only
+// pushing causes sensors to fill different fractions of the chart window.
+let _historyTimer = null
+function _pushHistory(t) {
+  const push = (key, val) => {
+    if (val == null) return
+    if (!tempHistory[key]) tempHistory[key] = []
+    tempHistory[key].push({ t, v: val })
+    if (tempHistory[key].length > HISTORY_LEN) tempHistory[key].shift()
+  }
+  push('hotend', printer.hotendTemp)
+  push('bed',    printer.bedTemp)
+  for (const [key, val] of Object.entries(deviceStore.dynamicObjects)) {
+    if (key.startsWith('temperature_sensor ') && val.temperature != null)
+      push(key, val.temperature)
+  }
+}
 
 function handleStatus(data) {
   if (data.extruder) {
@@ -614,24 +632,8 @@ function handleStatus(data) {
     printDuration: printer.printDuration,
     qglApplied:    data.quad_gantry_level?.applied ?? undefined,
   })
-
-  const t = Date.now()
-  if (data.extruder?.temperature != null) {
-    tempHistory.hotend.push({ t, v: printer.hotendTemp })
-    if (tempHistory.hotend.length > HISTORY_LEN) tempHistory.hotend.shift()
-  }
-  if (data.heater_bed?.temperature != null) {
-    tempHistory.bed.push({ t, v: printer.bedTemp })
-    if (tempHistory.bed.length > HISTORY_LEN) tempHistory.bed.shift()
-  }
-  // Track temperature_sensor * objects
-  for (const [key, val] of Object.entries(data)) {
-    if (key.startsWith('temperature_sensor ') && val.temperature != null) {
-      if (!tempHistory[key]) tempHistory[key] = []
-      tempHistory[key].push({ t, v: val.temperature })
-      if (tempHistory[key].length > HISTORY_LEN) tempHistory[key].shift()
-    }
-  }
+  // History is now pushed by the uniform 2s timer (_pushHistory) rather than
+  // here, so all sensors fill the same fraction of the chart window.
 }
 
 // ── State label / colour ───────────────────────────────────────
@@ -958,11 +960,11 @@ function drawCharts() {
       ctx.fillText((maxT - ((maxT - minT) / ySteps) * i).toFixed(0) + '°', pad.l - 2, y + 4)
     }
 
-    // X time axis labels — left=oldest, right=now
+    // X time axis labels — left=now, right=oldest (chart scrolls left→right)
     const xSteps = 6
     ctx.fillStyle = colT; ctx.font = '10px system-ui'
     for (let i = 0; i <= xSteps; i++) {
-      const t = tMin + (windowMs / xSteps) * i
+      const t = tMax - (windowMs / xSteps) * i   // left=now, right=oldest
       const x = pad.l + (pw / xSteps) * i
       const ago = Math.round((now - t) / 60000)
       const label = ago === 0 ? 'now' : `-${ago}m`
@@ -970,13 +972,13 @@ function drawCharts() {
       ctx.fillText(label, x, h - 4)
     }
 
-    // Draw each series
+    // Draw each series (x maps newest to left: x = pad.l + (tMax - p.t)/windowMs * pw)
     let li = 0
     for (const s of seriesData) {
       if (s.pts.length < 2) { li++; continue }
       ctx.strokeStyle = s.colour; ctx.lineWidth = 1.5; ctx.beginPath()
       s.pts.forEach((p, i) => {
-        const x = pad.l + ((p.t - tMin) / windowMs) * pw
+        const x = pad.l + ((tMax - p.t) / windowMs) * pw   // newest on left
         const y = pad.t + ph - ((p.v - minT) / (maxT - minT)) * ph
         i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
       })
@@ -998,11 +1000,13 @@ onMounted(async () => {
   await layout.tryAutoLoad()
   unsubscribe = subscribeToStatus(handleStatus)
   chartTimer = setInterval(drawCharts, 1000)
+  _historyTimer = setInterval(() => _pushHistory(Date.now()), 2000)
 })
 
 onUnmounted(() => {
   if (unsubscribe) unsubscribe()
-  if (chartTimer) clearInterval(chartTimer)
+  if (chartTimer)   clearInterval(chartTimer)
+  if (_historyTimer) clearInterval(_historyTimer)
 })
 </script>
 
