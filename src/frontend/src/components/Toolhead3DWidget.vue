@@ -181,7 +181,6 @@ function initScene() {
 
   // Camera
   camera = new THREE.PerspectiveCamera(45, w / h, 1, 5000)
-  positionCamera()
 
   // OrbitControls — right-drag to orbit, scroll to zoom, left-drag on empty = orbit
   controls = new OrbitControls(camera, canvas)
@@ -197,6 +196,8 @@ function initScene() {
     ONE: THREE.TOUCH.ROTATE,
     TWO: THREE.TOUCH.DOLLY_PAN,
   }
+
+  positionCamera()  // needs controls to exist — must come after OrbitControls init
 
   raycaster  = new THREE.Raycaster()
   bedPlane   = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
