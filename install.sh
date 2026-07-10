@@ -158,6 +158,32 @@ TTYD_EOF
     success "bakesail-ttyd service enabled and started."
 }
 
+install_fs_server() {
+    info "Installing Bakesail FS server service…"
+    local script_src="${BAKESAIL_DIR}/src/fs_server/bakesail-fs.py"
+    local service_src="${BAKESAIL_DIR}/config/systemd/bakesail-fs.service"
+    local service_dest="/etc/systemd/system/bakesail-fs.service"
+
+    [[ -f "${script_src}" ]]  || die "bakesail-fs.py not found at ${script_src}"
+    [[ -f "${service_src}" ]] || die "bakesail-fs.service not found at ${service_src}"
+
+    chmod +x "${script_src}"
+
+    sed "s|FS_USER|${USER}|g; s|FS_SCRIPT_PATH|${script_src}|g" \
+        "${service_src}" | sudo tee "${service_dest}" > /dev/null
+
+    sudo systemctl daemon-reload
+    sudo systemctl enable bakesail-fs
+    sudo systemctl restart bakesail-fs
+
+    sleep 1
+    if systemctl is-active --quiet bakesail-fs; then
+        success "bakesail-fs service running on 127.0.0.1:7127."
+    else
+        warn "bakesail-fs failed to start — check: sudo journalctl -u bakesail-fs"
+    fi
+}
+
 install_node() {
     local current_major=0
     if command -v node &>/dev/null; then
@@ -481,6 +507,7 @@ main() {
     preflight_checks
     install_dependencies
     install_ttyd
+    install_fs_server
     clone_repo
     build_frontend
     install_klipper_extra

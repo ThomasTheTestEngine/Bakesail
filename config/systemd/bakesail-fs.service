@@ -1,0 +1,16 @@
+[Unit]
+Description=Bakesail FS Server (file browser API)
+After=network.target
+
+[Service]
+Type=simple
+User=FS_USER
+ExecStart=/usr/bin/python3 FS_SCRIPT_PATH
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bakesail-fs
+
+[Install]
+WantedBy=multi-user.target
