@@ -54,6 +54,7 @@ const SUBSCRIBED_OBJECTS = {
   display_status:  ['progress', 'message'],
   virtual_sdcard:  ['progress', 'is_active', 'file_position', 'file_size'],
   toolhead:        ['position', 'homed_axes', 'max_velocity', 'max_accel', 'square_corner_velocity'],
+  motion_report:   ['live_position', 'live_velocity'],
   gcode_move:      ['speed_factor', 'extrude_factor', 'homing_origin', 'speed'],
   idle_timeout:         ['state'],
   system_stats:         ['cputime', 'memavail', 'sysload'],

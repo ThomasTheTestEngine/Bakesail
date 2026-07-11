@@ -66,14 +66,24 @@ const props = defineProps({
 const { send, sendGcode, subscribeToStatus } = useMoonraker()
 
 // ── Printer state (self-subscribed) ───────────────────────────────────────────
-const pos       = reactive({ x: null, y: null, z: null })
+const pos     = reactive({ x: null, y: null, z: null })  // toolhead planned position (for display/gcode)
+const livePos = reactive({ x: null, y: null, z: null })  // motion_report live position (for 3D mesh)
 const homedAxes = ref('')
 
 function handleStatus(data) {
-  if (!data.toolhead) return
-  const th = data.toolhead
-  if (th.position    != null) { pos.x = th.position[0]; pos.y = th.position[1]; pos.z = th.position[2] }
-  if (th.homed_axes  != null) homedAxes.value = th.homed_axes
+  if (data.toolhead) {
+    const th = data.toolhead
+    if (th.position   != null) { pos.x = th.position[0]; pos.y = th.position[1]; pos.z = th.position[2] }
+    if (th.homed_axes != null) homedAxes.value = th.homed_axes
+  }
+  if (data.motion_report) {
+    const mr = data.motion_report
+    if (mr.live_position != null) {
+      livePos.x = mr.live_position[0]
+      livePos.y = mr.live_position[1]
+      livePos.z = mr.live_position[2]
+    }
+  }
 }
 
 // ── Homing state ──────────────────────────────────────────────────────────────
@@ -415,11 +425,11 @@ function gridStepForSize(size) {
 // ── Sync toolhead mesh to current printer position ───────────────────────────
 function syncToolhead() {
   if (!toolheadMesh) return
-  const x = pos.x ?? limits.xMax / 2
-  const y = pos.y ?? limits.yMax / 2
-  const z = pos.z ?? 0
-  // Group origin is motor centre; nozzle tip is 25 units below.
-  // Position group so tip is at printer Z height. Printer Y → Three.js -Z.
+  // Use live_position from motion_report if available — updates at MCU rate.
+  // Fall back to toolhead.position (planned pos, ~1Hz) if motion_report not yet received.
+  const x = livePos.x ?? pos.x ?? limits.xMax / 2
+  const y = livePos.y ?? pos.y ?? limits.yMax / 2
+  const z = livePos.z ?? pos.z ?? 0
   toolheadMesh.position.set(x, z + 25, -y)
   if (zHandleMesh) zHandleMesh.position.y = z
 }
@@ -652,6 +662,11 @@ onMounted(async () => {
       objects: { toolhead: ['position', 'homed_axes'] }
     })
     if (r?.status?.toolhead) handleStatus({ toolhead: r.status.toolhead })
+    // Also query motion_report for initial live position
+    try {
+      const r2 = await send('printer.objects.query', { objects: { motion_report: ['live_position'] } })
+      if (r2?.status?.motion_report) handleStatus({ motion_report: r2.status.motion_report })
+    } catch { /* optional */ }
   } catch { /* degrade gracefully */ }
 
   // fetchLimits sets limitsReady which makes wrapEl render, so wait a tick
@@ -689,8 +704,8 @@ onUnmounted(() => {
 })
 
 // ── Reactivity: sync toolhead position into scene ─────────────────────────────
-watch(() => [pos.x, pos.y, pos.z], () => {
-  // Don't snap toolhead back to real position while user is manually positioning
+// Watch both motion_report (fast, for mesh) and toolhead.position (for display fallback)
+watch(() => [livePos.x, livePos.y, livePos.z, pos.x, pos.y, pos.z], () => {
   if (isDragging.value) return
   syncToolhead()
 })
