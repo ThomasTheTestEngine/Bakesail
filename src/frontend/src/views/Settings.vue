@@ -528,77 +528,9 @@
           </div>
         </template>
 
-        <!-- Write config -->
+        <!-- Edit Config -->
         <template v-else-if="activeSection === 'config'">
-          <div class="section-title">Write Config</div>
-          <p class="section-note">
-            Preview the config that will be generated from your current settings.
-            Edit before applying, backup the current config, or revert to a known good one.
-          </p>
-
-          <div class="config-toolbar">
-            <button class="btn btn-ghost btn-sm" @click="editMode = !editMode">
-              {{ editMode ? '✕ Cancel Edit' : '✎ Edit' }}
-            </button>
-            <button class="btn btn-ghost btn-sm" @click="backupConfig" :disabled="backingUp">
-              {{ backingUp ? 'Saving…' : '⬇ Backup Current' }}
-            </button>
-            <button class="btn btn-ghost btn-sm" @click="loadDefaultSettings">
-              ↺ Load Defaults
-            </button>
-            <button class="btn btn-ghost btn-sm" @click="showRevertDialog = true" :disabled="goodConfigs.length === 0"
-                    :title="goodConfigs.length === 0 ? 'No good configs saved yet' : ''">
-              ⟲ Revert to Good
-            </button>
-            <button class="btn btn-ghost btn-sm" @click="router.push('/wizard')">
-              ⊞ Re-run Wizard
-            </button>
-          </div>
-
-          <div v-if="saveError" class="save-error">{{ saveError }}</div>
-
-          <textarea v-if="editMode"
-            class="config-preview config-edit"
-            v-model="editedConfig"
-          ></textarea>
-          <pre v-else class="config-preview">{{ configPreview }}</pre>
-
-          <!-- Revert dialog -->
-          <div v-if="showRevertDialog" class="modal-overlay" @click.self="showRevertDialog = false">
-            <div class="revert-dialog card">
-              <div class="section-title">Revert to Good Config</div>
-              <div class="revert-list">
-                <button
-                  v-for="cfg in goodConfigs"
-                  :key="cfg.name"
-                  class="revert-item"
-                  @click="confirmRevert(cfg)"
-                >
-                  <span class="revert-name">{{ cfg.label }}</span>
-                  <span class="revert-date">{{ cfg.date }}</span>
-                </button>
-              </div>
-              <button class="btn btn-ghost btn-sm" style="margin-top:12px;width:100%"
-                      @click="showRevertDialog = false">Cancel</button>
-            </div>
-          </div>
-
-          <!-- Revert confirm dialog -->
-          <div v-if="revertTarget" class="modal-overlay" @click.self="revertTarget = null">
-            <div class="revert-dialog card">
-              <div class="section-title">Confirm Revert</div>
-              <p class="section-note">
-                Revert to <strong>{{ revertTarget.label }}</strong>?<br>
-                Current config will be replaced and Klipper will restart.
-              </p>
-              <div class="config-toolbar" style="margin-top:16px">
-                <button class="btn btn-danger" :disabled="reverting" @click="doRevert">
-                  {{ reverting ? 'Reverting…' : 'Yes, Revert' }}
-                </button>
-                <button class="btn btn-ghost" @click="revertTarget = null">Cancel</button>
-              </div>
-            </div>
-          </div>
+          <ConfigEditor class="ce-settings-embed" />
         </template>
 
       </div>
@@ -633,6 +565,7 @@ import { saveBakesailCfg, ensurePrinterCfgInclude, generateBakesailCfg } from '.
 import { useMoonraker } from '../composables/useMoonraker.js'
 import { cameraTypeLabel } from '../utils/cameraTypes.js'
 import CrowsnestSettingsPopover from '../components/CrowsnestSettingsPopover.vue'
+import ConfigEditor from '../components/ConfigEditor.vue'
 
 const router   = useRouter()
 const settings = useSettingsStore()
@@ -825,9 +758,8 @@ const sections = computed(() => {
       { id: 'steppers',     label: 'Stepper Slots' },
       { id: 'movement',     label: 'Movement' },
     ] : []),
-    { id: 'current',          label: 'View Current Config' },
     { id: 'dashboard_prefs', label: 'Dashboard' },
-    { id: 'config',           label: 'Write Config' },
+    { id: 'config',           label: 'Edit Config' },
   ]
   return base
 })
@@ -923,6 +855,16 @@ onMounted(() => {
   border-radius: var(--radius-lg);
   padding: 20px;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* ConfigEditor fills available space — remove padding when it's active */
+.ce-settings-embed {
+  margin: -20px;
+  flex: 1;
+  min-height: 0;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
 }
 
 .section-title {

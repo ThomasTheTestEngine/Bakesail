@@ -48,6 +48,18 @@
         <!-- CodeMirror mount point -->
         <div v-else ref="cmEl" class="fed-cm"></div>
 
+        <!-- Unsaved changes warning -->
+        <div v-if="closeConfirm" class="fed-confirm-bg">
+          <div class="fed-confirm">
+            <div class="fed-confirm-title">Unsaved Changes</div>
+            <p class="fed-confirm-note"><strong>{{ fileName }}</strong> has unsaved changes. Close anyway?</p>
+            <div class="fed-confirm-actions">
+              <button class="btn btn-ghost btn-sm" @click="closeConfirm = false">Cancel</button>
+              <button class="btn btn-sm fed-btn-danger" @click="forceClose">Discard & Close</button>
+            </div>
+          </div>
+        </div>
+
         <!-- Status bar -->
         <div class="fed-statusbar">
           <span>Ln {{ cursorLine }}, Col {{ cursorCol }}</span>
@@ -97,8 +109,9 @@ const saving      = ref(false)
 const saveMsg     = ref('')
 const saveMsgErr  = ref(false)
 const highlighted = ref(true)
-const cursorLine  = ref(1)
-const cursorCol   = ref(1)
+const cursorLine   = ref(1)
+const cursorCol    = ref(1)
+const closeConfirm = ref(false)
 
 let view          = null   // CodeMirror EditorView
 let originalText  = ''
@@ -278,7 +291,11 @@ async function save() {
 
 // ── Close guard ───────────────────────────────────────────────────────────────
 function tryClose() {
-  if (dirty.value && !confirm('You have unsaved changes. Close anyway?')) return
+  if (dirty.value) { closeConfirm.value = true; return }
+  emit('close')
+}
+function forceClose() {
+  closeConfirm.value = false
   emit('close')
 }
 </script>
@@ -301,6 +318,7 @@ function tryClose() {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
 }
 
 .fed-header {
@@ -359,4 +377,24 @@ function tryClose() {
   flex-shrink: 0;
 }
 .fed-status-dirty { color: var(--amber); }
+
+/* Unsaved close warning */
+.fed-confirm-bg {
+  position: absolute; inset: 0; z-index: 10;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius);
+}
+.fed-confirm {
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px;
+  width: 320px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+}
+.fed-confirm-title { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 8px; }
+.fed-confirm-note  { font-size: 12px; color: var(--text-dim); margin-bottom: 0; }
+.fed-confirm-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+.fed-btn-danger { background: var(--red, #e05555); color: #fff; border-color: var(--red, #e05555); }
 </style>
