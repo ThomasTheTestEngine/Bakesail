@@ -121,17 +121,17 @@
               <div class="topbar-macro-menu-section" style="margin-top:6px">Common Commands</div>
               <button v-for="m in COMMON_MACROS" :key="m.name"
                       class="topbar-macro-menu-item"
-                      :disabled="isPinned(m.name)"
-                      @click="addMacro(m.name, m.label)">
-                {{ m.label }}<span v-if="isPinned(m.name)" style="opacity:0.4;font-size:10px"> ✓</span>
+                      :class="{ 'topbar-macro-menu-item--pinned': isPinned(m.name) }"
+                      @click="isPinned(m.name) ? removeMacroByName(m.name) : addMacro(m.name, m.label)">
+                {{ m.label }}<span v-if="isPinned(m.name)" style="font-size:10px"> ✓ remove</span>
               </button>
               <template v-if="availableKlipperMacros.length > 0">
                 <div class="topbar-macro-menu-section" style="margin-top:6px">Klipper Macros</div>
                 <button v-for="name in availableKlipperMacros" :key="name"
                         class="topbar-macro-menu-item"
-                        :disabled="isPinned(name)"
-                        @click="addMacro(name)">
-                  {{ name }}<span v-if="isPinned(name)" style="opacity:0.4;font-size:10px"> ✓</span>
+                        :class="{ 'topbar-macro-menu-item--pinned': isPinned(name) }"
+                        @click="isPinned(name) ? removeMacroByName(name) : addMacro(name)">
+                  {{ name }}<span v-if="isPinned(name)" style="font-size:10px"> ✓ remove</span>
                 </button>
               </template>
             </div>
@@ -152,7 +152,7 @@
           </div>
 
           <!-- Right: print controls + system -->
-          <div class="topbar-actions">
+          <div class="topbar-actions" ref="topbarActionsEl">
             <button v-if="klippyState === 'ready' && deviceStore.printerState === 'standby'"
                     class="topbar-btn topbar-btn--lit" @click="openFileDialog" title="Load file">
 <i class="mdi mdi-file-upload-outline" style="font-size:14px;margin-right:3px;vertical-align:-2px"></i>Load
@@ -378,9 +378,10 @@ const { connected, klippyState, connect, send, sendGcode, subscribeToConsole, fe
 // ── Macro bar ──────────────────────────────────────────────────────────────────
 const BAR_H = 42          // px per row
 const SNAP_PX = 14        // snap radius for chip edges
-const macroMenuOpen  = ref(false)
-const macroBarEl     = ref(null)
-const macroAddEl     = ref(null)
+const macroMenuOpen    = ref(false)
+const macroBarEl       = ref(null)
+const macroAddEl       = ref(null)
+const topbarActionsEl  = ref(null)
 const macroMenuStyle = ref({})
 
 // Number of extra rows (0 = just the topbar row). Persisted in settings.
@@ -411,10 +412,14 @@ function packedInRow(row)   { return macrosInRow(row).filter(m => (m.x ?? null) 
 function floatingInRow(row) { return macrosInRow(row).filter(m => (m.x ?? null) !== null) }
 
 function chipFloatStyle(m) {
-  // Clamp to row width on render
-  const rowW = macroBarEl.value?.closest('.topbar-wrap')?.offsetWidth ?? window.innerWidth
-  const x = Math.min(m.x ?? 0, rowW - 80)
-  return { position: 'absolute', left: x + 'px', top: '50%', transform: 'translateY(-50%)' }
+  const wrapEl = macroBarEl.value?.closest('.topbar-wrap')
+  const rowW   = wrapEl?.offsetWidth ?? window.innerWidth
+  // For row 0: clamp right boundary to left edge of actions panel
+  const safeW = (m.row ?? 0) === 0 && topbarActionsEl.value
+    ? topbarActionsEl.value.getBoundingClientRect().left - (wrapEl?.getBoundingClientRect().left ?? 0) - 8
+    : rowW
+  const x = Math.min(m.x ?? 0, safeW - 80)
+  return { position: 'absolute', left: x + 'px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'auto' }
 }
 
 // toggleMacroMenu defined below with row support
@@ -489,8 +494,13 @@ function macroDragStart(evt, m) {
       if (x < packedEnd + 12) { ds.currentX = null; return }
     }
 
+    // Right boundary: row 0 stops before actions panel; other rows use full width
+    const safeRight = rowIdx === 0 && topbarActionsEl.value
+      ? topbarActionsEl.value.getBoundingClientRect().left - wrapRect.left - 8
+      : wrapRect.width
+
     // Clamp to row bounds
-    x = Math.max(0, Math.min(x, wrapRect.width - ds.chipW))
+    x = Math.max(0, Math.min(x, safeRight - ds.chipW))
 
     // Snap to sibling floating chip edges
     const siblings = settings.pinnedMacros.filter(s =>
@@ -503,8 +513,8 @@ function macroDragStart(evt, m) {
       if (Math.abs(x - (s.x + sW + 4)) < SNAP_PX)       { x = s.x + sW + 4; break }
       if (Math.abs((x + ds.chipW + 4) - s.x) < SNAP_PX) { x = s.x - ds.chipW - 4; break }
     }
-    // Snap right edge
-    const rightEdge = wrapRect.width - ds.chipW
+    // Snap right edge of safe area
+    const rightEdge = safeRight - ds.chipW
     if (Math.abs(x - rightEdge) < SNAP_PX) x = rightEdge
 
     ds.currentX = Math.round(x)
@@ -538,9 +548,11 @@ function macroDragStart(evt, m) {
           safeX = s.x + sW + 4
         }
       }
-      const rowW = ds.wrapEl.offsetWidth
+      const safeRight2 = ds.currentRow === 0 && topbarActionsEl.value
+        ? topbarActionsEl.value.getBoundingClientRect().left - ds.wrapEl.getBoundingClientRect().left - 8
+        : ds.wrapEl.offsetWidth
       m.row = ds.currentRow
-      m.x   = Math.round(Math.min(safeX, rowW - ds.chipW))
+      m.x   = Math.round(Math.min(safeX, safeRight2 - ds.chipW))
     } else {
       m.row = ds.currentRow
       m.x   = null
@@ -683,6 +695,13 @@ function removeMacro(m) {
   const idx = settings.pinnedMacros.findIndex(p => p.id === m.id)
   if (idx >= 0) settings.pinnedMacros.splice(idx, 1)
   settings.save()
+}
+
+function removeMacroByName(name) {
+  const idx = settings.pinnedMacros.findIndex(p => p.name === name)
+  if (idx >= 0) settings.pinnedMacros.splice(idx, 1)
+  settings.save()
+  macroMenuOpen.value = false
 }
 
 function runMacro(m) { sendGcode(m.name) }
@@ -1377,8 +1396,10 @@ a { color: inherit; text-decoration: none; }
   background: transparent; border: none; cursor: pointer;
   width: 100%;
 }
-.topbar-macro-menu-item:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+.topbar-macro-menu-item:hover:not(:disabled):not(.topbar-macro-menu-item--pinned) { background: var(--surface-2); color: var(--text); }
 .topbar-macro-menu-item:disabled { opacity: 0.45; cursor: default; }
+.topbar-macro-menu-item--pinned { opacity: 0.6; color: var(--red, #e05555); }
+.topbar-macro-menu-item--pinned:hover { background: rgba(224,85,85,0.1); color: var(--red, #e05555); opacity: 1; }
 .topbar-btn.topbar-btn--home-set   { color: var(--teal); border-color: var(--teal); }
 .topbar-btn.topbar-btn--home-set:hover { background: var(--teal-glow); }
 
@@ -1421,6 +1442,15 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
+  position: relative;
+}
+.topbar-actions::before {
+  content: '';
+  display: block;
+  width: 1px;
+  height: 18px;
+  background: var(--border-2);
   flex-shrink: 0;
 }
 
