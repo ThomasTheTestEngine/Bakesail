@@ -93,9 +93,9 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 
-import { EditorState }        from '@codemirror/state'
+import { EditorState, EditorSelection } from '@codemirror/state'
 import { EditorView, keymap, lineNumbers, highlightActiveLine,
-         highlightActiveLineGutter, drawSelection } from '@codemirror/view'
+         highlightActiveLineGutter, drawSelection, scrollIntoView } from '@codemirror/view'
 import { defaultKeymap, indentWithTab, history, historyKeymap } from '@codemirror/commands'
 import { indentOnInput, syntaxHighlighting,
          defaultHighlightStyle, bracketMatching }  from '@codemirror/language'
@@ -333,6 +333,39 @@ async function save() {
 function onDocClick(e) {
   if (pickerEl.value && !pickerEl.value.contains(e.target)) pickerOpen.value = false
 }
+
+// ── Public API ───────────────────────────────────────────────────────────────
+// Open a file and scroll/highlight a specific line number (1-based).
+// If the file is already open just jumps; otherwise loads it first.
+async function openFileAtLine(filename, lineNumber) {
+  if (dirty.value) {
+    // Switch without prompting — caller is responsible for confirming
+    originalText = view ? view.state.doc.toString() : ''
+  }
+  if (currentFile.value !== filename) {
+    currentFile.value = filename
+    await loadFile(filename)
+    // loadFile is async but mountEditor is called inside after nextTick;
+    // wait for Vue to render and CM to mount
+    await nextTick()
+    await new Promise(r => setTimeout(r, 80))
+  }
+  jumpToLine(lineNumber)
+}
+
+function jumpToLine(lineNumber) {
+  if (!view) return
+  const doc  = view.state.doc
+  const line = doc.line(Math.max(1, Math.min(lineNumber, doc.lines)))
+  // Select the whole line so it's visible and highlighted
+  view.dispatch({
+    selection: EditorSelection.range(line.from, line.to),
+    effects: scrollIntoView(line.from, { y: 'center' }),
+  })
+  view.focus()
+}
+
+defineExpose({ openFileAtLine })
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 onMounted(async () => {

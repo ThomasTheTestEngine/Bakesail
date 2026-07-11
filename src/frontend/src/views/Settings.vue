@@ -164,6 +164,7 @@
                   <span class="info-card-name">{{ f.name }}</span>
                   <span class="info-card-badge">{{ f.type }}</span>
                   <span class="info-card-live">{{ f.speed }}<span v-if="f.rpm"> · {{ f.rpm }}</span></span>
+                  <button class="btn btn-ghost btn-sm info-locate-btn" @click="locateInConfig(f.key)" title="Open in config editor">⌕ Locate</button>
                 </div>
                 <div class="info-card-body">
                   <div class="info-row"><span class="info-label">Pin</span><code>{{ f.pin }}</code></div>
@@ -246,6 +247,7 @@
                 <div class="info-card-header">
                   <span class="info-card-name">{{ l.name }}</span>
                   <span class="info-card-badge">{{ l.type }}</span>
+                  <button class="btn btn-ghost btn-sm info-locate-btn" @click="locateInConfig(l.key)" title="Open in config editor">⌕ Locate</button>
                 </div>
                 <div class="info-card-body">
                   <div class="info-row"><span class="info-label">Pin</span><code>{{ l.pin }}</code></div>
@@ -589,7 +591,7 @@
 
         <!-- Edit Config -->
         <template v-else-if="activeSection === 'config'">
-          <ConfigEditor class="ce-settings-embed" />
+          <ConfigEditor class="ce-settings-embed" ref="configEditorRef" />
         </template>
 
       </div>
@@ -616,7 +618,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSettingsStore, defaultSettings, ZONE_TYPES } from '../stores/settings.js'
 import { useTestPins } from '../composables/useTestPins.js'
@@ -633,7 +635,10 @@ const { isTestPin, toggleTestPin } = useTestPins(settings)
 const deviceStore = useDeviceStore()
 
 // Klipper configfile sections — fetched on mount for 3d_printer info panels
-const klipperCfg = ref({})
+const klipperCfg      = ref({})
+const configEditorRef = ref(null)
+// sectionIndex: Map of 'heater_fan name' -> { file, line }
+const sectionIndex    = ref({})
 const zoneTypes = ZONE_TYPES
 
 // ── Camera helpers ─────────────────────────────────────────────
@@ -652,6 +657,32 @@ onMounted(async () => {
     const kin = cfg?.printer?.kinematics
     if (kin) detectedKinematics.value = kin.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
   } catch { /* not critical */ }
+
+  // Build section index: scan all .cfg files for [section name] headers
+  try {
+    const listRes = await fetch('/server/files/list?root=config')
+    if (listRes.ok) {
+      const files = await listRes.json()
+      const cfgFiles = (files.result ?? files)
+        .map(f => f.path ?? f.filename ?? f)
+        .filter(n => n.endsWith('.cfg') || n.endsWith('.conf'))
+      const index = {}
+      await Promise.all(cfgFiles.map(async filename => {
+        try {
+          const r = await fetch(`/server/files/config/${encodeURIComponent(filename)}`)
+          if (!r.ok) return
+          const text  = await r.text()
+          const lines = text.split('\n')
+          lines.forEach((line, i) => {
+            const m = line.match(/^\[([^\]]+)\]/)
+            if (m) index[m[1].toLowerCase()] = { file: filename, line: i + 1 }
+          })
+        } catch { /* skip unreadable files */ }
+      }))
+      sectionIndex.value = index
+    }
+  } catch { /* not critical */ }
+
   try {
     const res = await fetch('/server/system_info')
     if (res.ok) {
@@ -718,6 +749,24 @@ const printerLedInfo = computed(() => {
     })
     .sort((a, b) => a.name.localeCompare(b.name))
 })
+
+// Open config editor at the section for a given Klipper object key
+function locateInConfig(objectKey) {
+  // objectKey e.g. 'heater_fan part_cooling' — match section header
+  const lookup = sectionIndex.value[objectKey.toLowerCase()]
+  if (!lookup) {
+    // Fall back: open printer.cfg
+    activeSection.value = 'config'
+    return
+  }
+  activeSection.value = 'config'
+  // Wait for ConfigEditor to mount/become active, then jump
+  nextTick(() => {
+    setTimeout(() => {
+      configEditorRef.value?.openFileAtLine(lookup.file, lookup.line)
+    }, 120)
+  })
+}
 
 // Moonraker configfile doesn't expose __source__ by default.
 // We can infer by checking if the section exists in known include files.
@@ -1030,6 +1079,14 @@ onMounted(() => {
   border-radius: var(--radius);
   padding: 1px 6px;
 }
+.info-locate-btn {
+  font-size: 10px;
+  padding: 1px 7px;
+  opacity: 0.7;
+  margin-left: auto;
+}
+.info-locate-btn:hover { opacity: 1; color: var(--teal); border-color: var(--teal); }
+
 .info-card-live {
   font-family: var(--font-mono);
   font-size: 11px;
