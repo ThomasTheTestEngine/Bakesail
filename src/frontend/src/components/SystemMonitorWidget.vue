@@ -14,7 +14,7 @@
           </div>
           <div class="wmon-load-detail" v-if="mcu.version">{{ mcu.version }}</div>
           <div class="wmon-load-detail">
-            Load: {{ mcu.load != null ? (parseFloat(mcu.load) * 100).toFixed(1) + '%' : '—' }}, Awake: {{ mcu.awake != null ? (parseFloat(mcu.awake) * 100).toFixed(1) + '%' : '—' }}<template v-if="mcu.freq != null">, {{ mcu.freq }} MHz</template><template v-if="mcu.temp != null">, {{ mcu.temp }}°C</template><template v-if="mcu.bw != null">, Tx {{ (mcu.bw / 1024).toFixed(1) }} KB</template>
+            Load: {{ mcu.load != null ? (parseFloat(mcu.load) * 100).toFixed(1) + '%' : '—' }}, Awake: {{ mcu.awake != null ? (parseFloat(mcu.awake) * 100).toFixed(1) + '%' : '—' }}<template v-if="mcu.freq != null">, {{ mcu.freq }} MHz</template><template v-if="mcuTemp(mcu.name) != null || mcu.temp != null">, Temp: {{ (mcuTemp(mcu.name) ?? mcu.temp).toFixed(1) }}°C</template><template v-if="mcu.bw != null">, Tx {{ (mcu.bw / 1024).toFixed(1) }} KB</template>
           </div>
         </div>
         <div class="wmon-gauge-pair">
@@ -32,16 +32,16 @@
             </svg>
             <span class="wmon-gauge-label">LOAD</span>
           </div>
-          <!-- MCU temp gauge -->
-          <div class="wmon-gauge-wrap" v-if="mcu.temp != null">
+          <!-- MCU temp gauge — from temperature_sensor matching MCU name -->
+          <div class="wmon-gauge-wrap" v-if="mcuTemp(mcu.name) != null || mcu.temp != null">
             <svg viewBox="0 0 48 48" class="wmon-gauge-svg">
               <circle cx="24" cy="24" r="20" fill="none" stroke="var(--border-2)" stroke-width="4"/>
               <circle cx="24" cy="24" r="20" fill="none" stroke="var(--amber)" stroke-width="4"
                       stroke-dasharray="125.66"
-                      :stroke-dashoffset="125.66 * (1 - Math.max(Math.min(mcu.temp / 80, 1), 0.008))"
+                      :stroke-dashoffset="125.66 * (1 - Math.max(Math.min((mcuTemp(mcu.name) ?? mcu.temp ?? 0) / 80, 1), 0.008))"
                       stroke-linecap="round" transform="rotate(-90 24 24)"/>
               <text x="24" y="29" text-anchor="middle" font-size="11" fill="var(--amber)" font-family="var(--font-mono)">
-                {{ mcu.temp }}°
+                {{ Math.round(mcuTemp(mcu.name) ?? mcu.temp ?? 0) }}°
               </text>
             </svg>
             <span class="wmon-gauge-label">TEMP</span>
@@ -163,6 +163,26 @@ async function pollSystemInfo() {
 }
 
 // ── Computed ───────────────────────────────────────────────────────────────────
+
+// Find temperature reading for an MCU by matching temperature_sensor objects.
+// Convention: 'mcu' → sensor named 'mcu_temp' or 'mcu'; 'mcu EBBCan' → 'EBBCan'
+function mcuTemp(mcuName) {
+  const objs = deviceStore.dynamicObjects
+  const shortName = mcuName === 'mcu' ? 'mcu' : mcuName.replace(/^mcu /, '')
+  // Try exact matches first, then partial
+  const candidates = Object.entries(objs)
+    .filter(([k]) => k.startsWith('temperature_sensor '))
+    .map(([k, v]) => ({ key: k, name: k.replace('temperature_sensor ', ''), temp: v.temperature }))
+  // Exact: 'mcu' matches 'mcu_temp' or 'mcu'
+  // Secondary: 'EBBCan' matches 'EBBCan' or 'ebbcan' (case-insensitive)
+  const match = candidates.find(c =>
+    c.name.toLowerCase() === shortName.toLowerCase() ||
+    c.name.toLowerCase() === shortName.toLowerCase() + '_temp' ||
+    c.name.toLowerCase().includes(shortName.toLowerCase())
+  )
+  return match?.temp ?? null
+}
+
 function mcuLabel(name) {
   return name === 'mcu' ? 'mcu' : name  // keep full name for secondary MCUs
 }
