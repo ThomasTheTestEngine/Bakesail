@@ -135,21 +135,46 @@
         <!-- ── Temperatures ──────────────────────────────────── -->
         <template v-else-if="w.type === 'temps'">
           <div class="w-monitor">
-            <div class="wmon-section-title">TEMPERATURES</div>
+            <div class="wmon-section-header">
+              <span class="wmon-section-title">TEMPERATURES</span>
+              <button class="wmon-cooldown-btn" @click="sendGcode('TURN_OFF_HEATERS')" title="Turn off all heaters">❄ Cooldown</button>
+            </div>
             <div class="wmon-sensor-grid">
               <!-- Extruder -->
-              <div class="wmon-sensor-row">
+              <div class="wmon-sensor-row wmon-sensor-row--heater">
+                <span class="wmon-heater-status" :class="printer.hotendTarget > 0 ? 'wmon-status--on' : 'wmon-status--off'">
+                  {{ printer.hotendTarget > 0 ? 'ON' : 'OFF' }}
+                </span>
+                <input class="wmon-temp-input"
+                       type="number" min="0" max="350" step="5"
+                       :value="hotendInputVal"
+                       :placeholder="printer.hotendTarget > 0 ? printer.hotendTarget.toFixed(0) : '0'"
+                       @focus="e => { e.target.value = printer.hotendTarget > 0 ? printer.hotendTarget.toFixed(0) : '' }"
+                       @keydown.enter="e => { setHotend(e.target.value); e.target.blur() }"
+                       @keydown.escape="e => e.target.blur()"
+                       @blur="e => { e.target.value = '' }" />
                 <span class="wmon-sensor-name">Extruder</span>
                 <span class="wmon-sensor-val">{{ printer.hotendTemp?.toFixed(1) ?? '—' }}°C</span>
                 <span class="wmon-sensor-target" v-if="printer.hotendTarget > 0">→ {{ printer.hotendTarget.toFixed(0) }}°</span>
               </div>
               <!-- Bed -->
-              <div class="wmon-sensor-row">
+              <div class="wmon-sensor-row wmon-sensor-row--heater">
+                <span class="wmon-heater-status" :class="printer.bedTarget > 0 ? 'wmon-status--on' : 'wmon-status--off'">
+                  {{ printer.bedTarget > 0 ? 'ON' : 'OFF' }}
+                </span>
+                <input class="wmon-temp-input"
+                       type="number" min="0" max="130" step="5"
+                       :value="bedInputVal"
+                       :placeholder="printer.bedTarget > 0 ? printer.bedTarget.toFixed(0) : '0'"
+                       @focus="e => { e.target.value = printer.bedTarget > 0 ? printer.bedTarget.toFixed(0) : '' }"
+                       @keydown.enter="e => { setBed(e.target.value); e.target.blur() }"
+                       @keydown.escape="e => e.target.blur()"
+                       @blur="e => { e.target.value = '' }" />
                 <span class="wmon-sensor-name">Bed</span>
                 <span class="wmon-sensor-val">{{ printer.bedTemp?.toFixed(1) ?? '—' }}°C</span>
                 <span class="wmon-sensor-target" v-if="printer.bedTarget > 0">→ {{ printer.bedTarget.toFixed(0) }}°</span>
               </div>
-              <!-- Dynamic temperature_sensor * -->
+              <!-- Dynamic temperature_sensor * (read-only, no target input) -->
               <div class="wmon-sensor-row" v-for="(obj, name) in tempSensors" :key="name">
                 <span class="wmon-sensor-name">{{ name.replace('temperature_sensor ','') }}</span>
                 <span class="wmon-sensor-val">{{ obj.temperature?.toFixed(1) ?? '—' }}°C</span>
@@ -788,6 +813,23 @@ const layout = useDashboardLayout('printer', buildDefaultLayout())
 const canvasStyle = computed(() => ({ minHeight: '100%' }))
 
 // ── Helpers ────────────────────────────────────────────────────
+// ── Temperature target inputs ──────────────────────────────────
+// Uncontrolled inputs: value is empty by default, populated on focus,
+// cleared on blur. Enter sends the gcode, Escape blurs without sending.
+const hotendInputVal = ref('')
+const bedInputVal    = ref('')
+
+function setHotend(val) {
+  const t = parseInt(val, 10)
+  if (isNaN(t) || t < 0) return
+  sendGcode(`M104 S${t}`)
+}
+function setBed(val) {
+  const t = parseInt(val, 10)
+  if (isNaN(t) || t < 0) return
+  sendGcode(`M140 S${t}`)
+}
+
 function tempClass(temp, target) {
   if (temp == null || target === 0) return ''
   const diff = Math.abs(temp - target)
@@ -1053,6 +1095,44 @@ onUnmounted(() => {
 .wmon-sensor-grid { display: flex; flex-direction: column; gap: 0; }
 .wmon-sensor-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); }
 .wmon-sensor-row:last-child { border-bottom: none; }
+
+.wmon-section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 6px;
+}
+.wmon-section-header .wmon-section-title { margin-bottom: 0; }
+
+.wmon-cooldown-btn {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.06em;
+  padding: 2px 8px; border-radius: var(--radius);
+  border: 1px solid var(--teal); color: var(--teal);
+  background: transparent; cursor: pointer;
+  transition: background 0.1s;
+}
+.wmon-cooldown-btn:hover { background: var(--teal-glow); }
+
+.wmon-sensor-row--heater { align-items: center; }
+
+.wmon-heater-status {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
+  padding: 1px 5px; border-radius: 3px; border: 1px solid;
+  flex-shrink: 0; min-width: 28px; text-align: center;
+}
+.wmon-status--on  { color: var(--amber); border-color: var(--amber); }
+.wmon-status--off { color: var(--text-muted); border-color: var(--border-2); opacity: 0.6; }
+
+.wmon-temp-input {
+  width: 48px; flex-shrink: 0;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text);
+  font-family: var(--font-mono); font-size: 12px;
+  padding: 2px 5px; text-align: center;
+  -moz-appearance: textfield;
+}
+.wmon-temp-input::-webkit-outer-spin-button,
+.wmon-temp-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+.wmon-temp-input:focus { outline: none; border-color: var(--amber); }
+.wmon-temp-input::placeholder { color: var(--text-muted); }
 .wmon-sensor-name { font-size: 12px; font-weight: 600; flex: 1; }
 .wmon-sensor-val  { font-size: 13px; font-family: var(--font-mono); font-weight: 700; color: var(--teal); }
 .wmon-sensor-target { font-size: 11px; color: var(--text-muted); }
