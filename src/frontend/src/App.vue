@@ -1233,18 +1233,17 @@ html, body {
 
 a { color: inherit; text-decoration: none; }
 
-/* ── Scrollbars: hidden until hover ─────────────────────────── */
+/* ── Scrollbars ──────────────────────────────────────────────── */
+/* scrollbar-width:auto gives Firefox/Windows a normal-thickness bar  */
+/* that we recolour; webkit gets an explicit 6px bar                  */
 * {
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-}
-*:hover {
+  scrollbar-width: auto;
   scrollbar-color: var(--border-2) transparent;
 }
-::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
-*:hover::-webkit-scrollbar-thumb { background: var(--border-2); }
+::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
 /* ── App shell ──────────────────────────────────────────────── */
 .app-shell {
