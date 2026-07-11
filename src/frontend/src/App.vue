@@ -100,8 +100,7 @@
                      class="topbar-macro-chip topbar-macro-chip--float"
                      :class="{ 'topbar-macro-chip--edit': editMode.editing.value }"
                      :style="chipFloatStyle(m)"
-                     :draggable="editMode.editing.value"
-                     @dragstart="macroDragStart($event, m)"
+                     @mousedown="editMode.editing.value && macroDragStart($event, m)"
                      @click="!editMode.editing.value && runMacro(m)">
                   <button v-if="editMode.editing.value" class="topbar-macro-remove" @click.stop="removeMacro(m)" title="Remove">−</button>
                   <span class="topbar-macro-name">{{ m.label ?? m.name }}</span>
@@ -420,142 +419,143 @@ function chipFloatStyle(m) {
 
 // toggleMacroMenu defined below with row support
 
-// ── Drag state (mouse-based, not HTML5 drag API) ──────────────────────────────
-const dragState = ref(null)
-// dragState: { macro, ghostEl, startClientX, startClientY, chipW,
-//              originRow, originX, currentRow, currentX, wrapRect }
+// ── Drag state (mouse-based) ──────────────────────────────────────────────────
+let ds = null  // plain object, not reactive — avoids Vue overhead during mousemove
 
 function macroDragStart(evt, m) {
-  if (!editMode.editing.value) return
-  evt.preventDefault()
-
-  const wrapEl  = macroBarEl.value?.closest('.topbar-wrap')
-  if (!wrapEl) return
-  const wrapRect = wrapEl.getBoundingClientRect()
-  const chipEl   = evt.currentTarget
+  // Don't preventDefault here — let click still work; only start drag on actual movement
+  const chipEl  = evt.currentTarget
   const chipRect = chipEl.getBoundingClientRect()
-  const chipW    = chipRect.width
-  const offsetX  = evt.clientX - chipRect.left
+  const startX  = evt.clientX
+  const startY  = evt.clientY
+  const offsetX = evt.clientX - chipRect.left
+  const offsetY = evt.clientY - chipRect.top
 
-  // Build a ghost chip that follows the cursor
-  const ghost = chipEl.cloneNode(true)
-  ghost.style.cssText = [
-    'position:fixed',
-    `width:${chipW}px`,
-    'pointer-events:none',
-    'z-index:99999',
-    'opacity:0.85',
-    'transition:none',
-    `left:${evt.clientX - offsetX}px`,
-    `top:${chipRect.top}px`,
-  ].join(';')
-  document.body.appendChild(ghost)
+  let started = false
 
-  dragState.value = {
-    macro: m, ghostEl: ghost,
-    offsetX, chipW,
-    wrapRect, wrapEl,
-    originRow: m.row ?? 0,
-    originX:   m.x,
-    currentRow: m.row ?? 0,
-    currentX:   null,
-  }
+  function onMove(e) {
+    if (!started) {
+      // Only begin drag after 4px movement to preserve click behaviour
+      if (Math.abs(e.clientX - startX) < 4 && Math.abs(e.clientY - startY) < 4) return
+      started = true
 
-  window.addEventListener('mousemove', macroDragMove)
-  window.addEventListener('mouseup',   macroDragEnd)
-}
+      const wrapEl   = macroBarEl.value?.closest('.topbar-wrap')
+      if (!wrapEl) { cleanup(); return }
 
-function macroDragMove(evt) {
-  const ds = dragState.value
-  if (!ds) return
+      // Ghost: plain text label, no buttons, so there's nothing to accidentally activate
+      const ghost = document.createElement('div')
+      ghost.className = 'topbar-macro-chip topbar-macro-chip--edit topbar-macro-chip--ghost'
+      ghost.textContent = m.label ?? m.name
+      ghost.style.cssText = [
+        'position:fixed',
+        `width:${chipRect.width}px`,
+        'pointer-events:none',
+        'z-index:99999',
+        'opacity:0.9',
+        'transition:none',
+        `left:${startX - offsetX}px`,
+        `top:${startY - offsetY}px`,
+      ].join(';')
+      document.body.appendChild(ghost)
 
-  // Update ghost position
-  ds.ghostEl.style.left = (evt.clientX - ds.offsetX) + 'px'
-  ds.ghostEl.style.top  = (evt.clientY - ds.chipW / 2) + 'px'
-
-  // Determine which row the cursor is over
-  const wrapRect = ds.wrapEl.getBoundingClientRect()
-  const relY = evt.clientY - wrapRect.top
-  const rowIdx = Math.max(0, Math.min(macroBarRows.value, Math.floor(relY / BAR_H)))
-  ds.currentRow = rowIdx
-
-  // X position relative to row left edge
-  let x = evt.clientX - wrapRect.left - ds.offsetX
-
-  // Row 0: check if cursor is within packed zone → will re-pack on drop
-  if (rowIdx === 0) {
-    const packedZone = macroBarEl.value
-    if (packedZone) {
-      const pRect    = packedZone.getBoundingClientRect()
-      const packedEndX = pRect.left - wrapRect.left + pRect.width - 26 // minus + btn
-      if (x < packedEndX) {
-        ds.currentX = null  // signal: will go packed
-        return
-      }
+      ds = { m, ghost, wrapEl, offsetX, offsetY, chipW: chipRect.width, chipH: chipRect.height,
+             currentRow: m.row ?? 0, currentX: m.x ?? null }
     }
-  }
 
-  // Clamp
-  x = Math.max(0, Math.min(x, wrapRect.width - ds.chipW))
+    if (!ds) return
+    e.preventDefault()
 
-  // Snap to sibling chip edges (using real stored widths via DOM query)
-  const rowChips = [...ds.wrapEl.querySelectorAll(
-    rowIdx === 0
-      ? '.topbar-macro-chip--float'
-      : `.topbar-macro-row:nth-child(${rowIdx + 1}) .topbar-macro-chip`
-  )]
-  const siblings = macrosInRow(rowIdx).filter(s => s.id !== ds.macro.id && (s.x ?? null) !== null)
-  for (const s of siblings) {
-    const sEl = ds.wrapEl.querySelector(`[data-macro-id="${s.id}"]`)
-    const sW  = sEl ? sEl.offsetWidth : ds.chipW
-    if (Math.abs(x - s.x) < SNAP_PX)               { x = s.x; break }
-    if (Math.abs(x - (s.x + sW + 4)) < SNAP_PX)    { x = s.x + sW + 4; break }
-    if (Math.abs((x + ds.chipW + 4) - s.x) < SNAP_PX) { x = s.x - ds.chipW - 4; break }
-  }
-  // Snap to right edge
-  const rightEdge = wrapRect.width - ds.chipW
-  if (Math.abs(x - rightEdge) < SNAP_PX) x = rightEdge
+    // Ghost follows cursor exactly
+    ds.ghost.style.left = (e.clientX - ds.offsetX) + 'px'
+    ds.ghost.style.top  = (e.clientY - ds.offsetY) + 'px'
 
-  ds.currentX = Math.round(x)
-}
+    const wrapRect = ds.wrapEl.getBoundingClientRect()
+    const relY     = e.clientY - wrapRect.top
+    const rowIdx   = Math.max(0, Math.min(macroBarRows.value, Math.floor(relY / BAR_H)))
+    ds.currentRow  = rowIdx
 
-function macroDragEnd() {
-  const ds = dragState.value
-  if (!ds) return
+    let x = e.clientX - wrapRect.left - ds.offsetX
 
-  ds.ghostEl.remove()
-  dragState.value = null
-  window.removeEventListener('mousemove', macroDragMove)
-  window.removeEventListener('mouseup',   macroDragEnd)
+    // Row 0 packed zone: if cursor is left of the end of the packed group, signal re-pack
+    if (rowIdx === 0 && macroBarEl.value) {
+      const pRect      = macroBarEl.value.getBoundingClientRect()
+      // packed group right edge = right of the last packed chip (add-btn excluded)
+      const packedChips = macroBarEl.value.querySelectorAll('.topbar-macro-chip:not(.topbar-macro-chip--float)')
+      let packedEnd = pRect.left - wrapRect.left  // fallback: left edge of bar
+      packedChips.forEach(c => {
+        const r = c.getBoundingClientRect()
+        packedEnd = Math.max(packedEnd, r.right - wrapRect.left)
+      })
+      if (x < packedEnd + 12) { ds.currentX = null; return }
+    }
 
-  const m    = ds.macro
-  const newX = ds.currentX  // null = re-pack
+    // Clamp to row bounds
+    x = Math.max(0, Math.min(x, wrapRect.width - ds.chipW))
 
-  // Anti-overlap check for floating placement
-  if (newX !== null) {
-    const siblings = macrosInRow(ds.currentRow).filter(s => s.id !== m.id && (s.x ?? null) !== null)
-    let safeX = newX
+    // Snap to sibling floating chip edges
+    const siblings = settings.pinnedMacros.filter(s =>
+      s.id !== ds.m.id && (s.row ?? 0) === rowIdx && (s.x ?? null) !== null
+    )
     for (const s of siblings) {
       const sEl = ds.wrapEl.querySelector(`[data-macro-id="${s.id}"]`)
       const sW  = sEl ? sEl.offsetWidth : ds.chipW
-      // if we would overlap, push right of sibling
-      if (safeX < s.x + sW + 2 && safeX + ds.chipW + 2 > s.x) {
-        safeX = s.x + sW + 4
-      }
+      if (Math.abs(x - s.x) < SNAP_PX)                  { x = s.x; break }
+      if (Math.abs(x - (s.x + sW + 4)) < SNAP_PX)       { x = s.x + sW + 4; break }
+      if (Math.abs((x + ds.chipW + 4) - s.x) < SNAP_PX) { x = s.x - ds.chipW - 4; break }
     }
-    // clamp again after push
-    const rowW = ds.wrapEl.offsetWidth
-    safeX = Math.min(safeX, rowW - ds.chipW)
-    m.row = ds.currentRow
-    m.x   = Math.round(safeX)
-  } else {
-    m.row = ds.currentRow
-    m.x   = null
+    // Snap right edge
+    const rightEdge = wrapRect.width - ds.chipW
+    if (Math.abs(x - rightEdge) < SNAP_PX) x = rightEdge
+
+    ds.currentX = Math.round(x)
   }
-  settings.save()
+
+  function onUp(e) {
+    cleanup()
+    if (!ds || !started) return
+    commitDrag()
+  }
+
+  function cleanup() {
+    window.removeEventListener('mousemove', onMove)
+    window.removeEventListener('mouseup',   onUp)
+  }
+
+  function commitDrag() {
+    const m    = ds.m
+    const newX = ds.currentX
+
+    if (newX !== null) {
+      // Anti-overlap: push right of any sibling we'd land on
+      const siblings = settings.pinnedMacros.filter(s =>
+        s.id !== m.id && (s.row ?? 0) === ds.currentRow && (s.x ?? null) !== null
+      )
+      let safeX = newX
+      for (const s of siblings) {
+        const sEl = ds.wrapEl.querySelector(`[data-macro-id="${s.id}"]`)
+        const sW  = sEl ? sEl.offsetWidth : ds.chipW
+        if (safeX < s.x + sW + 2 && safeX + ds.chipW + 2 > s.x) {
+          safeX = s.x + sW + 4
+        }
+      }
+      const rowW = ds.wrapEl.offsetWidth
+      m.row = ds.currentRow
+      m.x   = Math.round(Math.min(safeX, rowW - ds.chipW))
+    } else {
+      m.row = ds.currentRow
+      m.x   = null
+    }
+
+    ds.ghost.remove()
+    ds = null
+    settings.save()
+  }
+
+  window.addEventListener('mousemove', onMove)
+  window.addEventListener('mouseup',   onUp)
 }
 
-// Stub dragover/drop (no longer used, but template refs kept for safety)
+// Unused stubs kept so template @dragover/@drop don't throw
 function macroRowDragOver() {}
 function macroRowDrop() {}
 
@@ -1320,6 +1320,10 @@ a { color: inherit; text-decoration: none; }
 
 .topbar-macro-chip--float {
   pointer-events: auto;
+}
+.topbar-macro-chip--ghost {
+  cursor: grabbing;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
 }
 .topbar-macro-chip:hover:not(.topbar-macro-chip--edit) {
   background: var(--surface-2); color: var(--text);
