@@ -412,11 +412,15 @@ function packedInRow(row)   { return macrosInRow(row).filter(m => (m.x ?? null) 
 function floatingInRow(row) { return macrosInRow(row).filter(m => (m.x ?? null) !== null) }
 
 function chipFloatStyle(m) {
+  // x is stored relative to the chip's positioning container:
+  // row 0 → relative to macroBarEl left; rows 1+ → relative to wrap left (same as row left:0)
+  // So we just use m.x directly as the CSS left value.
   const wrapEl = macroBarEl.value?.closest('.topbar-wrap')
   const rowW   = wrapEl?.offsetWidth ?? window.innerWidth
-  // For row 0: clamp right boundary to left edge of actions panel
-  const safeW = (m.row ?? 0) === 0 && topbarActionsEl.value
-    ? topbarActionsEl.value.getBoundingClientRect().left - (wrapEl?.getBoundingClientRect().left ?? 0) - 8
+  const row    = m.row ?? 0
+  const safeW  = row === 0 && topbarActionsEl.value && wrapEl
+    ? topbarActionsEl.value.getBoundingClientRect().left -
+      (macroBarEl.value?.getBoundingClientRect().left ?? wrapEl.getBoundingClientRect().left) - 8
     : rowW
   const x = Math.min(m.x ?? 0, safeW - 80)
   return { position: 'absolute', left: x + 'px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'auto' }
@@ -445,7 +449,6 @@ function macroDragStart(evt, m) {
       started = true
 
       const wrapEl   = macroBarEl.value?.closest('.topbar-wrap')
-      console.log('[drag start] wrapEl=', wrapEl, 'macroBarEl=', macroBarEl.value, 'topbarActionsEl=', topbarActionsEl.value)
       if (!wrapEl) { cleanup(); return }
 
       // Ghost: plain text label, no buttons, so there's nothing to accidentally activate
@@ -464,8 +467,15 @@ function macroDragStart(evt, m) {
       ].join(';')
       document.body.appendChild(ghost)
 
+      // containerLeft: left edge of the positioning parent for this chip's row.
+      // Row 0 chips are inside macroBarEl (position:relative).
+      // Row 1+ chips are inside .topbar-macro-row which starts at wrapEl left.
+      const containerLeft = (m.row ?? 0) === 0 && macroBarEl.value
+        ? macroBarEl.value.getBoundingClientRect().left
+        : wrapEl.getBoundingClientRect().left
+
       ds = { m, ghost, wrapEl, offsetX, offsetY, chipW: chipRect.width, chipH: chipRect.height,
-             currentRow: m.row ?? 0, currentX: m.x ?? null }
+             currentRow: m.row ?? 0, currentX: m.x ?? null, containerLeft }
     }
 
     if (!ds) return
@@ -480,30 +490,33 @@ function macroDragStart(evt, m) {
     const rowIdx   = Math.max(0, Math.min(macroBarRows.value, Math.floor(relY / BAR_H)))
     ds.currentRow  = rowIdx
 
-    let x = e.clientX - wrapRect.left - ds.offsetX
+    // x relative to the positioning container of the target row
+    const containerLeft = rowIdx === 0 && macroBarEl.value
+      ? macroBarEl.value.getBoundingClientRect().left
+      : wrapRect.left
+    let x = e.clientX - containerLeft - ds.offsetX
 
     // Row 0 packed zone: if cursor is left of the end of the packed group, signal re-pack
     if (rowIdx === 0 && macroBarEl.value) {
-      const pRect = macroBarEl.value.getBoundingClientRect()
-      // packed group right edge — exclude the chip being dragged from measurement
+      // packed group right edge relative to containerLeft — exclude dragged chip
       const packedChips = [...macroBarEl.value.querySelectorAll('.topbar-macro-chip:not(.topbar-macro-chip--float)')]
         .filter(c => c.dataset.macroId !== ds.m.id)
-      let packedEnd = pRect.left - wrapRect.left  // fallback: left edge of bar
+      let packedEnd = 0  // fallback: left edge of container
       for (const c of packedChips) {
         const r = c.getBoundingClientRect()
-        packedEnd = Math.max(packedEnd, r.right - wrapRect.left)
+        packedEnd = Math.max(packedEnd, r.right - containerLeft)
       }
       if (x < packedEnd + 12) { ds.currentX = null; return }
     }
 
-    // Right boundary: row 0 stops before actions panel; other rows use full width
+    // Right boundary relative to containerLeft
     let safeRight
     if (rowIdx === 0) {
       safeRight = topbarActionsEl.value
-        ? topbarActionsEl.value.getBoundingClientRect().left - wrapRect.left - 8
-        : wrapRect.width * 0.6  // conservative fallback: 60% of wrap width
+        ? topbarActionsEl.value.getBoundingClientRect().left - containerLeft - 8
+        : (wrapRect.right - containerLeft) * 0.9
     } else {
-      safeRight = wrapRect.width
+      safeRight = wrapRect.width  // rows 1+ use full wrap width
     }
 
     // Clamp to row bounds
@@ -525,9 +538,6 @@ function macroDragStart(evt, m) {
     if (Math.abs(x - rightEdge) < 8) x = rightEdge
 
     ds.currentX = Math.round(x)
-    console.log('[drag] row=%d x=%d safeRight=%d packedEnd=%d currentX=%d',
-      rowIdx, Math.round(e.clientX - wrapRect.left - ds.offsetX), Math.round(safeRight),
-      0, ds.currentX)
   }
 
   function onUp(e) {
@@ -558,8 +568,11 @@ function macroDragStart(evt, m) {
           safeX = s.x + sW + 4
         }
       }
+      const cLeft2 = ds.currentRow === 0 && macroBarEl.value
+        ? macroBarEl.value.getBoundingClientRect().left
+        : ds.wrapEl.getBoundingClientRect().left
       const safeRight2 = ds.currentRow === 0 && topbarActionsEl.value
-        ? topbarActionsEl.value.getBoundingClientRect().left - ds.wrapEl.getBoundingClientRect().left - 8
+        ? topbarActionsEl.value.getBoundingClientRect().left - cLeft2 - 8
         : ds.wrapEl.offsetWidth
       m.row = ds.currentRow
       m.x   = Math.round(Math.min(safeX, safeRight2 - ds.chipW))
@@ -568,7 +581,6 @@ function macroDragStart(evt, m) {
       m.x   = null
     }
 
-    console.log('[drag commit] row=%d x=%d', m.row, m.x)
     ds.ghost.remove()
     ds = null
     settings.save()
