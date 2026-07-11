@@ -50,7 +50,8 @@
 
       <button class="btn btn-ghost btn-sm" @click="promptSaveAs">Save As…</button>
       <button class="btn btn-ghost btn-sm" @click="doRevert">↺ Reset</button>
-      <button class="btn btn-ghost btn-sm" @click="doFitScreen" title="Expand all widget edges to fill gaps and reach canvas boundary">⤢ Fit Screen</button>
+      <button class="btn btn-ghost btn-sm" @click="doFitWindow" title="Fit widgets to visible viewport">⤢ Fit Window</button>
+      <button class="btn btn-ghost btn-sm" @click="doFitCanvas" title="Fit widgets to full canvas (including any extended area)">⤢ Fit Canvas</button>
       <span v-if="layout.saveMsg.value" class="dt-save-msg">{{ layout.saveMsg.value }}</span>
 
       <div class="add-widget-wrap" @click.stop>
@@ -104,25 +105,27 @@ function doRevert() {
   else props.layout.revertToDefault()
 }
 
-function doFitScreen() {
+function getViewportDims() {
   const content = document.querySelector('.content')
   const canvas  = document.querySelector('.pd-root, .td-root, .ld-root, .dashboard-root')
-  if (!canvas || !content) return
-
-  // availW: clientWidth excludes scrollbar width, offsetWidth includes it
-  const availW = canvas.clientWidth
-
-  // availH: viewport height minus everything ABOVE the canvas (topbar, cbar,
-  // customize toolbar) and everything BELOW it (cbar). We compute this by
-  // finding where the canvas starts inside the content scroll area and how
-  // much content-area height is left from there.
-  // canvas.getBoundingClientRect().top = distance from viewport top to canvas top
-  // content.getBoundingClientRect().bottom = distance from viewport top to content bottom
+  if (!canvas || !content) return null
+  const availW        = canvas.clientWidth
   const canvasTop     = canvas.getBoundingClientRect().top
   const contentBottom = content.getBoundingClientRect().bottom
   const availH        = Math.max(200, Math.floor(contentBottom - canvasTop) - 1)
+  return { availW, availH }
+}
 
-  props.layout.fitScreen(availW, availH)
+function doFitWindow() {
+  const dims = getViewportDims()
+  if (!dims) return
+  props.layout.fitScreen(dims.availW, dims.availH)
+}
+
+function doFitCanvas() {
+  const dims = getViewportDims()
+  if (!dims) return
+  props.layout.fitCanvas(dims.availW, dims.availH)
 }
 
 // ── Add widget dropdown ──────────────────────────────────────────

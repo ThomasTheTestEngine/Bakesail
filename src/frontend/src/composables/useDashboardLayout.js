@@ -43,6 +43,10 @@ export function useDashboardLayout(dashboardId, defaultLayout) {
   // Each widget: { id, type, x, y, w, h, config: { ... type-specific } }
   const widgets = ref(deepClone(defaultLayout))
 
+  // Canvas size extensions beyond viewport (px). 0 = viewport-sized.
+  const canvasExtraH = ref(0)
+  const canvasExtraW = ref(0)
+
   // Open widget settings popout id
   const openWidgetSettings = ref(null)
   function toggleWidgetSettings(id) {
@@ -380,9 +384,18 @@ export function useDashboardLayout(dashboardId, defaultLayout) {
     }
   }
 
+  // ── Fit to Canvas ─────────────────────────────────────────
+  // Like fitScreen but uses the full canvas dimensions (which may exceed viewport)
+  function fitCanvas(viewportW, viewportH) {
+    const canvasW = viewportW + canvasExtraW.value
+    const canvasH = viewportH + canvasExtraH.value
+    fitScreen(canvasW, canvasH > viewportH ? canvasH : null)
+  }
+
   return {
     // State
     customizeMode, firstTimeSeen, widgets,
+    canvasExtraH, canvasExtraW,
     openWidgetSettings, addWidgetOpen,
     saving, saveMsg, availableLayouts, loadingLayouts,
 
@@ -395,6 +408,7 @@ export function useDashboardLayout(dashboardId, defaultLayout) {
     saveLayout, loadLayout, fetchAvailableLayouts,
     applyLayout,
     fitScreen,
+    fitCanvas,
     tryAutoLoad,
 
     // Helpers

@@ -517,6 +517,31 @@
         </template>
 
       </WidgetShell>
+
+      <!-- ── Canvas bottom resize handle (edit mode) ───────────── -->
+      <template v-if="layout.customizeMode.value">
+        <!-- Snap line at viewport height -->
+        <div class="canvas-snap-line canvas-snap-line--h"
+             :style="{ top: viewportH + 'px' }"
+             title="Viewport bottom boundary"></div>
+        <!-- Bottom drag handle -->
+        <div class="canvas-resize-handle canvas-resize-handle--bottom"
+             :style="{ top: (canvasHeight - 6) + 'px' }"
+             @mousedown.prevent="startCanvasResize('bottom', $event)"
+             title="Drag to extend canvas height"></div>
+      </template>
+
+      <!-- ── Canvas right resize handle (edit mode + hscroll enabled) ── -->
+      <template v-if="layout.customizeMode.value && settings.dashboardAllowHorizontalScroll">
+        <div class="canvas-snap-line canvas-snap-line--v"
+             :style="{ left: viewportW + 'px' }"
+             title="Viewport right boundary"></div>
+        <div class="canvas-resize-handle canvas-resize-handle--right"
+             :style="{ left: (canvasWidth - 6) + 'px' }"
+             @mousedown.prevent="startCanvasResize('right', $event)"
+             title="Drag to extend canvas width"></div>
+      </template>
+
     </div>
 
     <!-- ── Cancel confirm dialog ─────────────────────────────── -->
@@ -830,19 +855,72 @@ function buildDefaultLayout() {
 
 const layout = useDashboardLayout('printer', buildDefaultLayout())
 
-// Canvas height = tallest widget bottom + padding.
-// In customize mode adds 100px below so bottom-edge widgets can be resized.
+// Viewport dims (excluding topbar/cbar) — used for snap lines and resize clamping
+const viewportH = computed(() => {
+  const content = document.querySelector('.content')
+  const canvas  = document.querySelector('.pd-root')
+  if (!canvas || !content) return window.innerHeight - 100
+  const top    = canvas.getBoundingClientRect().top
+  const bottom = content.getBoundingClientRect().bottom
+  return Math.max(300, Math.floor(bottom - top))
+})
+const viewportW = computed(() => {
+  const canvas = document.querySelector('.pd-root')
+  return canvas ? canvas.clientWidth : window.innerWidth - 220
+})
+
+// Canvas dimensions: viewport + any user-extended extra
 const canvasHeight = computed(() => {
-  const ws = layout.widgets.value
-  if (!ws.length) return 0
-  const bottom = ws.reduce((m, w) => Math.max(m, w.y + w.h), 0)
-  return bottom + (layout.customizeMode.value ? 110 : 10)
+  const ws     = layout.widgets.value
+  const bottom = ws.length ? ws.reduce((m, w) => Math.max(m, w.y + w.h), 0) : 0
+  const base   = Math.max(bottom + 10, viewportH.value + layout.canvasExtraH.value)
+  // In customize mode add 100px buffer below content for bottom-edge resizing
+  return layout.customizeMode.value ? base + 100 : base
+})
+
+const canvasWidth = computed(() => {
+  if (!settings.dashboardAllowHorizontalScroll) return undefined  // CSS 100%
+  return viewportW.value + layout.canvasExtraW.value
 })
 
 const canvasStyle = computed(() => ({
-  height: canvasHeight.value > 0 ? canvasHeight.value + 'px' : undefined,
-  minHeight: canvasHeight.value > 0 ? undefined : '100%',
+  height: canvasHeight.value + 'px',
+  width:  canvasWidth.value  ? canvasWidth.value + 'px' : '100%',
 }))
+
+// ── Canvas resize drag ─────────────────────────────────────────────────────────
+function startCanvasResize(edge, evt) {
+  const startY   = evt.clientY
+  const startX   = evt.clientX
+  const startExH = layout.canvasExtraH.value
+  const startExW = layout.canvasExtraW.value
+  const snapH    = viewportH.value
+  const snapW    = viewportW.value
+
+  function onMove(e) {
+    if (edge === 'bottom') {
+      const dy  = e.clientY - startY
+      let newExH = Math.max(0, startExH + dy)
+      // Snap to viewport boundary (within 20px)
+      if (Math.abs(viewportH.value + newExH - snapH - startExH - dy + startExH) < 20) {
+        // snap to 0 extra (viewport edge)
+        if (Math.abs(newExH) < 20) newExH = 0
+      }
+      layout.canvasExtraH.value = Math.round(newExH)
+    } else {
+      const dx  = e.clientX - startX
+      let newExW = Math.max(0, startExW + dx)
+      if (Math.abs(newExW) < 20) newExW = 0
+      layout.canvasExtraW.value = Math.round(newExW)
+    }
+  }
+  function onUp() {
+    window.removeEventListener('mousemove', onMove)
+    window.removeEventListener('mouseup',   onUp)
+  }
+  window.addEventListener('mousemove', onMove)
+  window.addEventListener('mouseup',   onUp)
+}
 
 // ── Helpers ────────────────────────────────────────────────────
 // ── Temperature target inputs ──────────────────────────────────
@@ -1128,6 +1206,40 @@ onUnmounted(() => {
 
 
 .dash-canvas { position: relative; width: 100%; }
+
+/* Canvas resize handles (edit mode only) */
+.canvas-resize-handle {
+  position: absolute;
+  z-index: 50;
+  background: var(--amber-dim);
+  transition: background 0.15s;
+}
+.canvas-resize-handle--bottom {
+  left: 0; right: 0; height: 6px;
+  cursor: ns-resize;
+}
+.canvas-resize-handle--right {
+  top: 0; bottom: 0; width: 6px;
+  cursor: ew-resize;
+}
+.canvas-resize-handle:hover { background: var(--amber); }
+
+/* Snap guide lines at viewport boundary */
+.canvas-snap-line {
+  position: absolute;
+  z-index: 49;
+  pointer-events: none;
+}
+.canvas-snap-line--h {
+  left: 0; right: 0; height: 1px;
+  background: rgba(240,127,170,0.25);
+  border-top: 1px dashed rgba(240,127,170,0.4);
+}
+.canvas-snap-line--v {
+  top: 0; bottom: 0; width: 1px;
+  background: rgba(240,127,170,0.25);
+  border-left: 1px dashed rgba(240,127,170,0.4);
+}
 .grid-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 
 /* State */
