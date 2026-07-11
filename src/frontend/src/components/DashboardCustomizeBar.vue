@@ -115,7 +115,7 @@ function doFitScreen() {
   // content.getBoundingClientRect().bottom = distance from viewport top to content bottom
   const canvasTop     = canvas.getBoundingClientRect().top
   const contentBottom = content.getBoundingClientRect().bottom
-  const availH        = Math.max(200, contentBottom - canvasTop)
+  const availH        = Math.max(200, Math.floor(contentBottom - canvasTop) - 1)
 
   props.layout.fitScreen(availW, availH)
 }
