@@ -288,7 +288,7 @@
 
       </div>
 
-      <main class="content">
+      <main class="content" :class="{ 'content--hscroll': settings.dashboardAllowHorizontalScroll }">
         <RouterView />
       </main>
 
@@ -1724,6 +1724,7 @@ a { color: inherit; text-decoration: none; }
 .content {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 12px 16px;
 }
 /* Dashboard views need zero padding so widgets reach all edges */
@@ -1733,6 +1734,10 @@ a { color: inherit; text-decoration: none; }
 .content:has(.dashboard-root),
 .content:has(.cam-page) {
   padding: 0;
+}
+/* Allow horizontal scroll when setting is enabled */
+.content--hscroll {
+  overflow-x: auto;
 }
 
 /* ── Console bar ────────────────────────────────────────────── */

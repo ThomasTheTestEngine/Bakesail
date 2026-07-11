@@ -715,6 +715,17 @@
                    :disabled="!settings.dashboardGridSnap" />
             <span class="section-note" style="margin:0">Default 20px — smaller = finer control</span>
           </div>
+          <div class="field-row">
+            <label class="field-label">Horizontal Scroll</label>
+            <label class="field-label-inline">
+              <input type="checkbox" v-model="settings.dashboardAllowHorizontalScroll" />
+              Allow dashboard canvas to extend past viewport width
+            </label>
+          </div>
+          <p class="section-note" style="margin-top:2px">
+            Off by default — canvas clips at window edge. Enable if you want widgets
+            that extend horizontally and don't mind scrolling left/right.
+          </p>
         </template>
 
         <!-- Edit Config -->

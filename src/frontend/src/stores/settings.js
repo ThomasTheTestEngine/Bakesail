@@ -116,6 +116,7 @@ export function defaultSettings() {
     // Dashboard customization
     dashboardGridSnap: true,   // snap widgets to 20px grid
     dashboardGridSize: 20,     // px — exposed in settings for the freaks
+    dashboardAllowHorizontalScroll: false,  // allow canvas to extend past viewport width
 
     wizardComplete: false,
   }

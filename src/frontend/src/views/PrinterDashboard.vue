@@ -777,53 +777,72 @@ function isFieldHidden(w, key) { return w.config?.hiddenFields?.includes(key) }
 
 // ── Default layout ─────────────────────────────────────────────
 function buildDefaultLayout() {
-  const hasCam = settings.cameras.length > 0
-
-  // Measure available dimensions. When called at reset time the DOM is ready;
-  // at component-creation time it falls back to window dimensions minus known offsets.
+  const hasCam   = settings.cameras.length > 0
   const canvasEl = document.querySelector('.pd-root')
-  const content  = document.querySelector('.content')
 
   const availW = canvasEl?.offsetWidth ?? (window.innerWidth - 220)
+  // Viewport height minus topbar+cbar
+  const viewH  = Math.max(400, window.innerHeight - 100)
 
-  let availH
-  if (canvasEl && content) {
-    // Exact measurement: from canvas top to content bottom, accounting for
-    // topbar, cbar, and any toolbar above the canvas.
-    availH = Math.max(300, content.getBoundingClientRect().bottom - canvasEl.getBoundingClientRect().top)
+  const gap  = 10
+  // 3-column layout: toolhead3d | camera (if any) | sysloads
+  // Left col = ~35%, camera col = ~35%, right col = ~30%
+  // Without camera: left ~55%, right ~45%
+  let col0W, col1W, col2W, col1X, col2X
+  if (hasCam) {
+    col0W = Math.floor(availW * 0.35)
+    col1W = Math.floor(availW * 0.35)
+    col2W = availW - col0W - col1W - gap * 2
+    col1X = col0W + gap
+    col2X = col1X + col1W + gap
   } else {
-    // Fallback before DOM is ready: window minus ~topbar(42) + cbar(36) + padding
-    availH = Math.max(300, window.innerHeight - 100)
+    col0W = Math.floor(availW * 0.55)
+    col1W = 0
+    col2W = availW - col0W - gap
+    col1X = 0
+    col2X = col0W + gap
   }
 
-  const gap     = 10
-  const numCols = hasCam ? 3 : 2
-  const colW    = Math.floor((availW - gap * (numCols - 1)) / numCols)
-  const camW    = hasCam ? colW : 0
-  const rightColX = hasCam ? colW + gap + camW + gap : colW + gap
-
-  // Split height: top band 55%, bottom band 45%
-  const topH     = Math.floor(availH * 0.55)
-  const monitorY = topH + gap
-  const monitorH = availH - monitorY
-  const chartW   = rightColX - colW - gap
-  const stackX   = chartW + gap
-  const tempsH   = Math.round((monitorH - gap) / 2)
+  // Row heights
+  const topH     = Math.floor(viewH * 0.50)   // toolhead3d / camera / sysloads
+  const row2Y    = topH + gap
+  const chartH   = Math.floor(viewH * 0.38)   // temp chart spans left+center
+  const chartW   = hasCam ? col1X + col1W : col0W  // left cols
+  // misc and temps stack right of chart — auto-height (tall enough to fit)
+  const miscH    = 280   // tall enough for ~8 fans/lights
+  const tempsH   = 380   // tall enough for ~10 sensors
+  const row3Y    = row2Y + miscH + gap
 
   return [
-    { id: 'toolhead',  type: 'toolhead3d', x: 0,          y: 0,        w: colW,      h: topH,     config: {} },
-    ...(hasCam ? [{ id: 'camera', type: 'camera', x: colW + gap, y: 0, w: camW, h: topH, config: {} }] : []),
-    { id: 'speedflow', type: 'speedflow', x: rightColX,  y: 0,        w: colW,      h: topH - gap, config: {} },
-    { id: 'chart',     type: 'chart',     x: 0,          y: monitorY, w: chartW,    h: monitorH, config: {} },
-    { id: 'temps',     type: 'temps',     x: stackX,     y: monitorY, w: colW,      h: tempsH,   config: {} },
-    { id: 'fanlist',   type: 'fanlist',   x: stackX,     y: monitorY + tempsH + gap, w: colW, h: tempsH, config: {} },
-    { id: 'sysloads',  type: 'sysloads',  x: rightColX,  y: monitorY, w: colW,      h: monitorH, config: {} },
+    // Top row
+    { id: 'toolhead',  type: 'toolhead3d', x: 0,     y: 0,     w: col0W, h: topH,   config: {} },
+    ...(hasCam ? [{ id: 'camera', type: 'camera', x: col1X, y: 0, w: col1W, h: topH, config: {} }] : []),
+    { id: 'sysloads',  type: 'sysloads',   x: col2X, y: 0,     w: col2W, h: topH,   config: {} },
+    // Bottom-left: chart spanning left+center cols
+    { id: 'chart',     type: 'chart',      x: 0,     y: row2Y, w: chartW, h: chartH, config: {} },
+    // Bottom-right: misc + temps stacked, tall enough to show all entries
+    { id: 'fanlist',   type: 'fanlist',    x: col2X, y: row2Y, w: col2W, h: miscH,  config: {} },
+    { id: 'temps',     type: 'temps',      x: col2X, y: row3Y, w: col2W, h: tempsH, config: {} },
+    // Speedflow below chart
+    { id: 'speedflow', type: 'speedflow',  x: 0,     y: row2Y + chartH + gap, w: chartW, h: 420, config: {} },
   ]
 }
 
 const layout = useDashboardLayout('printer', buildDefaultLayout())
 
-const canvasStyle = computed(() => ({ minHeight: '100%' }))
+// Canvas height = tallest widget bottom + padding.
+// In customize mode adds 100px below so bottom-edge widgets can be resized.
+const canvasHeight = computed(() => {
+  const ws = layout.widgets.value
+  if (!ws.length) return 0
+  const bottom = ws.reduce((m, w) => Math.max(m, w.y + w.h), 0)
+  return bottom + (layout.customizeMode.value ? 110 : 10)
+})
+
+const canvasStyle = computed(() => ({
+  height: canvasHeight.value > 0 ? canvasHeight.value + 'px' : undefined,
+  minHeight: canvasHeight.value > 0 ? undefined : '100%',
+}))
 
 // ── Helpers ────────────────────────────────────────────────────
 // ── Temperature target inputs ──────────────────────────────────
