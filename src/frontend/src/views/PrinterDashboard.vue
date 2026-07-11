@@ -520,10 +520,6 @@
 
       <!-- ── Canvas bottom resize handle (edit mode) ───────────── -->
       <template v-if="layout.customizeMode.value">
-        <!-- Snap line at viewport height -->
-        <div class="canvas-snap-line canvas-snap-line--h"
-             :style="{ top: viewportH + 'px' }"
-             title="Viewport bottom boundary"></div>
         <!-- Bottom drag handle -->
         <div class="canvas-resize-handle canvas-resize-handle--bottom"
              :style="{ top: canvasHeight + 'px' }"
@@ -533,9 +529,6 @@
 
       <!-- ── Canvas right resize handle (edit mode + hscroll enabled) ── -->
       <template v-if="layout.customizeMode.value && settings.dashboardAllowHorizontalScroll">
-        <div class="canvas-snap-line canvas-snap-line--v"
-             :style="{ left: viewportW + 'px' }"
-             title="Viewport right boundary"></div>
         <div class="canvas-resize-handle canvas-resize-handle--right"
              :style="{ left: (canvasWidth - 6) + 'px' }"
              @mousedown.prevent="startCanvasResize('right', $event)"
@@ -1227,22 +1220,7 @@ onUnmounted(() => {
 }
 .canvas-resize-handle:hover { background: var(--amber); }
 
-/* Snap guide lines at viewport boundary */
-.canvas-snap-line {
-  position: absolute;
-  z-index: 49;
-  pointer-events: none;
-}
-.canvas-snap-line--h {
-  left: 0; right: 0; height: 1px;
-  background: rgba(240,127,170,0.25);
-  border-top: 1px dashed rgba(240,127,170,0.4);
-}
-.canvas-snap-line--v {
-  top: 0; bottom: 0; width: 1px;
-  background: rgba(240,127,170,0.25);
-  border-left: 1px dashed rgba(240,127,170,0.4);
-}
+
 .grid-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 
 /* State */
