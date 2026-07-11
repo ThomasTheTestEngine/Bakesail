@@ -1359,12 +1359,18 @@ a { color: inherit; text-decoration: none; }
   padding: 0 8px;
   height: 100%;
   position: relative;
-  z-index: 1;
+  z-index: 2;
+  pointer-events: none;  /* container is transparent to clicks; chips opt back in */
+}
+.topbar-macro-row-packed .topbar-macro-chip,
+.topbar-macro-row-packed .topbar-macro-add-wrap {
+  pointer-events: auto;
 }
 
 .topbar-macro-chip--float {
   pointer-events: auto;
   cursor: pointer;
+  z-index: 3;
 }
 .topbar-macro-chip--ghost {
   cursor: grabbing;
