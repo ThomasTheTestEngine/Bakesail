@@ -104,8 +104,8 @@ function doFitScreen() {
   const canvas  = document.querySelector('.pd-root, .td-root, .ld-root, .dashboard-root')
   if (!canvas || !content) return
 
-  // availW: the canvas element's own rendered width (no guessing)
-  const availW = canvas.offsetWidth
+  // availW: clientWidth excludes scrollbar width, offsetWidth includes it
+  const availW = canvas.clientWidth
 
   // availH: viewport height minus everything ABOVE the canvas (topbar, cbar,
   // customize toolbar) and everything BELOW it (cbar). We compute this by
