@@ -236,14 +236,16 @@ function positionCamera() {
 
   // Camera on POSITIVE-Z side so Three.js lookAt gives camera_right = +X,
   // making X increase leftward → X=0 at left, X=max at right. ✓
-  const dist  = Math.max(xMax, yMax, zMax) * 2.2   // 15% zoom-out vs 1.9
-  const azRad = THREE.MathUtils.degToRad(20)        // slight right → 0,0 corner at lower-left
-  const elRad = THREE.MathUtils.degToRad(30)
+  const dist  = Math.max(xMax, yMax, zMax) * 2.2
+  const azRad = THREE.MathUtils.degToRad(35)   // more to the right
+  const elRad = THREE.MathUtils.degToRad(18)   // lower elevation
   camera.position.set(
     cx  + dist * Math.sin(azRad) * Math.cos(elRad),
     dist * Math.sin(elRad),
-    cz  + dist * Math.cos(azRad) * Math.cos(elRad),  // + = camera on +Z side
+    cz  + dist * Math.cos(azRad) * Math.cos(elRad),
   )
+  // Shift orbit target slightly up so the bed sits lower in the viewport
+  controls.target.set(cx, zMax * 0.12, cz)
   controls.update()
 }
 
@@ -381,15 +383,25 @@ function buildScene() {
   dropLine.renderOrder = 1
   scene.add(dropLine)
 
-  // ── Z slice plane (shown during Z drag / XY drag) ─────────────────────────
-  const margin = 30
-  const sliceGeo = new THREE.PlaneGeometry(xMax + margin * 2, yMax + margin * 2)
-  sliceGeo.rotateX(-Math.PI / 2)
-  zSliceMesh = new THREE.Mesh(sliceGeo, new THREE.MeshBasicMaterial({
-    color: C.zSlice, transparent: true, opacity: 0.15, side: THREE.DoubleSide,
-  }))
-  zSliceMesh.position.set(xMax / 2, 0, -yMax / 2)  // centred on bed
-  zSliceMesh.visible = false
+  // ── Z slice grid (shown during Z drag / XY drag) — lines only, no fill ─────
+  const sliceGroup = new THREE.Group()
+  const sliceStep  = gridStep
+  const sliceVerts = []
+  for (let x = 0; x <= xMax + 0.5; x += sliceStep) {
+    const xc = Math.min(x, xMax)
+    sliceVerts.push(xc, 0, 0,  xc, 0, -yMax)
+  }
+  for (let y = 0; y <= yMax + 0.5; y += sliceStep) {
+    const yc = Math.min(y, yMax)
+    sliceVerts.push(0, 0, -yc,  xMax, 0, -yc)
+  }
+  const sliceGeo2 = new THREE.BufferGeometry()
+  sliceGeo2.setAttribute('position', new THREE.Float32BufferAttribute(sliceVerts, 3))
+  sliceGroup.add(new THREE.LineSegments(sliceGeo2,
+    new THREE.LineBasicMaterial({ color: C.zSlice, transparent: true, opacity: 0.35 })))
+  sliceGroup.position.set(0, 0, 0)
+  sliceGroup.visible = false
+  zSliceMesh = sliceGroup  // reuse same variable/visible flag
   scene.add(zSliceMesh)
 }
 
@@ -600,6 +612,12 @@ function updateZSlice() {
   zSliceMesh.position.y = dragTarget.z
   zSliceMesh.visible = true
   if (zHandleMesh) zHandleMesh.position.y = dragTarget.z
+  // Move toolhead vertically with the Z handle — keep XY from current pos
+  if (toolheadMesh) {
+    const x = dragTarget.x
+    const y = dragTarget.y
+    toolheadMesh.position.set(x, dragTarget.z + 25, -y)
+  }
 }
 
 // ── Resize handling ───────────────────────────────────────────────────────────
@@ -672,11 +690,9 @@ onUnmounted(() => {
 
 // ── Reactivity: sync toolhead position into scene ─────────────────────────────
 watch(() => [pos.x, pos.y, pos.z], () => {
+  // Don't snap toolhead back to real position while user is manually positioning
+  if (isDragging.value) return
   syncToolhead()
-  // Keep Z handle tracking live position unless we're mid-drag
-  if (!isDragging.value && zHandleMesh) {
-    zHandleMesh.position.y = pos.z ?? 0
-  }
 })
 </script>
 
