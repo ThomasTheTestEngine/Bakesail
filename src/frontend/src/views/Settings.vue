@@ -30,14 +30,13 @@
               <option value="3d_printer">3D Printer</option>
             </select>
           </div>
-          <div class="field-row">
-            <label class="field-label">Class</label>
-            <select class="field-select" v-model="settings.machineClass">
-              <option value="manual">Manual</option>
-              <option value="semi_auto">Semi-Automatic</option>
-              <option value="automatic">Automatic</option>
-            </select>
-          </div>
+          <template v-if="settings.deviceType === '3d_printer'">
+            <div class="field-row">
+              <label class="field-label">Kinematics</label>
+              <span class="field-readonly">{{ detectedKinematics || '—' }}</span>
+              <span class="section-note" style="margin:0 0 0 8px">detected from Klipper config</span>
+            </div>
+          </template>
         </template>
 
         <!-- Zones -->
@@ -648,6 +647,12 @@ function onCamTypeChange(cam) { if (cam.type !== 'custom') cam.name = '' }
 // falling back to a static list of common paths if unavailable.
 const availableVideoDevices = ref(['/dev/video0', '/dev/video1', '/dev/video2', '/dev/video3'])
 onMounted(async () => {
+  // Detect printer kinematics from Klipper configfile
+  try {
+    const r = await send('printer.objects.query', { objects: { configfile: ['config'] } })
+    const kin = r?.status?.configfile?.config?.printer?.kinematics
+    if (kin) detectedKinematics.value = kin.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+  } catch { /* not critical */ }
   try {
     const res = await fetch('/server/system_info')
     if (res.ok) {
@@ -657,12 +662,13 @@ onMounted(async () => {
     }
   } catch { /* stay with defaults */ }
 })
-const { sendGcode } = useMoonraker()
+const { send, sendGcode } = useMoonraker()
 
-const activeSection = ref('device')
-const saving        = ref(false)
-const saveError     = ref('')
-const applying      = ref(false)
+const activeSection      = ref('device')
+const saving             = ref(false)
+const saveError          = ref('')
+const applying           = ref(false)
+const detectedKinematics = ref('')
 const applyError    = ref('')
 const applySuccess  = ref(false)
 
@@ -965,6 +971,17 @@ onMounted(() => {
 }
 .field-input:focus { border-color: var(--amber-dim); }
 .field-input--pin { flex: 0 0 90px; font-family: var(--font-mono); font-size: 12px; }
+.field-readonly {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 4px 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  white-space: nowrap;
+}
+
 .field-select {
   background: var(--surface-2);
   border: 1px solid var(--border);
