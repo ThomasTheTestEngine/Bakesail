@@ -408,7 +408,14 @@
                 <div class="info-row"><span class="info-label">Heater Pin</span><code>{{ h.pin }}</code></div>
                 <div class="info-row"><span class="info-label">Sensor</span><span class="info-val">{{ h.sensor }}</span></div>
                 <div v-if="h.sensorPin"  class="info-row"><span class="info-label">Sensor Pin</span><code>{{ h.sensorPin }}</code></div>
-                <div v-if="h.minTemp != null" class="info-row"><span class="info-label">Temp Range</span><span class="info-val">{{ h.minTemp }}°C – {{ h.maxTemp }}°C</span></div>
+                <div v-if="h.minTemp != null" class="info-row">
+                  <span class="info-label">Temp Range</span>
+                  <span class="info-val">{{ h.minTemp }}°C – {{ h.maxTemp }}°C</span>
+                  <span v-if="h.liveTemp != null" class="info-live-temp">
+                    {{ h.liveTemp.toFixed(1) }}°C
+                    <span v-if="h.liveTarget > 0" class="info-live-target"> → {{ h.liveTarget.toFixed(0) }}°C</span>
+                  </span>
+                </div>
                 <div v-if="h.maxPower != null" class="info-row"><span class="info-label">Max Power</span><span class="info-val">{{ Math.round(h.maxPower * 100) }}%</span></div>
                 <div v-if="h.pid" class="info-row"><span class="info-label">PID</span><span class="info-val">Kp {{ h.pid.kp }} · Ki {{ h.pid.ki }} · Kd {{ h.pid.kd }}</span></div>
                 <div v-if="h.nozzleDia"    class="info-row"><span class="info-label">Nozzle</span><span class="info-val">{{ h.nozzleDia }} mm</span></div>
@@ -474,8 +481,39 @@
                 <button class="btn btn-ghost btn-sm info-locate-btn" @click="locateInConfig(e.source)" title="Open in config editor">⌕ Locate</button>
               </div>
               <div class="info-card-body">
-                <div class="info-row"><span class="info-label">Pin</span><code>{{ e.pin }}</code></div>
+                <div class="info-row">
+                  <span class="info-label">Pin</span>
+                  <code>{{ e.pin }}</code>
+                  <span v-if="e.virtual" class="info-card-badge" style="margin-left:6px">virtual</span>
+                </div>
                 <div class="info-row"><span class="info-label">Config</span><span class="info-val info-val--file">{{ e.configFile }}</span></div>
+              </div>
+            </div>
+          </div>
+        </template>
+
+
+        <!-- Sensors (3D printer) -->
+        <template v-else-if="activeSection === 'sensors'">
+          <div class="section-title">Sensors</div>
+          <p class="section-note">All temperature sensors detected from Klipper — includes sensors from heaters, fans, and standalone sensors.</p>
+          <div v-if="printerSensorInfo.length === 0" class="section-note" style="margin-top:12px">No sensors found.</div>
+          <div v-else class="info-card-list">
+            <div v-for="s in printerSensorInfo" :key="s.key" class="info-card">
+              <div class="info-card-header">
+                <span class="info-card-name">{{ s.name }}</span>
+                <span class="info-card-badge">{{ s.type }}</span>
+                <span v-if="s.liveTemp != null" class="info-card-live">{{ s.liveTemp.toFixed(1) }}°C</span>
+                <button v-if="s.configFile" class="btn btn-ghost btn-sm info-locate-btn"
+                        @click="locateInConfig(s.key.replace('sensor_',''))" title="Open in config editor">⌕ Locate</button>
+              </div>
+              <div class="info-card-body">
+                <div class="info-row"><span class="info-label">Sensor Type</span><span class="info-val">{{ s.sensorType }}</span></div>
+                <div v-if="s.pin"     class="info-row"><span class="info-label">Pin</span><code>{{ s.pin }}</code></div>
+                <div v-if="s.minTemp != null" class="info-row"><span class="info-label">Temp Range</span><span class="info-val">{{ s.minTemp }}°C – {{ s.maxTemp }}°C</span></div>
+                <div v-if="s.liveMin != null" class="info-row"><span class="info-label">Measured Min</span><span class="info-val">{{ s.liveMin.toFixed(1) }}°C</span></div>
+                <div v-if="s.liveMax != null" class="info-row"><span class="info-label">Measured Max</span><span class="info-val">{{ s.liveMax.toFixed(1) }}°C</span></div>
+                <div v-if="s.configFile" class="info-row"><span class="info-label">Config</span><span class="info-val info-val--file">{{ s.configFile }}</span></div>
               </div>
             </div>
           </div>
@@ -729,6 +767,7 @@ const klipperCfg      = ref({})
 const configEditorRef = ref(null)
 // sectionIndex: Map of 'heater_fan name' -> { file, line }
 const sectionIndex    = ref({})
+const liveHeaters     = ref({})  // { extruder: {temperature, target, power}, heater_bed: {...} }
 const zoneTypes = ZONE_TYPES
 
 // ── Camera helpers ─────────────────────────────────────────────
@@ -741,9 +780,23 @@ const availableVideoDevices = ref(['/dev/video0', '/dev/video1', '/dev/video2', 
 onMounted(async () => {
   // Detect printer kinematics + fetch full configfile for info panels
   try {
-    const r = await send('printer.objects.query', { objects: { configfile: ['config'] } })
+    const r = await send('printer.objects.query', { objects: { configfile: null } })
     const cfg = r?.status?.configfile?.config ?? {}
     klipperCfg.value = cfg
+
+    // Fetch live heater state (extruder, heater_bed) — not in dynamicObjects
+    try {
+      const hr = await send('printer.objects.query', {
+        objects: {
+          extruder:   ['temperature', 'target', 'power'],
+          heater_bed: ['temperature', 'target', 'power'],
+        }
+      })
+      if (hr?.status) {
+        liveHeaters.value = hr.status
+      }
+    } catch { /* degrade gracefully */ }
+
     const kin = cfg?.printer?.kinematics
     if (kin) detectedKinematics.value = kin.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
   } catch { /* not critical */ }
@@ -782,7 +835,14 @@ onMounted(async () => {
     }
   } catch { /* stay with defaults */ }
 })
-const { send, sendGcode } = useMoonraker()
+const { send, sendGcode, subscribeToStatus } = useMoonraker()
+
+// Keep liveHeaters updated from subscription
+subscribeToStatus(data => {
+  if (data.extruder   != null) liveHeaters.value = { ...liveHeaters.value, extruder:   { ...(liveHeaters.value.extruder ?? {}),   ...data.extruder   } }
+  if (data.heater_bed != null) liveHeaters.value = { ...liveHeaters.value, heater_bed: { ...(liveHeaters.value.heater_bed ?? {}), ...data.heater_bed } }
+  // Also update heater_generic from dynamicObjects (already reactive via deviceStore)
+})
 
 const activeSection      = ref('device')
 const saving             = ref(false)
@@ -875,6 +935,7 @@ const printerHeaterInfo = computed(() => {
 
   for (const { key, type } of staticHeaters) {
     const cfgSection = klipperCfg.value[key] ?? {}
+    const live = liveHeaters.value[key] ?? deviceStore.dynamicObjects[key] ?? {}
     out.push({
       key, type,
       name:       key === 'extruder' ? 'Extruder' : 'Heated Bed',
@@ -884,10 +945,12 @@ const printerHeaterInfo = computed(() => {
       minTemp:    cfgSection.min_temp    ?? null,
       maxTemp:    cfgSection.max_temp    ?? null,
       maxPower:   cfgSection.max_power   ?? null,
+      liveTemp:   live.temperature ?? null,
+      liveTarget: live.target      ?? null,
+      livePower:  live.power       ?? null,
       pid:        cfgSection.control === 'pid' ? {
         kp: cfgSection.pid_kp, ki: cfgSection.pid_ki, kd: cfgSection.pid_kd
       } : null,
-      // Extruder extras
       nozzleDia:     cfgSection.nozzle_diameter     ?? null,
       filamentDia:   cfgSection.filament_diameter   ?? null,
       pressureAdv:   cfgSection.pressure_advance    ?? null,
@@ -898,7 +961,7 @@ const printerHeaterInfo = computed(() => {
   }
 
   for (const key of heaterKeys) {
-    const val = deviceStore.dynamicObjects[key]
+    const val = deviceStore.dynamicObjects[key] ?? {}
     const cfgSection = klipperCfg.value[key] ?? {}
     const isExt = key.startsWith('extruder')
     out.push({
@@ -911,6 +974,9 @@ const printerHeaterInfo = computed(() => {
       minTemp:    cfgSection.min_temp    ?? null,
       maxTemp:    cfgSection.max_temp    ?? null,
       maxPower:   cfgSection.max_power   ?? null,
+      liveTemp:   val.temperature ?? null,
+      liveTarget: val.target      ?? null,
+      livePower:  val.power       ?? null,
       pid:        cfgSection.control === 'pid' ? {
         kp: cfgSection.pid_kp, ki: cfgSection.pid_ki, kd: cfgSection.pid_kd
       } : null,
@@ -959,67 +1025,154 @@ const endstopLoading  = ref(false)
 async function queryEndstops() {
   endstopLoading.value = true
   try {
-    const r = await send('printer.query_endstops.last_query', {})
-    endstopState.value = r ?? {}
-  } catch {
-    // query_endstops may not be available if not homed
-    try {
-      const r2 = await send('printer.objects.query', { objects: { query_endstops: null } })
-      endstopState.value = r2?.status?.query_endstops?.last_query ?? {}
-    } catch { /* not available */ }
-  } finally {
-    endstopLoading.value = false
-  }
+    // Moonraker exposes endstop state via printer.objects.query on query_endstops
+    const r = await send('printer.objects.query', { objects: { query_endstops: null } })
+    endstopState.value = r?.status?.query_endstops?.last_query ?? {}
+  } catch { /* not available if not homed */ }
+  finally { endstopLoading.value = false }
 }
 
 const printerEndstopInfo = computed(() => {
-  // Build from steppers (each stepper has an endstop_pin) + probe if present
   const entries = []
+  const seen = new Set()
 
-  // From steppers
-  for (const s of printerStepperInfo.value) {
-    if (!s.endstopPin) continue
-    const name = s.name.toLowerCase()
+  // Scan ALL stepper sections in configfile for endstop_pin
+  for (const [key, sec] of Object.entries(klipperCfg.value)) {
+    if (!key.startsWith('stepper_')) continue
+    const pin = sec.endstop_pin
+    if (!pin) continue
+    // Skip virtual endstops (probe:z_virtual_endstop etc.)
+    if (pin.includes('virtual_endstop')) {
+      // Still record it so user sees it, but mark as virtual
+      const axis = key.replace('stepper_', '').toUpperCase()
+      const name = axis
+      if (seen.has(key)) continue; seen.add(key)
+      entries.push({
+        key:        'endstop_' + key,
+        name,
+        source:     key,
+        pin,
+        virtual:    true,
+        state:      endstopState.value[axis.toLowerCase()] ?? null,
+        configFile: findCfgSource(key),
+      })
+      continue
+    }
+    const axis = key.replace('stepper_', '').toUpperCase()
+    if (seen.has(key)) continue; seen.add(key)
     entries.push({
-      key:        'endstop_' + name,
-      name:       s.name,
-      source:     `stepper_${name.toLowerCase()}`,
-      pin:        s.endstopPin,
-      state:      endstopState.value[name] ?? null,
-      configFile: s.configFile,
+      key:        'endstop_' + key,
+      name:       axis,
+      source:     key,
+      pin,
+      virtual:    false,
+      state:      endstopState.value[axis.toLowerCase()] ?? null,
+      configFile: findCfgSource(key),
     })
   }
 
-  // Probe (cartographer, bltouch, cr_touch, etc.)
-  const probeCfg = klipperCfg.value['probe'] ?? klipperCfg.value['bltouch'] ?? null
-  const probeKey = klipperCfg.value['probe'] ? 'probe' : klipperCfg.value['bltouch'] ? 'bltouch' : null
-  if (probeCfg && probeKey) {
+  // Probes and scanners
+  for (const probeKey of ['probe', 'bltouch', 'cartographer', 'scanner', 'cr_touch']) {
+    const cfg = klipperCfg.value[probeKey]
+    if (!cfg) continue
+    const label = { probe: 'Probe', bltouch: 'BLTouch', cr_touch: 'CR Touch',
+                    cartographer: 'Cartographer', scanner: 'Scanner' }[probeKey] ?? probeKey
     entries.push({
       key:        probeKey,
-      name:       probeKey === 'bltouch' ? 'BLTouch' : 'Probe',
+      name:       label,
       source:     probeKey,
-      pin:        probeCfg.pin ?? probeCfg.sensor_pin ?? '—',
-      state:      endstopState.value['probe'] ?? null,
+      pin:        cfg.sensor_pin ?? cfg.pin ?? '—',
+      virtual:    false,
+      state:      endstopState.value['probe'] ?? endstopState.value['z'] ?? null,
       configFile: findCfgSource(probeKey),
     })
   }
 
-  // Cartographer / scanner probes
-  for (const cfgKey of ['cartographer', 'scanner']) {
-    const cfg = klipperCfg.value[cfgKey]
-    if (cfg) {
-      entries.push({
-        key:        cfgKey,
-        name:       cfgKey.charAt(0).toUpperCase() + cfgKey.slice(1),
-        source:     cfgKey,
-        pin:        cfg.sensor_pin ?? cfg.pin ?? '—',
-        state:      endstopState.value['probe'] ?? null,
-        configFile: findCfgSource(cfgKey),
-      })
-    }
+  return entries
+})
+
+// ── Sensors ───────────────────────────────────────────────────────────────────
+const printerSensorInfo = computed(() => {
+  const entries = []
+
+  // temperature_sensor objects (NTC, PT100, DS18B20, etc.)
+  for (const [key, val] of Object.entries(deviceStore.dynamicObjects)) {
+    if (!key.startsWith('temperature_sensor ')) continue
+    const cfg = klipperCfg.value[key] ?? {}
+    entries.push({
+      key,
+      name:       key.replace('temperature_sensor ', ''),
+      type:       'Temperature Sensor',
+      sensorType: cfg.sensor_type ?? '—',
+      pin:        cfg.sensor_pin  ?? cfg.pin ?? null,
+      minTemp:    cfg.min_temp    ?? null,
+      maxTemp:    cfg.max_temp    ?? null,
+      liveTemp:   val.temperature ?? null,
+      liveMin:    val.measured_min_temp ?? null,
+      liveMax:    val.measured_max_temp ?? null,
+      configFile: findCfgSource(key),
+    })
   }
 
-  return entries
+  // Heater sensors (extruder, heater_bed, heater_generic) — temp only, no control
+  for (const [key, sec] of Object.entries(klipperCfg.value)) {
+    if (!['extruder', 'heater_bed'].includes(key) && !key.startsWith('heater_generic ') && !key.startsWith('extruder')) continue
+    if (!sec.sensor_type) continue
+    const live = liveHeaters.value[key] ?? deviceStore.dynamicObjects[key] ?? {}
+    const label = key === 'extruder' ? 'Extruder' : key === 'heater_bed' ? 'Bed' : key.replace('heater_generic ', '')
+    entries.push({
+      key:        'sensor_' + key,
+      name:       label,
+      type:       'Heater Sensor',
+      sensorType: sec.sensor_type,
+      pin:        sec.sensor_pin ?? null,
+      minTemp:    sec.min_temp   ?? null,
+      maxTemp:    sec.max_temp   ?? null,
+      liveTemp:   live.temperature ?? null,
+      liveMin:    null,
+      liveMax:    null,
+      configFile: findCfgSource(key),
+    })
+  }
+
+  // MCU temperature sensors (from MCU last_stats)
+  for (const mcu of deviceStore.mcus) {
+    if (mcu.temp == null) continue
+    entries.push({
+      key:        'mcu_temp_' + mcu.name,
+      name:       mcu.name.replace('mcu ', '') || 'MCU',
+      type:       'MCU Temp',
+      sensorType: 'Internal',
+      pin:        null,
+      minTemp:    null,
+      maxTemp:    null,
+      liveTemp:   mcu.temp,
+      liveMin:    null,
+      liveMax:    null,
+      configFile: null,
+    })
+  }
+
+  // temperature_fan sensors
+  for (const [key, val] of Object.entries(deviceStore.dynamicObjects)) {
+    if (!key.startsWith('temperature_fan ')) continue
+    const cfg = klipperCfg.value[key] ?? {}
+    entries.push({
+      key:        'sensor_' + key,
+      name:       key.replace('temperature_fan ', ''),
+      type:       'Temperature Fan Sensor',
+      sensorType: cfg.sensor_type ?? '—',
+      pin:        cfg.sensor_pin  ?? null,
+      minTemp:    cfg.min_temp    ?? null,
+      maxTemp:    cfg.max_temp    ?? null,
+      liveTemp:   val.temperature ?? null,
+      liveMin:    null,
+      liveMax:    null,
+      configFile: findCfgSource(key),
+    })
+  }
+
+  return entries.sort((a, b) => a.name.localeCompare(b.name))
 })
 
 // Monotonically true — watch for endstops tab activation
@@ -1187,6 +1340,7 @@ const sections = computed(() => {
       { id: 'heaters',   label: 'Heaters'  },
       { id: 'steppers',  label: 'Steppers' },
       { id: 'endstops',  label: 'Endstops' },
+      { id: 'sensors',   label: 'Sensors'  },
     ] : []),
     { id: 'cameras',      label: 'Cameras' },
     ...(!is3dPrinter.value ? [
@@ -1344,6 +1498,18 @@ onMounted(() => {
   border-radius: var(--radius);
   padding: 1px 6px;
 }
+.info-live-temp {
+  margin-left: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--amber);
+  font-weight: 600;
+}
+.info-live-target {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
 .info-locate-btn {
   font-size: 10px;
   padding: 1px 7px;
