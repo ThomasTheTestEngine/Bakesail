@@ -239,23 +239,22 @@ function initScene() {
 
 function positionCamera() {
   const { xMax, yMax, zMax } = limits
-  const cx = xMax / 2
-  const cz = -yMax / 2  // bed centre in new mapping (Printer Y → Three.js -Z)
 
-  controls.target.set(cx, 0, cz)
+  // Orbit target: -10% X, -10% Y (printer coords), +20% Z from bed centre
+  const tx = xMax * (0.5 - 0.10)          // centre - 10%
+  const tz = -(yMax * (0.5 - 0.10))       // centre - 10% (negated for Three.js -Z)
+  const ty = zMax * 0.20                   // +20% up
 
-  // Camera on POSITIVE-Z side so Three.js lookAt gives camera_right = +X,
-  // making X increase leftward → X=0 at left, X=max at right. ✓
+  controls.target.set(tx, ty, tz)
+
   const dist  = Math.max(xMax, yMax, zMax) * 2.2
-  const azRad = THREE.MathUtils.degToRad(35)   // more to the right
-  const elRad = THREE.MathUtils.degToRad(18)   // lower elevation
+  const azRad = THREE.MathUtils.degToRad(35)
+  const elRad = THREE.MathUtils.degToRad(18)
   camera.position.set(
-    cx  + dist * Math.sin(azRad) * Math.cos(elRad),
-    dist * Math.sin(elRad),
-    cz  + dist * Math.cos(azRad) * Math.cos(elRad),
+    tx + dist * Math.sin(azRad) * Math.cos(elRad),
+    ty + dist * Math.sin(elRad),
+    tz + dist * Math.cos(azRad) * Math.cos(elRad),
   )
-  // Shift orbit target slightly up so the bed sits lower in the viewport
-  controls.target.set(cx, zMax * 0.12, cz)
   controls.update()
 }
 
