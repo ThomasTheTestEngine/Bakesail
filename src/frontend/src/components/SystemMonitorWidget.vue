@@ -22,11 +22,11 @@
           <div class="wmon-gauge-wrap">
             <svg viewBox="0 0 48 48" class="wmon-gauge-svg">
               <circle cx="24" cy="24" r="20" fill="none" stroke="var(--border-2)" stroke-width="4"/>
-              <circle cx="24" cy="24" r="20" fill="none" stroke="var(--teal)" stroke-width="4"
+              <circle cx="24" cy="24" r="20" fill="none" stroke="var(--yellow)" stroke-width="4"
                       stroke-dasharray="125.66"
                       :stroke-dashoffset="125.66 * (1 - Math.max(Math.min(parseFloat(mcu.load ?? 0), 1), 0.008))"
                       stroke-linecap="round" transform="rotate(-90 24 24)"/>
-              <text x="24" y="29" text-anchor="middle" font-size="12" fill="var(--teal)" font-family="var(--font-mono)">
+              <text x="24" y="29" text-anchor="middle" font-size="12" fill="var(--yellow)" font-family="var(--font-mono)">
                 {{ mcu.load != null ? Math.min(Math.round(parseFloat(mcu.load) * 100), 100) + '%' : '—' }}
               </text>
             </svg>
@@ -86,11 +86,11 @@
           <div class="wmon-gauge-wrap">
             <svg viewBox="0 0 48 48" class="wmon-gauge-svg">
               <circle cx="24" cy="24" r="20" fill="none" stroke="var(--border-2)" stroke-width="4"/>
-              <circle cx="24" cy="24" r="20" fill="none" stroke="var(--teal)" stroke-width="4"
+              <circle cx="24" cy="24" r="20" fill="none" stroke="var(--yellow)" stroke-width="4"
                       stroke-dasharray="125.66"
                       :stroke-dashoffset="125.66 * (1 - Math.max(Math.min((hostCpuPct ?? 0) / 100, 1), 0.008))"
                       stroke-linecap="round" transform="rotate(-90 24 24)"/>
-              <text x="24" y="29" text-anchor="middle" font-size="12" fill="var(--teal)" font-family="var(--font-mono)">
+              <text x="24" y="29" text-anchor="middle" font-size="12" fill="var(--yellow)" font-family="var(--font-mono)">
                 {{ hostCpuPct != null ? Math.round(hostCpuPct) + '%' : '—' }}
               </text>
             </svg>
