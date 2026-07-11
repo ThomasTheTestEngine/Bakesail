@@ -195,7 +195,8 @@ function applyStatusUpdate(status) {
       k.startsWith('neopixel ')        ||
       k.startsWith('led ')             ||
       k.startsWith('output_pin ')      ||
-      k.startsWith('stepper_')
+      k.startsWith('stepper_')         ||
+      k.startsWith('gcode_macro ')
     )
   })
   if (dynamicKeys.length > 0) {

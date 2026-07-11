@@ -111,14 +111,15 @@
                     @click="addMacro(m.name, m.label)">
               {{ m.label }}<span v-if="isPinned(m.name)" style="opacity:0.4;font-size:10px"> ✓</span>
             </button>
-            <div class="topbar-macro-menu-section" style="margin-top:6px">Klipper Macros</div>
-            <div v-if="availableKlipperMacros.length === 0" class="topbar-macro-menu-item" style="opacity:0.5;cursor:default">No macros found</div>
-            <button v-for="name in availableKlipperMacros" :key="name"
-                    class="topbar-macro-menu-item"
-                    :disabled="isPinned(name)"
-                    @click="addMacro(name)">
-              {{ name }}<span v-if="isPinned(name)" style="opacity:0.4;font-size:10px"> ✓</span>
-            </button>
+            <template v-if="availableKlipperMacros.length > 0">
+              <div class="topbar-macro-menu-section" style="margin-top:6px">Klipper Macros</div>
+              <button v-for="name in availableKlipperMacros" :key="name"
+                      class="topbar-macro-menu-item"
+                      :disabled="isPinned(name)"
+                      @click="addMacro(name)">
+                {{ name }}<span v-if="isPinned(name)" style="opacity:0.4;font-size:10px"> ✓</span>
+              </button>
+            </template>
             <div class="topbar-macro-menu-section" style="margin-top:6px">Custom</div>
             <button class="topbar-macro-menu-item" @click="addCustomMacro">+ New custom…</button>
           </div>
