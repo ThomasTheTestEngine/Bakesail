@@ -71,6 +71,9 @@
 
 <script setup>
 import { computed, ref, inject } from 'vue'
+import { useEditMode } from '../composables/useEditMode.js'
+
+const { editing } = useEditMode()
 
 const props = defineProps({
   layout:           { type: Object,   required: true },
@@ -87,11 +90,13 @@ const setCustomizing = inject('setCustomizing', () => {})
 function enterCustomize() {
   props.layout.enterCustomize()
   setCustomizing(true)
+  editing.value = true
 }
 function exitCustomize() {
   setCustomizing(false)
-  props.layout.applyLayout()   // saves + exits (same as old Apply button)
+  props.layout.applyLayout()
   showLoadMenu.value = false
+  editing.value = false
 }
 
 function doRevert() {

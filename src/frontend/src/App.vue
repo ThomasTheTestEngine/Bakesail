@@ -75,6 +75,40 @@
                     :title="deviceStore.motorsEnabled ? 'Disable motors' : 'Enable motors'">
 <i class="mdi mdi-engine-off" style="font-size:16px;vertical-align:-2px"></i>
             </button>
+
+            <!-- ── Pinned macro chips ─────────────────────────── -->
+            <div class="topbar-divider" v-if="settings.pinnedMacros.length > 0 || editMode.editing.value"></div>
+            <div class="topbar-macros" ref="macroBarEl">
+              <!-- Existing macro chips -->
+              <div v-for="(m, i) in settings.pinnedMacros" :key="m.id"
+                   class="topbar-macro-chip"
+                   :class="{ 'topbar-macro-chip--edit': editMode.editing.value }"
+                   :draggable="editMode.editing.value"
+                   @dragstart="macroDragStart(i)"
+                   @dragover.prevent="macroDragOver(i)"
+                   @dragend="macroDragEnd"
+                   @click="!editMode.editing.value && runMacro(m)">
+                <button v-if="editMode.editing.value" class="topbar-macro-remove" @click.stop="removeMacro(i)" title="Remove">−</button>
+                <span class="topbar-macro-name">{{ m.name }}</span>
+              </div>
+
+              <!-- Add macro button (edit mode only) -->
+              <div v-if="editMode.editing.value" class="topbar-macro-add-wrap" @click.stop>
+                <button class="topbar-macro-add-btn" @click="macroMenuOpen = !macroMenuOpen" title="Add macro">+</button>
+                <div v-if="macroMenuOpen" class="topbar-macro-menu">
+                  <div class="topbar-macro-menu-section">Klipper Macros</div>
+                  <button v-for="name in availableKlipperMacros" :key="name"
+                          class="topbar-macro-menu-item"
+                          :disabled="isPinned(name)"
+                          @click="addMacro(name)">
+                    {{ name }}
+                    <span v-if="isPinned(name)" style="opacity:0.4;font-size:10px"> ✓</span>
+                  </button>
+                  <div class="topbar-macro-menu-section" style="margin-top:6px">Custom</div>
+                  <button class="topbar-macro-menu-item" @click="addCustomMacro">+ New custom…</button>
+                </div>
+              </div>
+            </div>
           </template>
         </div>
 
@@ -229,6 +263,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { tabsForDevice } from './router/index.js'
+import { useEditMode } from './composables/useEditMode.js'
 import { useMoonraker } from './composables/useMoonraker.js'
 import { useDeviceStore } from './stores/device.js'
 import { useSettingsStore } from './stores/settings.js'
@@ -237,7 +272,62 @@ const route    = useRoute()
 const router   = useRouter()
 const store    = useDeviceStore()
 const settings = useSettingsStore()
+const editMode = useEditMode()
 const { connected, klippyState, connect, sendGcode, subscribeToConsole, fetchConsoleHistory } = useMoonraker()
+
+// ── Macro bar ──────────────────────────────────────────────────────────────────
+const macroMenuOpen = ref(false)
+const macroBarEl    = ref(null)
+let   macroDragIdx  = null
+
+const availableKlipperMacros = computed(() => {
+  const { useDeviceStore: _ds } = { useDeviceStore: () => deviceStore }
+  return Object.keys(deviceStore.dynamicObjects)
+    .filter(k => k.startsWith('gcode_macro '))
+    .map(k => k.replace('gcode_macro ', '').toUpperCase())
+    .sort()
+})
+
+function isPinned(name) { return settings.pinnedMacros.some(m => m.name === name) }
+
+function addMacro(name) {
+  if (isPinned(name)) return
+  settings.pinnedMacros.push({ id: Date.now().toString(36), name })
+  settings.save()
+  macroMenuOpen.value = false
+}
+
+async function addCustomMacro() {
+  const name = prompt('Macro name (the gcode command to send):')
+  if (!name?.trim()) return
+  settings.pinnedMacros.push({ id: Date.now().toString(36), name: name.trim().toUpperCase() })
+  settings.save()
+  macroMenuOpen.value = false
+}
+
+function removeMacro(i) {
+  settings.pinnedMacros.splice(i, 1)
+  settings.save()
+}
+
+function runMacro(m) {
+  sendGcode(m.name)
+}
+
+function macroDragStart(i) { macroDragIdx = i }
+function macroDragOver(i) {
+  if (macroDragIdx === null || macroDragIdx === i) return
+  const arr = settings.pinnedMacros
+  const item = arr.splice(macroDragIdx, 1)[0]
+  arr.splice(i, 0, item)
+  macroDragIdx = i
+}
+function macroDragEnd() { macroDragIdx = null; settings.save() }
+
+// Close macro menu on outside click
+if (typeof window !== 'undefined') {
+  window.addEventListener('click', () => { macroMenuOpen.value = false })
+}
 
 // ── Console bar ────────────────────────────────────────────────
 const cbarOpen       = ref(false)
@@ -800,7 +890,76 @@ a { color: inherit; text-decoration: none; }
   padding: 3px 10px;
 }
 
-.topbar-btn.topbar-btn--home-unset { color: var(--teal); border-color: var(--teal); opacity: 0.35; }
+/* ── Macro bar ──────────────────────────────────────────── */
+.topbar-macros {
+  display: flex; align-items: center; gap: 4px; flex-wrap: nowrap;
+}
+
+.topbar-macro-chip {
+  display: flex; align-items: center; gap: 3px;
+  padding: 2px 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-2);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+  cursor: pointer; white-space: nowrap;
+  transition: background 0.1s, color 0.1s;
+  user-select: none;
+}
+.topbar-macro-chip:hover:not(.topbar-macro-chip--edit) {
+  background: var(--surface-2); color: var(--text);
+}
+.topbar-macro-chip--edit {
+  cursor: grab; border-color: var(--amber); color: var(--amber);
+  opacity: 0.85;
+}
+.topbar-macro-chip--edit:active { cursor: grabbing; }
+
+.topbar-macro-remove {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 1px solid currentColor; background: transparent;
+  color: inherit; font-size: 12px; line-height: 1;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  padding: 0; flex-shrink: 0;
+}
+.topbar-macro-remove:hover { background: var(--red); border-color: var(--red); color: #fff; }
+
+.topbar-macro-name { pointer-events: none; }
+
+.topbar-macro-add-wrap { position: relative; }
+.topbar-macro-add-btn {
+  width: 22px; height: 22px; border-radius: var(--radius);
+  border: 1px dashed var(--border-2); background: transparent;
+  color: var(--text-muted); font-size: 16px; line-height: 1;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: border-color 0.1s, color 0.1s;
+}
+.topbar-macro-add-btn:hover { border-color: var(--green); color: var(--green); }
+
+.topbar-macro-menu {
+  position: absolute; top: calc(100% + 6px); left: 0;
+  min-width: 200px; max-height: 320px; overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+  z-index: 500;
+  display: flex; flex-direction: column;
+}
+.topbar-macro-menu-section {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.10em;
+  color: var(--text-muted); padding: 6px 10px 3px;
+  border-bottom: 1px solid var(--border);
+}
+.topbar-macro-menu-item {
+  text-align: left; padding: 6px 12px;
+  font-size: 12px; color: var(--text-dim);
+  background: transparent; border: none; cursor: pointer;
+  width: 100%;
+}
+.topbar-macro-menu-item:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+.topbar-macro-menu-item:disabled { opacity: 0.45; cursor: default; }
 .topbar-btn.topbar-btn--home-set   { color: var(--teal); border-color: var(--teal); }
 .topbar-btn.topbar-btn--home-set:hover { background: var(--teal-glow); }
 

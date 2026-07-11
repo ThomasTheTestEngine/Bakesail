@@ -91,6 +91,10 @@ export function defaultSettings() {
     // test: true = dummy camera (shows placeholder, no real device needed)
     cameras: [],
 
+    // Macro buttons pinned to the topbar.
+    // { id, name, gcode? }  gcode is set for custom macros only.
+    pinnedMacros: [],
+
     // Motion
     motion: {
       maxSpeed:         50,
