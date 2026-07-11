@@ -50,7 +50,7 @@
                     :stroke-dashoffset="125.66 * (1 - Math.max(Math.min(parseFloat(mcu.load ?? 0), 1), 0.01))"
                     stroke-linecap="round" transform="rotate(-90 24 24)"/>
             <text x="24" y="29" text-anchor="middle" font-size="12" fill="var(--teal)" font-family="var(--font-mono)">
-              {{ mcu.load != null ? Math.round(parseFloat(mcu.load) * 100) + '%' : '?' }}
+              {{ mcu.load != null ? Math.min(Math.round(parseFloat(mcu.load) * 100), 100) + '%' : '?' }}
             </text>
           </svg>
         </div>
@@ -149,10 +149,24 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useDeviceStore } from '../stores/device.js'
 
 const deviceStore = useDeviceStore()
+
+// Poll /machine/proc_stats every 2s for live CPU/mem/network/temp.
+// This is a machine-level endpoint, not a printer object, so it can't
+// be subscribed via printer.objects.subscribe — polling is correct.
+let pollTimer = null
+async function pollProcStats() {
+  try {
+    const r = await fetch('/machine/proc_stats')
+    if (!r.ok) return
+    const d = await r.json()
+    const ps = d.result ?? d
+    deviceStore.updateProcStats(ps)
+  } catch { /* degrade gracefully */ }
+}
 
 // CPU %: proc_stats gives per-core array 0-100; average them.
 // Fall back to sysload/cpu_count from system_stats.
@@ -189,14 +203,22 @@ const hostMemPct = computed(() => {
 // is a one-shot REST call, so the widget owns it here to stay self-sufficient
 // on any dashboard.
 onMounted(async () => {
-  if (deviceStore.hostInfo) return   // already fetched by another mounted instance
-  try {
-    const r = await fetch('/machine/system_info')
-    if (r.ok) {
-      const d = await r.json()
-      deviceStore.updateHostInfo(d.result?.system_info ?? null)
-    }
-  } catch { /* host row degrades gracefully — gauges/MCU rows still render */ }
+  if (!deviceStore.hostInfo) {
+    try {
+      const r = await fetch('/machine/system_info')
+      if (r.ok) {
+        const d = await r.json()
+        deviceStore.updateHostInfo(d.result?.system_info ?? null)
+      }
+    } catch { /* host row degrades gracefully */ }
+  }
+  // Start proc_stats polling immediately then every 2s
+  pollProcStats()
+  pollTimer = setInterval(pollProcStats, 2000)
+})
+
+onUnmounted(() => {
+  clearInterval(pollTimer)
 })
 </script>
 
