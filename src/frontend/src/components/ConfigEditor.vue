@@ -93,9 +93,9 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 
-import { EditorState, EditorSelection } from '@codemirror/state'
+import { EditorState, EditorSelection, StateEffect } from '@codemirror/state'
 import { EditorView, keymap, lineNumbers, highlightActiveLine,
-         highlightActiveLineGutter, drawSelection, scrollIntoView } from '@codemirror/view'
+         highlightActiveLineGutter, drawSelection } from '@codemirror/view'
 import { defaultKeymap, indentWithTab, history, historyKeymap } from '@codemirror/commands'
 import { indentOnInput, syntaxHighlighting,
          defaultHighlightStyle, bracketMatching }  from '@codemirror/language'
@@ -357,10 +357,9 @@ function jumpToLine(lineNumber) {
   if (!view) return
   const doc  = view.state.doc
   const line = doc.line(Math.max(1, Math.min(lineNumber, doc.lines)))
-  // Select the whole line so it's visible and highlighted
   view.dispatch({
     selection: EditorSelection.range(line.from, line.to),
-    effects: scrollIntoView(line.from, { y: 'center' }),
+    effects: EditorView.scrollIntoView(line.from, { y: 'center' }),
   })
   view.focus()
 }
