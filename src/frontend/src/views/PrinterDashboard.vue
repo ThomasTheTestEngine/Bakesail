@@ -729,7 +729,7 @@ const WIDGET_DEFS = [
   { type: 'controls',  label: 'Print Controls',      defaultW: 600, defaultH: 60,  defaultConfig: {}, fields: [] },
   { type: 'macros',    label: 'Macro Buttons',       defaultW: 400, defaultH: 100, defaultConfig: { macros: ['BED_MESH_CALIBRATE', 'LOAD_FILAMENT', 'UNLOAD_FILAMENT'] }, fields: [], multiple: true },
   { type: 'console',   label: 'Console',             defaultW: 480, defaultH: 360, defaultConfig: {}, fields: [] },
-  { type: 'camera',    label: 'Camera Feed',         defaultW: 320, defaultH: 260, defaultConfig: { cameraId: null }, fields: [{ key: 'label', label: 'Show camera name' }], multiple: true },
+  { type: 'camera',    label: 'Camera Feed',         defaultW: 400, defaultH: 225, defaultConfig: { cameraId: null }, fields: [{ key: 'label', label: 'Show camera name' }], multiple: true },
 ]
 
 function widgetLabel(type)   { return WIDGET_DEFS.find(d => d.type === type)?.label ?? type }

@@ -152,7 +152,7 @@ onUnmounted(() => clearInterval(fpsInterval))
 .cam-img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   display: block;
 }
 
@@ -171,7 +171,7 @@ onUnmounted(() => clearInterval(fpsInterval))
 
 .cam-fps {
   position: absolute;
-  top: 6px;
+  bottom: 6px;
   right: 8px;
   font-size: 11px;
   font-weight: 700;
@@ -180,65 +180,5 @@ onUnmounted(() => clearInterval(fpsInterval))
   text-shadow: 0 1px 4px rgba(0,0,0,0.9);
   pointer-events: none;
   letter-spacing: 0.04em;
-}
-</style>
-<style scoped>
-.cam-feed {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  background: var(--surface-2);
-  border-radius: var(--radius);
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.cam-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  height: 100%;
-  color: var(--text-muted);
-}
-.cam-placeholder--err .cam-placeholder-icon { color: var(--red); opacity: 0.5; }
-.cam-placeholder--err .cam-placeholder-text { color: var(--red); opacity: 0.6; }
-
-.cam-placeholder-icon { font-size: 28px; opacity: 0.4; }
-.cam-placeholder-text {
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  opacity: 0.5;
-}
-.cam-placeholder-sub {
-  font-size: 11px;
-  font-family: var(--font-mono);
-  opacity: 0.35;
-}
-
-.cam-img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-}
-
-.cam-label {
-  position: absolute;
-  bottom: 6px;
-  left: 8px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(255,255,255,0.5);
-  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
-  pointer-events: none;
 }
 </style>
