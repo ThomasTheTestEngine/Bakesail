@@ -152,25 +152,53 @@
         <!-- Fans -->
         <template v-else-if="activeSection === 'fans'">
           <div class="section-title">Fans</div>
-          <div class="item-list">
-            <div v-for="fan in settings.fans" :key="fan.id" class="item-row">
-              <div class="item-num">{{ fan.id }}</div>
-              <input class="field-input" v-model="fan.label" style="width:110px;flex:none" />
-              <input class="field-input field-input--pin" v-model="fan.pin" placeholder="e.g. PC6" />
-              <label class="test-pin-label" :class="{ active: isTestPin(fan.pin) }">
-                <input type="checkbox" :checked="isTestPin(fan.pin)"
-                  @change="fan.pin = toggleTestPin(fan.pin)" />
-                Test
-              </label>
-              <label class="field-label-inline">
-                <input type="checkbox" v-model="fan.pwm" /> PWM
-              </label>
-              <button class="item-remove" @click="settings.removeFan(fan.id)">×</button>
+          <!-- 3D printer: read-only info from Klipper -->
+          <template v-if="is3dPrinter">
+            <p class="section-note">Fans detected from Klipper. Edit definitions in <strong>Edit Config</strong>.</p>
+            <div v-if="printerFanInfo.length === 0" class="section-note" style="margin-top:12px">
+              No fans found. Ensure Klipper is connected.
             </div>
-          </div>
-          <button class="btn btn-ghost btn-sm" @click="settings.addFan()" style="margin-top:10px">
-            + Add Fan
-          </button>
+            <div v-else class="info-card-list">
+              <div v-for="f in printerFanInfo" :key="f.key" class="info-card">
+                <div class="info-card-header">
+                  <span class="info-card-name">{{ f.name }}</span>
+                  <span class="info-card-badge">{{ f.type }}</span>
+                  <span class="info-card-live">{{ f.speed }}<span v-if="f.rpm"> · {{ f.rpm }}</span></span>
+                </div>
+                <div class="info-card-body">
+                  <div class="info-row"><span class="info-label">Pin</span><code>{{ f.pin }}</code></div>
+                  <div v-if="f.heater"    class="info-row"><span class="info-label">Heater</span><code>{{ f.heater }}</code></div>
+                  <div v-if="f.sensor"    class="info-row"><span class="info-label">Sensor</span><span class="info-val">{{ f.sensor }}</span></div>
+                  <div v-if="f.maxPower"  class="info-row"><span class="info-label">Max Power</span><span class="info-val">{{ Math.round(f.maxPower * 100) }}%</span></div>
+                  <div v-if="f.kickStart" class="info-row"><span class="info-label">Kick Start</span><span class="info-val">{{ f.kickStart }}s</span></div>
+                  <div v-if="f.offBelow"  class="info-row"><span class="info-label">Off Below</span><span class="info-val">{{ Math.round(f.offBelow * 100) }}%</span></div>
+                  <div class="info-row"><span class="info-label">Config</span><span class="info-val info-val--file">{{ f.configFile }}</span></div>
+                </div>
+              </div>
+            </div>
+          </template>
+          <!-- Other device types: original editable UI -->
+          <template v-else>
+            <div class="item-list">
+              <div v-for="fan in settings.fans" :key="fan.id" class="item-row">
+                <div class="item-num">{{ fan.id }}</div>
+                <input class="field-input" v-model="fan.label" style="width:110px;flex:none" />
+                <input class="field-input field-input--pin" v-model="fan.pin" placeholder="e.g. PC6" />
+                <label class="test-pin-label" :class="{ active: isTestPin(fan.pin) }">
+                  <input type="checkbox" :checked="isTestPin(fan.pin)"
+                    @change="fan.pin = toggleTestPin(fan.pin)" />
+                  Test
+                </label>
+                <label class="field-label-inline">
+                  <input type="checkbox" v-model="fan.pwm" /> PWM
+                </label>
+                <button class="item-remove" @click="settings.removeFan(fan.id)">×</button>
+              </div>
+            </div>
+            <button class="btn btn-ghost btn-sm" @click="settings.addFan()" style="margin-top:10px">
+              + Add Fan
+            </button>
+          </template>
         </template>
 
         <!-- Vacuum -->
@@ -204,43 +232,74 @@
           </div>
         </template>
 
-        <!-- Illumination -->
+        <!-- Illumination / Lights -->
         <template v-else-if="activeSection === 'illumination'">
-          <div class="section-title">Illumination</div>
-          <div class="item-list">
-            <div class="item-row">
-              <label class="field-label-inline" style="width:180px">
-                <input type="checkbox" v-model="settings.illumination.laser" /> Laser / spot light
-              </label>
-              <input v-if="settings.illumination.laser" class="field-input field-input--pin"
-                     v-model="settings.illumination.laserPin" placeholder="e.g. PB0" />
-              <label v-if="settings.illumination.laser" class="test-pin-label" :class="{ active: isTestPin(settings.illumination.laserPin) }">
-                <input type="checkbox" :checked="isTestPin(settings.illumination.laserPin)"
-                  @change="settings.illumination.laserPin = toggleTestPin(settings.illumination.laserPin)" />
-                Test
-              </label>
+          <div class="section-title">{{ is3dPrinter ? 'Lights' : 'Illumination' }}</div>
+          <!-- 3D printer: read-only info from Klipper -->
+          <template v-if="is3dPrinter">
+            <p class="section-note">LEDs detected from Klipper. Edit definitions in <strong>Edit Config</strong>.</p>
+            <div v-if="printerLedInfo.length === 0" class="section-note" style="margin-top:12px">
+              No LEDs found. Ensure Klipper is connected.
             </div>
-            <div class="item-row item-row--wrap">
-              <label class="field-label-inline" style="width:180px">
-                <input type="checkbox" v-model="settings.illumination.neopixel" /> NeoPixel LED bar
-              </label>
-              <template v-if="settings.illumination.neopixel">
-                <span class="field-label-inline">Pin</span>
-                <input class="field-input field-input--pin" v-model="settings.illumination.neopixelPin" placeholder="PB1" />
-                <label class="test-pin-label" :class="{ active: isTestPin(settings.illumination.neopixelPin) }">
-                  <input type="checkbox" :checked="isTestPin(settings.illumination.neopixelPin)"
-                    @change="settings.illumination.neopixelPin = toggleTestPin(settings.illumination.neopixelPin)" />
+            <div v-else class="info-card-list">
+              <div v-for="l in printerLedInfo" :key="l.key" class="info-card">
+                <div class="info-card-header">
+                  <span class="info-card-name">{{ l.name }}</span>
+                  <span class="info-card-badge">{{ l.type }}</span>
+                </div>
+                <div class="info-card-body">
+                  <div class="info-row"><span class="info-label">Pin</span><code>{{ l.pin }}</code></div>
+                  <div v-if="l.chainCount" class="info-row"><span class="info-label">LED Count</span><span class="info-val">{{ l.chainCount }}</span></div>
+                  <div v-if="l.colorOrder" class="info-row"><span class="info-label">Color Order</span><span class="info-val">{{ l.colorOrder }}</span></div>
+                  <div v-if="l.initialRed != null" class="info-row">
+                    <span class="info-label">Initial Color</span>
+                    <span class="info-val">
+                      R:{{ l.initialRed }} G:{{ l.initialGreen }} B:{{ l.initialBlue }}
+                      <span v-if="l.initialWhite != null"> W:{{ l.initialWhite }}</span>
+                    </span>
+                  </div>
+                  <div class="info-row"><span class="info-label">Config</span><span class="info-val info-val--file">{{ l.configFile }}</span></div>
+                </div>
+              </div>
+            </div>
+          </template>
+          <!-- Other device types: original editable UI -->
+          <template v-else>
+            <div class="item-list">
+              <div class="item-row">
+                <label class="field-label-inline" style="width:180px">
+                  <input type="checkbox" v-model="settings.illumination.laser" /> Laser / spot light
+                </label>
+                <input v-if="settings.illumination.laser" class="field-input field-input--pin"
+                       v-model="settings.illumination.laserPin" placeholder="e.g. PB0" />
+                <label v-if="settings.illumination.laser" class="test-pin-label" :class="{ active: isTestPin(settings.illumination.laserPin) }">
+                  <input type="checkbox" :checked="isTestPin(settings.illumination.laserPin)"
+                    @change="settings.illumination.laserPin = toggleTestPin(settings.illumination.laserPin)" />
                   Test
                 </label>
-                <span class="field-label-inline">LEDs</span>
-                <input class="field-input" type="number" v-model.number="settings.illumination.neopixelCount"
-                       min="1" max="300" style="width:70px;flex:none" />
-                <span class="field-label-inline">Colour</span>
-                <input type="color" v-model="settings.illumination.neopixelColor"
-                       style="width:40px;height:32px;border:none;background:none;cursor:pointer;padding:0" />
-              </template>
+              </div>
+              <div class="item-row item-row--wrap">
+                <label class="field-label-inline" style="width:180px">
+                  <input type="checkbox" v-model="settings.illumination.neopixel" /> NeoPixel LED bar
+                </label>
+                <template v-if="settings.illumination.neopixel">
+                  <span class="field-label-inline">Pin</span>
+                  <input class="field-input field-input--pin" v-model="settings.illumination.neopixelPin" placeholder="PB1" />
+                  <label class="test-pin-label" :class="{ active: isTestPin(settings.illumination.neopixelPin) }">
+                    <input type="checkbox" :checked="isTestPin(settings.illumination.neopixelPin)"
+                      @change="settings.illumination.neopixelPin = toggleTestPin(settings.illumination.neopixelPin)" />
+                    Test
+                  </label>
+                  <span class="field-label-inline">LEDs</span>
+                  <input class="field-input" type="number" v-model.number="settings.illumination.neopixelCount"
+                         min="1" max="300" style="width:70px;flex:none" />
+                  <span class="field-label-inline">Colour</span>
+                  <input type="color" v-model="settings.illumination.neopixelColor"
+                         style="width:40px;height:32px;border:none;background:none;cursor:pointer;padding:0" />
+                </template>
+              </div>
             </div>
-          </div>
+          </template>
         </template>
 
         <!-- Cameras -->
@@ -563,6 +622,7 @@ import { useSettingsStore, defaultSettings, ZONE_TYPES } from '../stores/setting
 import { useTestPins } from '../composables/useTestPins.js'
 import { saveBakesailCfg, ensurePrinterCfgInclude, generateBakesailCfg } from '../utils/configWriter.js'
 import { useMoonraker } from '../composables/useMoonraker.js'
+import { useDeviceStore } from '../stores/device.js'
 import { cameraTypeLabel } from '../utils/cameraTypes.js'
 import CrowsnestSettingsPopover from '../components/CrowsnestSettingsPopover.vue'
 import ConfigEditor from '../components/ConfigEditor.vue'
@@ -570,6 +630,10 @@ import ConfigEditor from '../components/ConfigEditor.vue'
 const router   = useRouter()
 const settings = useSettingsStore()
 const { isTestPin, toggleTestPin } = useTestPins(settings)
+const deviceStore = useDeviceStore()
+
+// Klipper configfile sections — fetched on mount for 3d_printer info panels
+const klipperCfg = ref({})
 const zoneTypes = ZONE_TYPES
 
 // ── Camera helpers ─────────────────────────────────────────────
@@ -580,10 +644,12 @@ function onCamTypeChange(cam) { if (cam.type !== 'custom') cam.name = '' }
 // falling back to a static list of common paths if unavailable.
 const availableVideoDevices = ref(['/dev/video0', '/dev/video1', '/dev/video2', '/dev/video3'])
 onMounted(async () => {
-  // Detect printer kinematics from Klipper configfile
+  // Detect printer kinematics + fetch full configfile for info panels
   try {
     const r = await send('printer.objects.query', { objects: { configfile: ['config'] } })
-    const kin = r?.status?.configfile?.config?.printer?.kinematics
+    const cfg = r?.status?.configfile?.config ?? {}
+    klipperCfg.value = cfg
+    const kin = cfg?.printer?.kinematics
     if (kin) detectedKinematics.value = kin.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
   } catch { /* not critical */ }
   try {
@@ -602,6 +668,64 @@ const saving             = ref(false)
 const saveError          = ref('')
 const applying           = ref(false)
 const detectedKinematics = ref('')
+
+// ── 3D Printer fan/LED info panels ────────────────────────────────────────────
+// Enumerate live objects from dynamicObjects, enrich with configfile pin data
+const printerFanInfo = computed(() => {
+  return Object.entries(deviceStore.dynamicObjects)
+    .filter(([k]) => k.startsWith('heater_fan ') || k.startsWith('fan_generic ') || k.startsWith('temperature_fan '))
+    .map(([key, val]) => {
+      const cfgSection = klipperCfg.value[key] ?? {}
+      return {
+        key,
+        type: key.startsWith('heater_fan ') ? 'Heater Fan'
+            : key.startsWith('temperature_fan ') ? 'Temperature Fan'
+            : 'Generic Fan',
+        name: key.replace(/^(heater_fan |fan_generic |temperature_fan )/, ''),
+        speed: val.speed != null ? Math.round(val.speed * 100) + '%' : '—',
+        rpm:   val.rpm  != null ? val.rpm + ' RPM' : null,
+        pin:        cfgSection.pin        ?? cfgSection.fan_pin   ?? '—',
+        heater:     cfgSection.heater     ?? null,
+        sensor:     cfgSection.sensor_type ?? cfgSection.sensor    ?? null,
+        maxPower:   cfgSection.max_power   ?? null,
+        kickStart:  cfgSection.kick_start_time ?? null,
+        offBelow:   cfgSection.off_below   ?? null,
+        configFile: cfgSection.__source__  ?? findCfgSource(key),
+      }
+    })
+    .sort((a, b) => a.name.localeCompare(b.name))
+})
+
+const printerLedInfo = computed(() => {
+  return Object.entries(deviceStore.dynamicObjects)
+    .filter(([k]) => k.startsWith('neopixel ') || k.startsWith('led '))
+    .map(([key, val]) => {
+      const cfgSection = klipperCfg.value[key] ?? {}
+      const isNeo = key.startsWith('neopixel ')
+      return {
+        key,
+        type: isNeo ? 'NeoPixel' : 'LED',
+        name: key.replace(/^(neopixel |led )/, ''),
+        pin:        cfgSection.pin         ?? cfgSection.data_pin  ?? '—',
+        chainCount: cfgSection.chain_count  ?? null,
+        colorOrder: cfgSection.color_order  ?? null,
+        initialRed:   cfgSection.initial_red   ?? null,
+        initialGreen: cfgSection.initial_green ?? null,
+        initialBlue:  cfgSection.initial_blue  ?? null,
+        initialWhite: cfgSection.initial_white ?? null,
+        configFile: findCfgSource(key),
+      }
+    })
+    .sort((a, b) => a.name.localeCompare(b.name))
+})
+
+// Moonraker configfile doesn't expose __source__ by default.
+// We can infer by checking if the section exists in known include files.
+// For now fall back to 'printer.cfg' as most likely source.
+function findCfgSource(key) {
+  // A future enhancement could cross-reference with file list.
+  return 'printer.cfg'
+}
 const applyError    = ref('')
 const applySuccess  = ref(false)
 
@@ -866,6 +990,79 @@ onMounted(() => {
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
+
+/* ── Info cards (3d printer fan/LED panels) ──────────────── */
+.info-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+.info-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.info-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.info-card-name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+}
+.info-card-badge {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1px 6px;
+}
+.info-card-live {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--teal);
+}
+.info-card-body {
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.info-label {
+  width: 90px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.info-row code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--amber);
+  background: var(--bg);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.info-val { color: var(--text-dim); font-family: var(--font-mono); font-size: 11px; }
+.info-val--file { color: var(--text-muted); font-style: italic; }
 
 .section-title {
   font-size: 14px;
