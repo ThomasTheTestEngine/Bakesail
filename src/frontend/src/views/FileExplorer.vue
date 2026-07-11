@@ -115,7 +115,8 @@
           </div>
 
           <div v-for="f in files" :key="'f:'+f.name"
-               class="fe-row" :class="{ 'fe-row--sel': selected.has('f:'+f.name) }">
+               class="fe-row" :class="{ 'fe-row--sel': selected.has('f:'+f.name) }"
+               @dblclick="openFileEditor(f.name)">
             <label class="fe-check-cell" @click.stop>
               <input type="checkbox" :checked="selected.has('f:'+f.name)"
                      @change="toggle('f:'+f.name)" />
@@ -438,15 +439,12 @@ const editorFilePath  = ref('')
 const editorFileName  = ref('')
 const editorMoonraker = ref(null)
 
-function editSelected() {
-  if (selectedFiles.value.length !== 1) return
-  const name = selectedFiles.value[0]
+function openFileEditor(name) {
   editorFileName.value = name
   if (adv.value) {
     editorFilePath.value  = absPath.value.replace(/\/$/, '') + '/' + name
     editorMoonraker.value = null
   } else {
-    // Moonraker path used for both read URL and re-upload
     editorFilePath.value  = [...segments.value, name].join('/')
     editorMoonraker.value = {
       root:    segments.value[0] ?? 'config',
@@ -454,6 +452,11 @@ function editSelected() {
     }
   }
   editorOpen.value = true
+}
+
+function editSelected() {
+  if (selectedFiles.value.length !== 1) return
+  openFileEditor(selectedFiles.value[0])
 }
 
 function onEditorSaved() {
