@@ -14,7 +14,7 @@
           </div>
           <div class="wmon-load-detail" v-if="mcu.version">{{ mcu.version }}</div>
           <div class="wmon-load-detail">
-            Awake: {{ mcu.awake != null ? (parseFloat(mcu.awake) * 100).toFixed(1) + '%' : '—' }}<template v-if="mcu.freq != null">, {{ mcu.freq }} MHz</template><template v-if="mcu.temp != null">, {{ mcu.temp }}°C</template><template v-if="mcu.bw != null">, Tx {{ (mcu.bw / 1024).toFixed(1) }} KB</template>
+            Load: {{ mcu.load != null ? (parseFloat(mcu.load) * 100).toFixed(1) + '%' : '—' }}, Awake: {{ mcu.awake != null ? (parseFloat(mcu.awake) * 100).toFixed(1) + '%' : '—' }}<template v-if="mcu.freq != null">, {{ mcu.freq }} MHz</template><template v-if="mcu.temp != null">, {{ mcu.temp }}°C</template><template v-if="mcu.bw != null">, Tx {{ (mcu.bw / 1024).toFixed(1) }} KB</template>
           </div>
         </div>
         <div class="wmon-gauge-pair">
@@ -30,7 +30,7 @@
                 {{ mcu.load != null ? Math.min(Math.round(parseFloat(mcu.load) * 100), 100) + '%' : '—' }}
               </text>
             </svg>
-            <span class="wmon-gauge-label">AWAKE</span>
+            <span class="wmon-gauge-label">LOAD</span>
           </div>
           <!-- MCU temp gauge -->
           <div class="wmon-gauge-wrap" v-if="mcu.temp != null">

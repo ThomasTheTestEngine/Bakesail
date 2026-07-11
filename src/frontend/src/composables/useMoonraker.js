@@ -176,18 +176,25 @@ function applyStatusUpdate(status) {
       const raw = status[key]
       const ls  = raw.last_stats ?? {}
       const idx = existing.findIndex(m => m.name === key)
-      // mcu_awake is a 0.0-1.0 fraction of time the MCU spends not sleeping —
-      // this is the meaningful load gauge metric. mcu_task_avg is average
-      // single-task duration in seconds (tiny even under load, not a %).
-      const awakeFrac = ls.mcu_awake ?? null
+      // Mainsail-compatible load calculation:
+      // mcu_task_avg is average task duration in seconds; multiplied by the
+      // MCU task rate gives fraction of time in tasks. Klipper's task rate is
+      // typically ~1000/s on ARM so: load = mcu_task_avg * 1000 (0.0–1.0).
+      // mcu_awake is a separate metric (awake time fraction, can exceed 1.0
+      // on fast MCUs like Cartographer) — shown as info but not used for gauge.
+      const taskAvg   = ls.mcu_task_avg ?? null
+      // Estimate task rate from freq: ARM Cortex-M runs ~1 task/ms = freq/48000
+      // fallback to 1000 tasks/s if freq unknown
+      const taskRate  = ls.freq != null ? (ls.freq / 48000) : 1000
+      const loadFrac  = taskAvg != null ? Math.min(taskAvg * taskRate, 1) : null
       const parsed = {
         name:    key,
         version: raw.mcu_version ?? existing[idx]?.version ?? '',
         freq:    ls.freq        != null ? Math.round(ls.freq / 1e6)  : (existing[idx]?.freq  ?? null),
-        load:    awakeFrac      != null ? awakeFrac                   : (existing[idx]?.load  ?? null),
-        awake:   awakeFrac      != null ? awakeFrac.toFixed(3)        : (existing[idx]?.awake ?? null),
-        taskAvg: ls.mcu_task_avg != null ? ls.mcu_task_avg.toFixed(4) : (existing[idx]?.taskAvg ?? null),
-        temp:    ls.temp        != null ? Math.round(ls.temp)         : (existing[idx]?.temp  ?? null),
+        load:    loadFrac       != null ? loadFrac                    : (existing[idx]?.load  ?? null),
+        awake:   ls.mcu_awake  != null ? ls.mcu_awake.toFixed(3)     : (existing[idx]?.awake ?? null),
+        taskAvg: taskAvg       != null ? taskAvg.toFixed(4)           : (existing[idx]?.taskAvg ?? null),
+        temp:    ls.temp       != null ? Math.round(ls.temp)          : (existing[idx]?.temp  ?? null),
         bw:      ls.bytes_write != null ? ls.bytes_write              : (existing[idx]?.bw    ?? null),
       }
       if (idx >= 0) existing[idx] = parsed
