@@ -902,20 +902,23 @@ const printerLedInfo = computed(() => {
 
 // Open config editor at the section for a given Klipper object key
 function locateInConfig(objectKey) {
-  // objectKey e.g. 'heater_fan part_cooling' — match section header
-  const lookup = sectionIndex.value[objectKey.toLowerCase()]
-  if (!lookup) {
-    // Fall back: open printer.cfg
-    activeSection.value = 'config'
-    return
-  }
+  // Strip internal prefixes added for uniqueness
+  const cleanKey = objectKey.replace(/^(sensor_|endstop_)/, '')
+  const lookup   = sectionIndex.value[cleanKey.toLowerCase()]
   activeSection.value = 'config'
-  // Wait for ConfigEditor to mount/become active, then jump
-  nextTick(() => {
-    setTimeout(() => {
-      configEditorRef.value?.openFileAtLine(lookup.file, lookup.line)
-    }, 120)
-  })
+  if (!lookup) return  // just open the tab, no jump
+
+  // Poll until configEditorRef is mounted and ready, then jump
+  let attempts = 0
+  function tryJump() {
+    attempts++
+    if (configEditorRef.value) {
+      configEditorRef.value.openFileAtLine(lookup.file, lookup.line)
+    } else if (attempts < 20) {
+      setTimeout(tryJump, 80)
+    }
+  }
+  nextTick(() => setTimeout(tryJump, 80))
 }
 
 // ── Heaters ───────────────────────────────────────────────────────────────────
@@ -993,25 +996,27 @@ const printerHeaterInfo = computed(() => {
 
 // ── Steppers ──────────────────────────────────────────────────────────────────
 const printerStepperInfo = computed(() => {
-  return Object.entries(deviceStore.dynamicObjects)
+  // Build from klipperCfg (same source endstops use — always has data after mount query)
+  // Use dynamicObjects only for live mcu_position overlay
+  return Object.entries(klipperCfg.value)
     .filter(([k]) => k.startsWith('stepper_'))
-    .map(([key, val]) => {
-      const cfgSection = klipperCfg.value[key] ?? {}
+    .map(([key, sec]) => {
+      const live = deviceStore.dynamicObjects[key] ?? {}
       return {
         key,
         name:          key.replace('stepper_', '').toUpperCase(),
-        mcuPosition:   val.mcu_position ?? null,
-        stepPin:       cfgSection.step_pin       ?? '—',
-        dirPin:        cfgSection.dir_pin        ?? '—',
-        enablePin:     cfgSection.enable_pin     ?? null,
-        endstopPin:    cfgSection.endstop_pin    ?? null,
-        rotationDist:  cfgSection.rotation_distance ?? null,
-        microsteps:    cfgSection.microsteps        ?? null,
-        fullStepsRev:  cfgSection.full_steps_per_rotation ?? null,
-        positionMin:   cfgSection.position_min  ?? null,
-        positionMax:   cfgSection.position_max  ?? null,
-        positionEndstop: cfgSection.position_endstop ?? null,
-        homing:        cfgSection.homing_speed  ?? null,
+        mcuPosition:   live.mcu_position ?? null,
+        stepPin:       sec.step_pin       ?? '—',
+        dirPin:        sec.dir_pin        ?? '—',
+        enablePin:     sec.enable_pin     ?? null,
+        endstopPin:    sec.endstop_pin    ?? null,
+        rotationDist:  sec.rotation_distance ?? null,
+        microsteps:    sec.microsteps        ?? null,
+        fullStepsRev:  sec.full_steps_per_rotation ?? null,
+        positionMin:   sec.position_min  ?? null,
+        positionMax:   sec.position_max  ?? null,
+        positionEndstop: sec.position_endstop ?? null,
+        homing:        sec.homing_speed  ?? null,
         configFile:    findCfgSource(key),
       }
     })
