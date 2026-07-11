@@ -75,42 +75,48 @@
                     :title="deviceStore.motorsEnabled ? 'Disable motors' : 'Enable motors'">
 <i class="mdi mdi-engine-off" style="font-size:16px;vertical-align:-2px"></i>
             </button>
-
-            <!-- ── Pinned macro chips ─────────────────────────── -->
-            <div class="topbar-divider" v-if="(settings.pinnedMacros?.length > 0) || editMode.editing.value"></div>
-            <div class="topbar-macros" ref="macroBarEl">
-              <!-- Existing macro chips -->
-              <div v-for="(m, i) in (settings.pinnedMacros ?? [])" :key="m.id"
-                   class="topbar-macro-chip"
-                   :class="{ 'topbar-macro-chip--edit': editMode.editing.value }"
-                   :draggable="editMode.editing.value"
-                   @dragstart="macroDragStart(i)"
-                   @dragover.prevent="macroDragOver(i)"
-                   @dragend="macroDragEnd"
-                   @click="!editMode.editing.value && runMacro(m)">
-                <button v-if="editMode.editing.value" class="topbar-macro-remove" @click.stop="removeMacro(i)" title="Remove">−</button>
-                <span class="topbar-macro-name">{{ m.name }}</span>
-              </div>
-
-              <!-- Add macro button (edit mode only) -->
-              <div v-if="editMode.editing.value" class="topbar-macro-add-wrap" @click.stop>
-                <button class="topbar-macro-add-btn" @click.stop="macroMenuOpen = !macroMenuOpen" title="Add macro">+</button>
-                <div v-if="macroMenuOpen" class="topbar-macro-menu">
-                  <div class="topbar-macro-menu-section">Klipper Macros</div>
-                  <button v-for="name in availableKlipperMacros" :key="name"
-                          class="topbar-macro-menu-item"
-                          :disabled="isPinned(name)"
-                          @click="addMacro(name)">
-                    {{ name }}
-                    <span v-if="isPinned(name)" style="opacity:0.4;font-size:10px"> ✓</span>
-                  </button>
-                  <div class="topbar-macro-menu-section" style="margin-top:6px">Custom</div>
-                  <button class="topbar-macro-menu-item" @click="addCustomMacro">+ New custom…</button>
-                </div>
-              </div>
-            </div>
           </template>
         </div>
+
+        <!-- ── Pinned macro chips (outside topbar-left so overflow:hidden doesn't clip dropdown) -->
+        <template v-if="klippyState === 'ready'">
+          <div class="topbar-divider" v-if="(settings.pinnedMacros?.length > 0) || editMode.editing.value"></div>
+          <div class="topbar-macros" ref="macroBarEl">
+            <div v-for="(m, i) in (settings.pinnedMacros ?? [])" :key="m.id"
+                 class="topbar-macro-chip"
+                 :class="{ 'topbar-macro-chip--edit': editMode.editing.value }"
+                 :draggable="editMode.editing.value"
+                 @dragstart="macroDragStart(i)"
+                 @dragover.prevent="macroDragOver(i)"
+                 @dragend="macroDragEnd"
+                 @click="!editMode.editing.value && runMacro(m)">
+              <button v-if="editMode.editing.value" class="topbar-macro-remove" @click.stop="removeMacro(i)" title="Remove">−</button>
+              <span class="topbar-macro-name">{{ m.name }}</span>
+            </div>
+
+            <!-- Add macro button (edit mode only) -->
+            <div v-if="editMode.editing.value" class="topbar-macro-add-wrap" ref="macroAddEl">
+              <button class="topbar-macro-add-btn" @click.stop="toggleMacroMenu" title="Add macro">+</button>
+            </div>
+          </div>
+
+          <!-- Macro dropdown — Teleported to body so topbar overflow can't clip it -->
+          <Teleport to="body">
+            <div v-if="macroMenuOpen" class="topbar-macro-backdrop" @click="macroMenuOpen = false" />
+            <div v-if="macroMenuOpen" class="topbar-macro-menu" :style="macroMenuStyle">
+              <div class="topbar-macro-menu-section">Klipper Macros</div>
+              <div v-if="availableKlipperMacros.length === 0" class="topbar-macro-menu-item" style="opacity:0.5;cursor:default">No macros found</div>
+              <button v-for="name in availableKlipperMacros" :key="name"
+                      class="topbar-macro-menu-item"
+                      :disabled="isPinned(name)"
+                      @click="addMacro(name)">
+                {{ name }}<span v-if="isPinned(name)" style="opacity:0.4;font-size:10px"> ✓</span>
+              </button>
+              <div class="topbar-macro-menu-section" style="margin-top:6px">Custom</div>
+              <button class="topbar-macro-menu-item" @click="addCustomMacro">+ New custom…</button>
+            </div>
+          </Teleport>
+        </template>
 
         <!-- Center: file + progress (shown when printing/paused/complete) -->
         <div class="topbar-center" v-if="klippyState === 'ready' && deviceStore.printerState !== 'standby'">
@@ -278,7 +284,22 @@ const { connected, klippyState, connect, sendGcode, subscribeToConsole, fetchCon
 // ── Macro bar ──────────────────────────────────────────────────────────────────
 const macroMenuOpen = ref(false)
 const macroBarEl    = ref(null)
+const macroAddEl    = ref(null)
+const macroMenuStyle = ref({})
 let   macroDragIdx  = null
+
+function toggleMacroMenu() {
+  macroMenuOpen.value = !macroMenuOpen.value
+  if (macroMenuOpen.value && macroAddEl.value) {
+    const r = macroAddEl.value.getBoundingClientRect()
+    macroMenuStyle.value = {
+      position: 'fixed',
+      top:  `${r.bottom + 4}px`,
+      left: `${r.left}px`,
+      zIndex: 9999,
+    }
+  }
+}
 
 const availableKlipperMacros = computed(() => {
   return Object.keys(deviceStore.dynamicObjects)
@@ -936,14 +957,15 @@ a { color: inherit; text-decoration: none; }
 }
 .topbar-macro-add-btn:hover { border-color: var(--green); color: var(--green); }
 
+.topbar-macro-backdrop {
+  position: fixed; inset: 0; z-index: 9998;
+}
 .topbar-macro-menu {
-  position: absolute; top: calc(100% + 6px); left: 0;
-  min-width: 200px; max-height: 320px; overflow-y: auto;
+  min-width: 220px; max-height: 320px; overflow-y: auto;
   background: var(--surface);
   border: 1px solid var(--border-2);
   border-radius: var(--radius);
   box-shadow: 0 8px 20px rgba(0,0,0,0.4);
-  z-index: 500;
   display: flex; flex-direction: column;
 }
 .topbar-macro-menu-section {
