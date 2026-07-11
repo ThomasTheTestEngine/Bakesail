@@ -59,6 +59,46 @@ export function useDashboardLayout(dashboardId, defaultLayout) {
   // or an adjacent widget's edge, then clamps everything within bounds.
   // Works iteratively: clamp first, then inflate right/bottom edges,
   // then inflate left/top edges (moving origin requires adjusting size too).
+  // ── Overlap resolution ────────────────────────────────────
+  // After a drag or resize, pull the mover's edges back so it doesn't
+  // overlap any sibling. Only the mover shrinks — neighbours are untouched.
+  function resolveOverlap(widget) {
+    for (const o of widgets.value) {
+      if (o.id === widget.id) continue
+      const overlapX = widget.x < o.x + o.w && widget.x + widget.w > o.x
+      const overlapY = widget.y < o.y + o.h && widget.y + widget.h > o.y
+      if (!overlapX || !overlapY) continue  // no actual overlap
+
+      // Compute intrusion on each edge
+      const fromRight  = (widget.x + widget.w) - o.x      // widget right into o left
+      const fromLeft   = (o.x + o.w) - widget.x           // widget left into o right
+      const fromBottom = (widget.y + widget.h) - o.y      // widget bottom into o top
+      const fromTop    = (o.y + o.h) - widget.y           // widget top into o bottom
+
+      // Retreat the smallest intrusion axis
+      const minX = Math.min(fromRight, fromLeft)
+      const minY = Math.min(fromBottom, fromTop)
+
+      if (minX <= minY) {
+        if (fromRight < fromLeft) {
+          widget.w = Math.max(MIN_W, o.x - widget.x)
+        } else {
+          const newX = o.x + o.w
+          widget.w  = Math.max(MIN_W, widget.w - (newX - widget.x))
+          widget.x  = newX
+        }
+      } else {
+        if (fromBottom < fromTop) {
+          widget.h = Math.max(MIN_H, o.y - widget.y)
+        } else {
+          const newY = o.y + o.h
+          widget.h  = Math.max(MIN_H, widget.h - (newY - widget.y))
+          widget.y  = newY
+        }
+      }
+    }
+  }
+
   function fitScreen(canvasWidth, canvasHeight) {
     if (!canvasWidth || canvasWidth <= 0) return
     const ws = widgets.value.map(w => ({ ...w }))
@@ -184,6 +224,10 @@ export function useDashboardLayout(dashboardId, defaultLayout) {
   }
 
   function onDragEnd() {
+    if (_drag) {
+      const widget = widgets.value.find(w => w.id === _drag.widgetId)
+      if (widget) resolveOverlap(widget)
+    }
     _drag = null
     window.removeEventListener('pointermove', onDragMove)
     window.removeEventListener('pointerup', onDragEnd)
@@ -265,6 +309,10 @@ export function useDashboardLayout(dashboardId, defaultLayout) {
   }
 
   function onResizeEnd() {
+    if (_resize) {
+      const widget = widgets.value.find(w => w.id === _resize.widgetId)
+      if (widget) resolveOverlap(widget)
+    }
     _resize = null
     window.removeEventListener('pointermove', onResizeMove)
     window.removeEventListener('pointerup', onResizeEnd)
@@ -392,6 +440,53 @@ export function useDashboardLayout(dashboardId, defaultLayout) {
     fitScreen(canvasW, canvasH > viewportH ? canvasH : null)
   }
 
+  // ── Fit to Width ──────────────────────────────────────────
+  // Fills horizontal gaps (right/left inflation + x-clamp) without touching
+  // widget heights or vertical positions. Widgets that extend below the
+  // viewport are left at their current height.
+  function fitWidth(canvasW) {
+    if (!canvasW || canvasW <= 0) return
+    const ws = widgets.value.map(w => ({ ...w }))
+
+    // Step 1: clamp x only (not y/h)
+    for (const w of ws) {
+      w.x = Math.max(0, w.x)
+      if (w.x + w.w > canvasW) w.w = canvasW - w.x
+      w.w = Math.max(MIN_W, w.w)
+    }
+    // Step 2: inflate right edges to nearest sibling or canvas right
+    for (const w of ws) {
+      const myRight = w.x + w.w
+      let nearest = canvasW
+      for (const o of ws) {
+        if (o.id === w.id) continue
+        if (!vertOverlap(w, o)) continue
+        if (o.x >= myRight) nearest = Math.min(nearest, o.x)
+      }
+      w.w = nearest - w.x
+    }
+    // Step 3: inflate left edges to nearest sibling or canvas left
+    for (const w of ws) {
+      let nearest = 0
+      for (const o of ws) {
+        if (o.id === w.id) continue
+        if (!vertOverlap(w, o)) continue
+        const oRight = o.x + o.w
+        if (oRight <= w.x) nearest = Math.max(nearest, oRight)
+      }
+      const newX = nearest
+      w.w += w.x - newX
+      w.x  = newX
+    }
+    // Write back (x and w only)
+    for (const w of ws) {
+      const target = widgets.value.find(t => t.id === w.id)
+      if (!target) continue
+      target.x = snap(Math.max(0, w.x))
+      target.w = Math.max(MIN_W, snap(w.w))
+    }
+  }
+
   return {
     // State
     customizeMode, firstTimeSeen, widgets,
@@ -409,6 +504,7 @@ export function useDashboardLayout(dashboardId, defaultLayout) {
     applyLayout,
     fitScreen,
     fitCanvas,
+    fitWidth,
     tryAutoLoad,
 
     // Helpers

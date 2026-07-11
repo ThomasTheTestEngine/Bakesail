@@ -51,6 +51,7 @@
       <button class="btn btn-ghost btn-sm" @click="promptSaveAs">Save As…</button>
       <button class="btn btn-ghost btn-sm" @click="doRevert">↺ Reset</button>
       <button class="btn btn-ghost btn-sm" @click="doFitWindow" title="Fit widgets to visible viewport">⤢ Fit Window</button>
+      <button class="btn btn-ghost btn-sm" @click="doFitWidth" title="Fill horizontal gaps without changing widget heights">⤢ Fit Width</button>
       <button class="btn btn-ghost btn-sm" @click="doFitCanvas" title="Fit widgets to full canvas (including any extended area)">⤢ Fit Canvas</button>
       <span v-if="layout.saveMsg.value" class="dt-save-msg">{{ layout.saveMsg.value }}</span>
 
@@ -120,6 +121,12 @@ function doFitWindow() {
   const dims = getViewportDims()
   if (!dims) return
   props.layout.fitScreen(dims.availW, dims.availH)
+}
+
+function doFitWidth() {
+  const dims = getViewportDims()
+  if (!dims) return
+  props.layout.fitWidth(dims.availW)
 }
 
 function doFitCanvas() {
