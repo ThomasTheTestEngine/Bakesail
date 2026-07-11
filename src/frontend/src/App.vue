@@ -1318,15 +1318,24 @@ a { color: inherit; text-decoration: none; }
 /* Resize handle */
 .topbar-resize-handle {
   position: absolute;
-  bottom: 0; left: 0; right: 0;
-  height: 1px;
+  bottom: -3px; left: 0; right: 0;
+  height: 7px;  /* 3px above + 1px bar + 3px below */
   cursor: ns-resize;
   z-index: 10;
+  background: transparent;
+  transition: background 0.15s;
+}
+.topbar-resize-handle::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  top: 3px;
+  height: 1px;
   background: var(--amber-dim);
   transition: background 0.15s;
 }
-.topbar-resize-handle:hover,
-.topbar-resize-handle:active {
+.topbar-resize-handle:hover::after,
+.topbar-resize-handle:active::after {
   background: var(--amber);
 }
 
