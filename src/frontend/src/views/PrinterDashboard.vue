@@ -806,11 +806,11 @@ function buildDefaultLayout() {
   // Row heights
   const topH     = Math.floor(viewH * 0.50)   // toolhead3d / camera / sysloads
   const row2Y    = topH + gap
-  const chartH   = Math.floor(viewH * 0.38)   // temp chart spans left+center
+  const chartH   = Math.floor(viewH * 0.23)   // temp chart spans left+center
   const chartW   = hasCam ? col1X + col1W : col0W  // left cols
   // misc and temps stack right of chart — auto-height (tall enough to fit)
-  const miscH    = 280   // tall enough for ~8 fans/lights
-  const tempsH   = 380   // tall enough for ~10 sensors
+  const miscH    = 220   // tall enough for ~8 fans/lights
+  const tempsH   = 300   // tall enough for ~10 sensors
   const row3Y    = row2Y + miscH + gap
 
   return [
@@ -821,7 +821,7 @@ function buildDefaultLayout() {
     // Bottom-left: chart spanning left+center cols
     { id: 'chart',     type: 'chart',      x: 0,     y: row2Y, w: chartW, h: chartH, config: {} },
     // Bottom-right: speedflow (extruder) top, then misc + temps below
-    { id: 'speedflow', type: 'speedflow',  x: col2X, y: row2Y, w: col2W, h: 420,    config: {} },
+    { id: 'speedflow', type: 'speedflow',  x: col2X, y: row2Y, w: col2W, h: 350,    config: {} },
     // Below chart: fanlist + temps side by side
     { id: 'fanlist',   type: 'fanlist',    x: 0,                           y: row2Y + chartH + gap, w: Math.floor((chartW - gap) / 2), h: tempsH, config: {} },
     { id: 'temps',     type: 'temps',      x: Math.floor((chartW - gap) / 2) + gap, y: row2Y + chartH + gap, w: chartW - Math.floor((chartW - gap) / 2) - gap, h: tempsH, config: {} },
