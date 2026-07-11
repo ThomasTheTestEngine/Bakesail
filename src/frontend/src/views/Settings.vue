@@ -806,7 +806,7 @@ const is3dPrinter = computed(() => settings.deviceType === '3d_printer')
 const sections = computed(() => {
   const base = [
     { id: 'device',       label: 'Device' },
-    ...(!isLaser.value ? [
+    ...(!isLaser.value && !is3dPrinter.value ? [
       { id: 'zones',        label: 'Heater Zones' },
       { id: 'tc',           label: 'Thermocouples' },
     ] : []),
@@ -814,13 +814,17 @@ const sections = computed(() => {
       { id: 'laser',        label: 'Laser' },
     ] : []),
     { id: 'fans',         label: 'Fans' },
-    ...(!isLaser.value ? [
+    ...(!isLaser.value && !is3dPrinter.value ? [
       { id: 'vacuum',       label: 'Vacuum' },
-      { id: 'illumination', label: 'Illumination' },
+    ] : []),
+    ...(!isLaser.value ? [
+      { id: 'illumination', label: is3dPrinter.value ? 'Lights' : 'Illumination' },
     ] : []),
     { id: 'cameras',      label: 'Cameras' },
-    { id: 'steppers',     label: 'Stepper Slots' },
-    { id: 'movement',     label: 'Movement' },
+    ...(!is3dPrinter.value ? [
+      { id: 'steppers',     label: 'Stepper Slots' },
+      { id: 'movement',     label: 'Movement' },
+    ] : []),
     { id: 'current',          label: 'View Current Config' },
     { id: 'dashboard_prefs', label: 'Dashboard' },
     { id: 'config',           label: 'Write Config' },
