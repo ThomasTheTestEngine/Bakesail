@@ -391,6 +391,96 @@
           </div>
         </template>
 
+
+        <!-- Heaters (3D printer) -->
+        <template v-else-if="activeSection === 'heaters'">
+          <div class="section-title">Heaters</div>
+          <p class="section-note">Heaters detected from Klipper. Edit definitions in <strong>Edit Config</strong>.</p>
+          <div v-if="printerHeaterInfo.length === 0" class="section-note" style="margin-top:12px">No heaters found.</div>
+          <div v-else class="info-card-list">
+            <div v-for="h in printerHeaterInfo" :key="h.key" class="info-card">
+              <div class="info-card-header">
+                <span class="info-card-name">{{ h.name }}</span>
+                <span class="info-card-badge">{{ h.type }}</span>
+                <button class="btn btn-ghost btn-sm info-locate-btn" @click="locateInConfig(h.key)" title="Open in config editor">⌕ Locate</button>
+              </div>
+              <div class="info-card-body">
+                <div class="info-row"><span class="info-label">Heater Pin</span><code>{{ h.pin }}</code></div>
+                <div class="info-row"><span class="info-label">Sensor</span><span class="info-val">{{ h.sensor }}</span></div>
+                <div v-if="h.sensorPin"  class="info-row"><span class="info-label">Sensor Pin</span><code>{{ h.sensorPin }}</code></div>
+                <div v-if="h.minTemp != null" class="info-row"><span class="info-label">Temp Range</span><span class="info-val">{{ h.minTemp }}°C – {{ h.maxTemp }}°C</span></div>
+                <div v-if="h.maxPower != null" class="info-row"><span class="info-label">Max Power</span><span class="info-val">{{ Math.round(h.maxPower * 100) }}%</span></div>
+                <div v-if="h.pid" class="info-row"><span class="info-label">PID</span><span class="info-val">Kp {{ h.pid.kp }} · Ki {{ h.pid.ki }} · Kd {{ h.pid.kd }}</span></div>
+                <div v-if="h.nozzleDia"    class="info-row"><span class="info-label">Nozzle</span><span class="info-val">{{ h.nozzleDia }} mm</span></div>
+                <div v-if="h.filamentDia"  class="info-row"><span class="info-label">Filament</span><span class="info-val">{{ h.filamentDia }} mm</span></div>
+                <div v-if="h.rotationDist" class="info-row"><span class="info-label">Rot. Dist</span><span class="info-val">{{ h.rotationDist }} mm</span></div>
+                <div v-if="h.microsteps"   class="info-row"><span class="info-label">Microsteps</span><span class="info-val">{{ h.microsteps }}</span></div>
+                <div v-if="h.pressureAdv != null" class="info-row"><span class="info-label">Pressure Adv.</span><span class="info-val">{{ h.pressureAdv }}</span></div>
+                <div class="info-row"><span class="info-label">Config</span><span class="info-val info-val--file">{{ h.configFile }}</span></div>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- Steppers (3D printer) -->
+        <template v-else-if="activeSection === 'steppers'">
+          <div class="section-title">Steppers</div>
+          <p class="section-note">Steppers detected from Klipper. Edit definitions in <strong>Edit Config</strong>.</p>
+          <div v-if="printerStepperInfo.length === 0" class="section-note" style="margin-top:12px">No steppers found.</div>
+          <div v-else class="info-card-list">
+            <div v-for="s in printerStepperInfo" :key="s.key" class="info-card">
+              <div class="info-card-header">
+                <span class="info-card-name">{{ s.name }}</span>
+                <span class="info-card-badge">Stepper</span>
+                <span v-if="s.mcuPosition != null" class="info-card-live">pos {{ s.mcuPosition }}</span>
+                <button class="btn btn-ghost btn-sm info-locate-btn" @click="locateInConfig(s.key)" title="Open in config editor">⌕ Locate</button>
+              </div>
+              <div class="info-card-body">
+                <div class="info-row"><span class="info-label">Step Pin</span><code>{{ s.stepPin }}</code></div>
+                <div class="info-row"><span class="info-label">Dir Pin</span><code>{{ s.dirPin }}</code></div>
+                <div v-if="s.enablePin"    class="info-row"><span class="info-label">Enable Pin</span><code>{{ s.enablePin }}</code></div>
+                <div v-if="s.endstopPin"   class="info-row"><span class="info-label">Endstop Pin</span><code>{{ s.endstopPin }}</code></div>
+                <div v-if="s.rotationDist" class="info-row"><span class="info-label">Rot. Dist</span><span class="info-val">{{ s.rotationDist }} mm</span></div>
+                <div v-if="s.microsteps"   class="info-row"><span class="info-label">Microsteps</span><span class="info-val">{{ s.microsteps }}</span></div>
+                <div v-if="s.fullStepsRev" class="info-row"><span class="info-label">Full Steps/Rev</span><span class="info-val">{{ s.fullStepsRev }}</span></div>
+                <div v-if="s.positionMin != null" class="info-row"><span class="info-label">Travel</span><span class="info-val">{{ s.positionMin }} – {{ s.positionMax }} mm</span></div>
+                <div v-if="s.positionEndstop != null" class="info-row"><span class="info-label">Endstop Pos</span><span class="info-val">{{ s.positionEndstop }} mm</span></div>
+                <div v-if="s.homing"       class="info-row"><span class="info-label">Homing Speed</span><span class="info-val">{{ s.homing }} mm/s</span></div>
+                <div class="info-row"><span class="info-label">Config</span><span class="info-val info-val--file">{{ s.configFile }}</span></div>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- Endstops (3D printer) -->
+        <template v-else-if="activeSection === 'endstops'">
+          <div class="section-title">Endstops</div>
+          <p class="section-note">
+            Endstops detected from Klipper config.
+            <button class="btn btn-ghost btn-sm" style="margin-left:8px" @click="queryEndstops" :disabled="endstopLoading">
+              {{ endstopLoading ? 'Querying…' : '↻ Query State' }}
+            </button>
+          </p>
+          <div v-if="printerEndstopInfo.length === 0" class="section-note" style="margin-top:12px">No endstops found.</div>
+          <div v-else class="info-card-list">
+            <div v-for="e in printerEndstopInfo" :key="e.key" class="info-card">
+              <div class="info-card-header">
+                <span class="info-card-name">{{ e.name }}</span>
+                <span class="info-card-badge">{{ e.source }}</span>
+                <span v-if="e.state" class="info-card-live"
+                      :style="{ color: e.state === 'TRIGGERED' ? 'var(--red)' : 'var(--green)' }">
+                  {{ e.state }}
+                </span>
+                <button class="btn btn-ghost btn-sm info-locate-btn" @click="locateInConfig(e.source)" title="Open in config editor">⌕ Locate</button>
+              </div>
+              <div class="info-card-body">
+                <div class="info-row"><span class="info-label">Pin</span><code>{{ e.pin }}</code></div>
+                <div class="info-row"><span class="info-label">Config</span><span class="info-val info-val--file">{{ e.configFile }}</span></div>
+              </div>
+            </div>
+          </div>
+        </template>
+
         <!-- Cameras -->
         <template v-else-if="activeSection === 'cameras'">
           <div class="section-title">Cameras</div>
@@ -618,7 +708,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSettingsStore, defaultSettings, ZONE_TYPES } from '../stores/settings.js'
 import { useTestPins } from '../composables/useTestPins.js'
@@ -767,6 +857,173 @@ function locateInConfig(objectKey) {
     }, 120)
   })
 }
+
+// ── Heaters ───────────────────────────────────────────────────────────────────
+const printerHeaterInfo = computed(() => {
+  const out = []
+
+  // extruder + extruder1/2/3 from SUBSCRIBED_OBJECTS (live in store directly via subscribers)
+  // and heater_generic from dynamicObjects
+  const heaterKeys = Object.keys(deviceStore.dynamicObjects)
+    .filter(k => k.startsWith('heater_generic ') || k.startsWith('extruder'))
+
+  // Always include extruder and heater_bed from store (they're not in dynamicObjects)
+  const staticHeaters = [
+    { key: 'extruder',   type: 'Extruder',   subType: null },
+    { key: 'heater_bed', type: 'Heated Bed', subType: null },
+  ]
+
+  for (const { key, type } of staticHeaters) {
+    const cfgSection = klipperCfg.value[key] ?? {}
+    out.push({
+      key, type,
+      name:       key === 'extruder' ? 'Extruder' : 'Heated Bed',
+      pin:        cfgSection.heater_pin ?? cfgSection.pwm_pin ?? '—',
+      sensor:     cfgSection.sensor_type ?? '—',
+      sensorPin:  cfgSection.sensor_pin  ?? null,
+      minTemp:    cfgSection.min_temp    ?? null,
+      maxTemp:    cfgSection.max_temp    ?? null,
+      maxPower:   cfgSection.max_power   ?? null,
+      pid:        cfgSection.control === 'pid' ? {
+        kp: cfgSection.pid_kp, ki: cfgSection.pid_ki, kd: cfgSection.pid_kd
+      } : null,
+      // Extruder extras
+      nozzleDia:     cfgSection.nozzle_diameter     ?? null,
+      filamentDia:   cfgSection.filament_diameter   ?? null,
+      pressureAdv:   cfgSection.pressure_advance    ?? null,
+      rotationDist:  cfgSection.rotation_distance   ?? null,
+      microsteps:    cfgSection.microsteps           ?? null,
+      configFile: findCfgSource(key),
+    })
+  }
+
+  for (const key of heaterKeys) {
+    const val = deviceStore.dynamicObjects[key]
+    const cfgSection = klipperCfg.value[key] ?? {}
+    const isExt = key.startsWith('extruder')
+    out.push({
+      key,
+      type:       isExt ? 'Extruder' : 'Heater',
+      name:       key.replace(/^(heater_generic |extruder)/, '') || key,
+      pin:        cfgSection.heater_pin ?? cfgSection.pwm_pin ?? '—',
+      sensor:     cfgSection.sensor_type ?? '—',
+      sensorPin:  cfgSection.sensor_pin  ?? null,
+      minTemp:    cfgSection.min_temp    ?? null,
+      maxTemp:    cfgSection.max_temp    ?? null,
+      maxPower:   cfgSection.max_power   ?? null,
+      pid:        cfgSection.control === 'pid' ? {
+        kp: cfgSection.pid_kp, ki: cfgSection.pid_ki, kd: cfgSection.pid_kd
+      } : null,
+      nozzleDia:    cfgSection.nozzle_diameter   ?? null,
+      filamentDia:  cfgSection.filament_diameter ?? null,
+      pressureAdv:  cfgSection.pressure_advance  ?? null,
+      rotationDist: cfgSection.rotation_distance ?? null,
+      microsteps:   cfgSection.microsteps        ?? null,
+      configFile: findCfgSource(key),
+    })
+  }
+  return out
+})
+
+// ── Steppers ──────────────────────────────────────────────────────────────────
+const printerStepperInfo = computed(() => {
+  return Object.entries(deviceStore.dynamicObjects)
+    .filter(([k]) => k.startsWith('stepper_'))
+    .map(([key, val]) => {
+      const cfgSection = klipperCfg.value[key] ?? {}
+      return {
+        key,
+        name:          key.replace('stepper_', '').toUpperCase(),
+        mcuPosition:   val.mcu_position ?? null,
+        stepPin:       cfgSection.step_pin       ?? '—',
+        dirPin:        cfgSection.dir_pin        ?? '—',
+        enablePin:     cfgSection.enable_pin     ?? null,
+        endstopPin:    cfgSection.endstop_pin    ?? null,
+        rotationDist:  cfgSection.rotation_distance ?? null,
+        microsteps:    cfgSection.microsteps        ?? null,
+        fullStepsRev:  cfgSection.full_steps_per_rotation ?? null,
+        positionMin:   cfgSection.position_min  ?? null,
+        positionMax:   cfgSection.position_max  ?? null,
+        positionEndstop: cfgSection.position_endstop ?? null,
+        homing:        cfgSection.homing_speed  ?? null,
+        configFile:    findCfgSource(key),
+      }
+    })
+    .sort((a, b) => a.name.localeCompare(b.name))
+})
+
+// ── Endstops ──────────────────────────────────────────────────────────────────
+const endstopState    = ref({})   // { 'x': 'open', 'y': 'open', 'z': 'TRIGGERED', ... }
+const endstopLoading  = ref(false)
+
+async function queryEndstops() {
+  endstopLoading.value = true
+  try {
+    const r = await send('printer.query_endstops.last_query', {})
+    endstopState.value = r ?? {}
+  } catch {
+    // query_endstops may not be available if not homed
+    try {
+      const r2 = await send('printer.objects.query', { objects: { query_endstops: null } })
+      endstopState.value = r2?.status?.query_endstops?.last_query ?? {}
+    } catch { /* not available */ }
+  } finally {
+    endstopLoading.value = false
+  }
+}
+
+const printerEndstopInfo = computed(() => {
+  // Build from steppers (each stepper has an endstop_pin) + probe if present
+  const entries = []
+
+  // From steppers
+  for (const s of printerStepperInfo.value) {
+    if (!s.endstopPin) continue
+    const name = s.name.toLowerCase()
+    entries.push({
+      key:        'endstop_' + name,
+      name:       s.name,
+      source:     `stepper_${name.toLowerCase()}`,
+      pin:        s.endstopPin,
+      state:      endstopState.value[name] ?? null,
+      configFile: s.configFile,
+    })
+  }
+
+  // Probe (cartographer, bltouch, cr_touch, etc.)
+  const probeCfg = klipperCfg.value['probe'] ?? klipperCfg.value['bltouch'] ?? null
+  const probeKey = klipperCfg.value['probe'] ? 'probe' : klipperCfg.value['bltouch'] ? 'bltouch' : null
+  if (probeCfg && probeKey) {
+    entries.push({
+      key:        probeKey,
+      name:       probeKey === 'bltouch' ? 'BLTouch' : 'Probe',
+      source:     probeKey,
+      pin:        probeCfg.pin ?? probeCfg.sensor_pin ?? '—',
+      state:      endstopState.value['probe'] ?? null,
+      configFile: findCfgSource(probeKey),
+    })
+  }
+
+  // Cartographer / scanner probes
+  for (const cfgKey of ['cartographer', 'scanner']) {
+    const cfg = klipperCfg.value[cfgKey]
+    if (cfg) {
+      entries.push({
+        key:        cfgKey,
+        name:       cfgKey.charAt(0).toUpperCase() + cfgKey.slice(1),
+        source:     cfgKey,
+        pin:        cfg.sensor_pin ?? cfg.pin ?? '—',
+        state:      endstopState.value['probe'] ?? null,
+        configFile: findCfgSource(cfgKey),
+      })
+    }
+  }
+
+  return entries
+})
+
+// Monotonically true — watch for endstops tab activation
+// (computed from activeSection)
 
 // Moonraker configfile doesn't expose __source__ by default.
 // We can infer by checking if the section exists in known include files.
@@ -926,6 +1183,11 @@ const sections = computed(() => {
     ...(!isLaser.value ? [
       { id: 'illumination', label: is3dPrinter.value ? 'Lights' : 'Illumination' },
     ] : []),
+    ...(is3dPrinter.value ? [
+      { id: 'heaters',   label: 'Heaters'  },
+      { id: 'steppers',  label: 'Steppers' },
+      { id: 'endstops',  label: 'Endstops' },
+    ] : []),
     { id: 'cameras',      label: 'Cameras' },
     ...(!is3dPrinter.value ? [
       { id: 'steppers',     label: 'Stepper Slots' },
@@ -938,6 +1200,9 @@ const sections = computed(() => {
 })
 
 const configPreview = computed(() => generateBakesailCfg(settings.$state))
+
+// Auto-query endstop state when endstops tab is opened
+watch(activeSection, (sec) => { if (sec === 'endstops') queryEndstops() })
 
 async function writeConfig() {
   saving.value    = true

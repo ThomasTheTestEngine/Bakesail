@@ -114,6 +114,8 @@ const DYNAMIC_PREFIXES = {
   'led ':             () => null,
   'output_pin ':      () => ['value'],
   'stepper_':         () => ['mcu_position'],
+  'heater_generic ':  () => ['temperature', 'target', 'power'],
+  'extruder':         () => ['temperature', 'target', 'power', 'pressure_advance'],
   'gcode_macro ':     () => null,   // macro variable state
 }
 
@@ -200,6 +202,7 @@ function applyStatusUpdate(status) {
       k.startsWith('led ')             ||
       k.startsWith('output_pin ')      ||
       k.startsWith('stepper_')         ||
+      k.startsWith('heater_generic ')    ||
       k.startsWith('gcode_macro ')
     )
   })
