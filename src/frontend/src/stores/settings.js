@@ -163,6 +163,9 @@ export const useSettingsStore = defineStore('settings', {
           this.cameras = migrated
         }
 
+        // ── Migration: ensure pinnedMacros array exists ────────────
+        if (!Array.isArray(this.pinnedMacros)) this.pinnedMacros = []
+
         this._loaded = true
         return true
       } catch (e) {

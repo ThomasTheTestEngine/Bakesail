@@ -110,6 +110,7 @@ const DYNAMIC_PREFIXES = {
   'led ':             () => null,
   'output_pin ':      () => ['value'],
   'stepper_':         () => ['mcu_position'],
+  'gcode_macro ':     () => null,   // macro variable state
 }
 
 async function subscribe() {

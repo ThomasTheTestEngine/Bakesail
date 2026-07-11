@@ -77,10 +77,10 @@
             </button>
 
             <!-- ── Pinned macro chips ─────────────────────────── -->
-            <div class="topbar-divider" v-if="settings.pinnedMacros.length > 0 || editMode.editing.value"></div>
+            <div class="topbar-divider" v-if="(settings.pinnedMacros?.length > 0) || editMode.editing.value"></div>
             <div class="topbar-macros" ref="macroBarEl">
               <!-- Existing macro chips -->
-              <div v-for="(m, i) in settings.pinnedMacros" :key="m.id"
+              <div v-for="(m, i) in (settings.pinnedMacros ?? [])" :key="m.id"
                    class="topbar-macro-chip"
                    :class="{ 'topbar-macro-chip--edit': editMode.editing.value }"
                    :draggable="editMode.editing.value"
@@ -94,7 +94,7 @@
 
               <!-- Add macro button (edit mode only) -->
               <div v-if="editMode.editing.value" class="topbar-macro-add-wrap" @click.stop>
-                <button class="topbar-macro-add-btn" @click="macroMenuOpen = !macroMenuOpen" title="Add macro">+</button>
+                <button class="topbar-macro-add-btn" @click.stop="macroMenuOpen = !macroMenuOpen" title="Add macro">+</button>
                 <div v-if="macroMenuOpen" class="topbar-macro-menu">
                   <div class="topbar-macro-menu-section">Klipper Macros</div>
                   <button v-for="name in availableKlipperMacros" :key="name"
@@ -281,7 +281,6 @@ const macroBarEl    = ref(null)
 let   macroDragIdx  = null
 
 const availableKlipperMacros = computed(() => {
-  const { useDeviceStore: _ds } = { useDeviceStore: () => deviceStore }
   return Object.keys(deviceStore.dynamicObjects)
     .filter(k => k.startsWith('gcode_macro '))
     .map(k => k.replace('gcode_macro ', '').toUpperCase())
