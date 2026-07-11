@@ -549,7 +549,7 @@
  *   3. Wire reactive data from handleStatus() into the `printer` object
  */
 
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useSettingsStore }   from '../stores/settings.js'
 import { useDeviceStore }     from '../stores/device.js'
 import { useMoonraker }       from '../composables/useMoonraker.js'
@@ -822,9 +822,9 @@ function buildDefaultLayout() {
     { id: 'chart',     type: 'chart',      x: 0,     y: row2Y, w: chartW, h: chartH, config: {} },
     // Bottom-right: speedflow (extruder) top, then misc + temps below
     { id: 'speedflow', type: 'speedflow',  x: col2X, y: row2Y, w: col2W, h: 420,    config: {} },
-    // Bottom-left: misc + temps stacked below chart
-    { id: 'fanlist',   type: 'fanlist',    x: 0,     y: row2Y + chartH + gap, w: chartW, h: miscH,  config: {} },
-    { id: 'temps',     type: 'temps',      x: 0,     y: row2Y + chartH + gap + miscH + gap, w: chartW, h: tempsH, config: {} },
+    // Below chart: fanlist + temps side by side
+    { id: 'fanlist',   type: 'fanlist',    x: 0,                           y: row2Y + chartH + gap, w: Math.floor((chartW - gap) / 2), h: tempsH, config: {} },
+    { id: 'temps',     type: 'temps',      x: Math.floor((chartW - gap) / 2) + gap, y: row2Y + chartH + gap, w: chartW - Math.floor((chartW - gap) / 2) - gap, h: tempsH, config: {} },
   ]
 }
 
@@ -1094,7 +1094,15 @@ function drawCharts() {
 let unsubscribe = null
 
 onMounted(async () => {
-  await layout.tryAutoLoad()
+  const hadSaved = await layout.tryAutoLoad()
+  if (!hadSaved) {
+    // First load — apply fitScreen to fill gaps after DOM settles
+    await nextTick()
+    setTimeout(() => {
+      const root = document.querySelector('.pd-root')
+      if (root) layout.fitScreen(root.offsetWidth, null)
+    }, 80)
+  }
   unsubscribe = subscribeToStatus(handleStatus)
   chartTimer = setInterval(drawCharts, 1000)
   _historyTimer = setInterval(() => _pushHistory(Date.now()), 2000)
