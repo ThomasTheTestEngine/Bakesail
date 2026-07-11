@@ -91,7 +91,7 @@
                    @dragend="macroDragEnd"
                    @click="!editMode.editing.value && runMacro(m)">
                 <button v-if="editMode.editing.value" class="topbar-macro-remove" @click.stop="removeMacro(i)" title="Remove">−</button>
-                <span class="topbar-macro-name">{{ m.name }}</span>
+                <span class="topbar-macro-name">{{ m.label ?? m.name }}</span>
               </div>
               <div v-if="editMode.editing.value" class="topbar-macro-add-wrap" ref="macroAddEl">
                 <button class="topbar-macro-add-btn" @click.stop="toggleMacroMenu" title="Add macro">+</button>
@@ -104,7 +104,14 @@
         <Teleport to="body">
           <div v-if="macroMenuOpen" class="topbar-macro-backdrop" @click="macroMenuOpen = false" />
           <div v-if="macroMenuOpen" class="topbar-macro-menu" :style="macroMenuStyle">
-            <div class="topbar-macro-menu-section">Klipper Macros</div>
+            <div class="topbar-macro-menu-section">Common Commands</div>
+            <button v-for="m in COMMON_MACROS" :key="m.name"
+                    class="topbar-macro-menu-item"
+                    :disabled="isPinned(m.name)"
+                    @click="addMacro(m.name, m.label)">
+              {{ m.label }}<span v-if="isPinned(m.name)" style="opacity:0.4;font-size:10px"> ✓</span>
+            </button>
+            <div class="topbar-macro-menu-section" style="margin-top:6px">Klipper Macros</div>
             <div v-if="availableKlipperMacros.length === 0" class="topbar-macro-menu-item" style="opacity:0.5;cursor:default">No macros found</div>
             <button v-for="name in availableKlipperMacros" :key="name"
                     class="topbar-macro-menu-item"
@@ -300,18 +307,34 @@ function toggleMacroMenu() {
   }
 }
 
+// Built-in gcodes / Klipper commands that don't appear as gcode_macro objects
+const COMMON_MACROS = [
+  { name: 'G28',                  label: 'Home All'         },
+  { name: 'G32',                  label: 'G32'              },
+  { name: 'QUAD_GANTRY_LEVEL',    label: 'Quad Gantry Level'},
+  { name: 'BED_MESH_CALIBRATE',   label: 'Bed Mesh'         },
+  { name: 'LOAD_FILAMENT',        label: 'Load Filament'    },
+  { name: 'UNLOAD_FILAMENT',      label: 'Unload Filament'  },
+  { name: 'TURN_OFF_ALL_HEATERS', label: 'Cooldown'         },
+  { name: 'M84',                  label: 'Motors Off'       },
+]
+
 const availableKlipperMacros = computed(() => {
+  const commonNames = new Set(COMMON_MACROS.map(m => m.name))
   return Object.keys(deviceStore.dynamicObjects)
     .filter(k => k.startsWith('gcode_macro '))
     .map(k => k.replace('gcode_macro ', '').toUpperCase())
+    .filter(name => !commonNames.has(name))
     .sort()
 })
 
 function isPinned(name) { return settings.pinnedMacros.some(m => m.name === name) }
 
-function addMacro(name) {
+function addMacro(name, label) {
   if (isPinned(name)) return
-  settings.pinnedMacros.push({ id: Date.now().toString(36), name })
+  const entry = { id: Date.now().toString(36), name }
+  if (label && label !== name) entry.label = label
+  settings.pinnedMacros.push(entry)
   settings.save()
   macroMenuOpen.value = false
 }
