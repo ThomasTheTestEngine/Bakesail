@@ -820,11 +820,11 @@ function buildDefaultLayout() {
     { id: 'sysloads',  type: 'sysloads',   x: col2X, y: 0,     w: col2W, h: topH,   config: {} },
     // Bottom-left: chart spanning left+center cols
     { id: 'chart',     type: 'chart',      x: 0,     y: row2Y, w: chartW, h: chartH, config: {} },
-    // Bottom-right: misc + temps stacked, tall enough to show all entries
-    { id: 'fanlist',   type: 'fanlist',    x: col2X, y: row2Y, w: col2W, h: miscH,  config: {} },
-    { id: 'temps',     type: 'temps',      x: col2X, y: row3Y, w: col2W, h: tempsH, config: {} },
-    // Speedflow below chart
-    { id: 'speedflow', type: 'speedflow',  x: 0,     y: row2Y + chartH + gap, w: chartW, h: 420, config: {} },
+    // Bottom-right: speedflow (extruder) top, then misc + temps below
+    { id: 'speedflow', type: 'speedflow',  x: col2X, y: row2Y, w: col2W, h: 420,    config: {} },
+    // Bottom-left: misc + temps stacked below chart
+    { id: 'fanlist',   type: 'fanlist',    x: 0,     y: row2Y + chartH + gap, w: chartW, h: miscH,  config: {} },
+    { id: 'temps',     type: 'temps',      x: 0,     y: row2Y + chartH + gap + miscH + gap, w: chartW, h: tempsH, config: {} },
   ]
 }
 
