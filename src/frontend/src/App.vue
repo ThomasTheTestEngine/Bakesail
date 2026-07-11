@@ -86,16 +86,17 @@
                    @drop.prevent="macroRowDrop($event, 0)">
                 <!-- packed (x===null) chips flow left naturally -->
                 <div v-for="m in packedInRow(0)" :key="m.id"
+                     :data-macro-id="m.id"
                      class="topbar-macro-chip"
                      :class="{ 'topbar-macro-chip--edit': editMode.editing.value }"
-                     :draggable="editMode.editing.value"
-                     @dragstart="macroDragStart($event, m)"
+                     @mousedown="editMode.editing.value && macroDragStart($event, m)"
                      @click="!editMode.editing.value && runMacro(m)">
                   <button v-if="editMode.editing.value" class="topbar-macro-remove" @click.stop="removeMacro(m)" title="Remove">−</button>
                   <span class="topbar-macro-name">{{ m.label ?? m.name }}</span>
                 </div>
                 <!-- floating (x!==null) chips in row 0 -->
                 <div v-for="m in floatingInRow(0)" :key="m.id"
+                     :data-macro-id="m.id"
                      class="topbar-macro-chip topbar-macro-chip--float"
                      :class="{ 'topbar-macro-chip--edit': editMode.editing.value }"
                      :style="chipFloatStyle(m)"
@@ -187,15 +188,30 @@
         <!-- Extra macro rows (rows 1+) -->
         <div v-for="rowIdx in extraRowIndices" :key="rowIdx"
              class="topbar-macro-row"
-             :style="{ top: (rowIdx * BAR_H) + 'px' }"
-             @dragover.prevent="macroRowDragOver($event, rowIdx)"
-             @drop.prevent="macroRowDrop($event, rowIdx)">
-          <div v-for="m in macrosInRow(rowIdx)" :key="m.id"
+             :style="{ top: (rowIdx * BAR_H) + 'px' }">
+          <!-- packed chips (x===null) left-gravity flex -->
+          <div class="topbar-macro-row-packed">
+            <div v-for="m in packedInRow(rowIdx)" :key="m.id"
+                 :data-macro-id="m.id"
+                 class="topbar-macro-chip"
+                 :class="{ 'topbar-macro-chip--edit': editMode.editing.value }"
+                 @mousedown="editMode.editing.value && macroDragStart($event, m)"
+                 @click="!editMode.editing.value && runMacro(m)">
+              <button v-if="editMode.editing.value" class="topbar-macro-remove" @click.stop="removeMacro(m)" title="Remove">−</button>
+              <span class="topbar-macro-name">{{ m.label ?? m.name }}</span>
+            </div>
+            <div v-if="editMode.editing.value" class="topbar-macro-add-wrap"
+                 :ref="el => { if(el) rowAddEls[rowIdx] = el }">
+              <button class="topbar-macro-add-btn" @click.stop="toggleMacroMenuForRow(rowIdx)" title="Add macro to this row">+</button>
+            </div>
+          </div>
+          <!-- floating chips (x!==null) -->
+          <div v-for="m in floatingInRow(rowIdx)" :key="m.id"
+               :data-macro-id="m.id"
                class="topbar-macro-chip topbar-macro-chip--float"
                :class="{ 'topbar-macro-chip--edit': editMode.editing.value }"
                :style="chipFloatStyle(m)"
-               :draggable="editMode.editing.value"
-               @dragstart="macroDragStart($event, m)"
+               @mousedown="editMode.editing.value && macroDragStart($event, m)"
                @click="!editMode.editing.value && runMacro(m)">
             <button v-if="editMode.editing.value" class="topbar-macro-remove" @click.stop="removeMacro(m)" title="Remove">−</button>
             <span class="topbar-macro-name">{{ m.label ?? m.name }}</span>
@@ -390,10 +406,10 @@ function migrateMacros() {
   if (dirty) settings.save()
 }
 
-// Helpers
-function macrosInRow(row)   { return settings.pinnedMacros.filter(m => m.row === row) }
-function packedInRow(row)   { return macrosInRow(row).filter(m => m.x === null) }
-function floatingInRow(row) { return macrosInRow(row).filter(m => m.x !== null) }
+// Helpers — treat missing row as 0, missing x as null (pre-migration safety)
+function macrosInRow(row)   { return settings.pinnedMacros.filter(m => (m.row ?? 0) === row) }
+function packedInRow(row)   { return macrosInRow(row).filter(m => (m.x ?? null) === null) }
+function floatingInRow(row) { return macrosInRow(row).filter(m => (m.x ?? null) !== null) }
 
 function chipFloatStyle(m) {
   // Clamp to row width on render
@@ -402,91 +418,146 @@ function chipFloatStyle(m) {
   return { position: 'absolute', left: x + 'px', top: '50%', transform: 'translateY(-50%)' }
 }
 
-function toggleMacroMenu() {
-  macroMenuOpen.value = !macroMenuOpen.value
-  if (macroMenuOpen.value && macroAddEl.value) {
-    const r = macroAddEl.value.getBoundingClientRect()
-    macroMenuStyle.value = { position: 'fixed', top: `${r.bottom + 4}px`, left: `${r.left}px`, zIndex: 9999 }
-  }
-}
+// toggleMacroMenu defined below with row support
 
-// ── Drag state ────────────────────────────────────────────────────────────────
-let dragMacro      = null   // the macro object being dragged
-let dragOffsetX    = 0      // cursor x offset within chip at dragstart
+// ── Drag state (mouse-based, not HTML5 drag API) ──────────────────────────────
+const dragState = ref(null)
+// dragState: { macro, ghostEl, startClientX, startClientY, chipW,
+//              originRow, originX, currentRow, currentX, wrapRect }
 
 function macroDragStart(evt, m) {
-  dragMacro   = m
-  dragOffsetX = evt.offsetX ?? 0
-  evt.dataTransfer.effectAllowed = 'move'
-  // ghost image — transparent 1x1
-  const ghost = document.createElement('div')
-  ghost.style.cssText = 'position:fixed;left:-999px;top:-999px;width:1px;height:1px'
+  if (!editMode.editing.value) return
+  evt.preventDefault()
+
+  const wrapEl  = macroBarEl.value?.closest('.topbar-wrap')
+  if (!wrapEl) return
+  const wrapRect = wrapEl.getBoundingClientRect()
+  const chipEl   = evt.currentTarget
+  const chipRect = chipEl.getBoundingClientRect()
+  const chipW    = chipRect.width
+  const offsetX  = evt.clientX - chipRect.left
+
+  // Build a ghost chip that follows the cursor
+  const ghost = chipEl.cloneNode(true)
+  ghost.style.cssText = [
+    'position:fixed',
+    `width:${chipW}px`,
+    'pointer-events:none',
+    'z-index:99999',
+    'opacity:0.85',
+    'transition:none',
+    `left:${evt.clientX - offsetX}px`,
+    `top:${chipRect.top}px`,
+  ].join(';')
   document.body.appendChild(ghost)
-  evt.dataTransfer.setDragImage(ghost, 0, 0)
-  setTimeout(() => ghost.remove(), 0)
+
+  dragState.value = {
+    macro: m, ghostEl: ghost,
+    offsetX, chipW,
+    wrapRect, wrapEl,
+    originRow: m.row ?? 0,
+    originX:   m.x,
+    currentRow: m.row ?? 0,
+    currentX:   null,
+  }
+
+  window.addEventListener('mousemove', macroDragMove)
+  window.addEventListener('mouseup',   macroDragEnd)
 }
 
-// Per-row dragover: show snap guides (future), nothing stored yet
-function macroRowDragOver(evt, rowIdx) {
-  evt.dataTransfer.dropEffect = 'move'
-}
+function macroDragMove(evt) {
+  const ds = dragState.value
+  if (!ds) return
 
-function macroRowDrop(evt, rowIdx) {
-  if (!dragMacro) return
+  // Update ghost position
+  ds.ghostEl.style.left = (evt.clientX - ds.offsetX) + 'px'
+  ds.ghostEl.style.top  = (evt.clientY - ds.chipW / 2) + 'px'
 
-  const m = dragMacro
-  dragMacro = null
+  // Determine which row the cursor is over
+  const wrapRect = ds.wrapEl.getBoundingClientRect()
+  const relY = evt.clientY - wrapRect.top
+  const rowIdx = Math.max(0, Math.min(macroBarRows.value, Math.floor(relY / BAR_H)))
+  ds.currentRow = rowIdx
 
-  // Find the row container to get its bounding rect
-  // For row 0 use macroBarEl; for others find the .topbar-macro-row
-  const wrap = macroBarEl.value?.closest('.topbar-wrap')
-  if (!wrap) return
-  const wrapRect = wrap.getBoundingClientRect()
-  const rowW     = wrapRect.width
+  // X position relative to row left edge
+  let x = evt.clientX - wrapRect.left - ds.offsetX
 
-  // Drop x relative to row left edge
-  let dropX = evt.clientX - wrapRect.left - dragOffsetX
-
-  // For row 0: if dropX is within the packed zone + 1 chip width, snap back to packed
-  const packed = packedInRow(rowIdx)
-  if (rowIdx === 0 && packed.length > 0) {
-    // Estimate packed zone width: sum of ~chips. We use a rough 70px/chip heuristic
-    // or we can check actual DOM — but keep it simple: if dropping within first 60px after packed group, repack
-    // Simpler rule: if dropX < 0 (drop target is the flex group itself), go packed
-    // We detect this by checking if evt.target is inside .topbar-macros--row0's flex part
+  // Row 0: check if cursor is within packed zone → will re-pack on drop
+  if (rowIdx === 0) {
     const packedZone = macroBarEl.value
     if (packedZone) {
-      const pRect = packedZone.getBoundingClientRect()
-      const packedEnd = pRect.left - wrapRect.left + pRect.width - 30 // minus add-btn
-      if (dropX < packedEnd + BAR_H) {
-        // drop into packed group
-        m.row = rowIdx
-        m.x   = null
-        settings.save()
+      const pRect    = packedZone.getBoundingClientRect()
+      const packedEndX = pRect.left - wrapRect.left + pRect.width - 26 // minus + btn
+      if (x < packedEndX) {
+        ds.currentX = null  // signal: will go packed
         return
       }
     }
   }
 
-  // Snap to row right edge
-  if (dropX > rowW - 80) dropX = rowW - 80
-  if (dropX < 0) dropX = 0
+  // Clamp
+  x = Math.max(0, Math.min(x, wrapRect.width - ds.chipW))
 
-  // Snap to edges of sibling chips
-  const siblings = macrosInRow(rowIdx).filter(s => s.id !== m.id && s.x !== null)
-  const CHIP_W   = 80 // rough estimate; real snap is close enough
+  // Snap to sibling chip edges (using real stored widths via DOM query)
+  const rowChips = [...ds.wrapEl.querySelectorAll(
+    rowIdx === 0
+      ? '.topbar-macro-chip--float'
+      : `.topbar-macro-row:nth-child(${rowIdx + 1}) .topbar-macro-chip`
+  )]
+  const siblings = macrosInRow(rowIdx).filter(s => s.id !== ds.macro.id && (s.x ?? null) !== null)
   for (const s of siblings) {
-    if (Math.abs(dropX - s.x) < SNAP_PX)             { dropX = s.x; break }
-    if (Math.abs(dropX - (s.x + CHIP_W)) < SNAP_PX)  { dropX = s.x + CHIP_W + 4; break }
-    if (Math.abs((dropX + CHIP_W) - s.x) < SNAP_PX)  { dropX = s.x - CHIP_W - 4; break }
+    const sEl = ds.wrapEl.querySelector(`[data-macro-id="${s.id}"]`)
+    const sW  = sEl ? sEl.offsetWidth : ds.chipW
+    if (Math.abs(x - s.x) < SNAP_PX)               { x = s.x; break }
+    if (Math.abs(x - (s.x + sW + 4)) < SNAP_PX)    { x = s.x + sW + 4; break }
+    if (Math.abs((x + ds.chipW + 4) - s.x) < SNAP_PX) { x = s.x - ds.chipW - 4; break }
   }
-  // Snap right edge of row
-  if (Math.abs(dropX - (rowW - CHIP_W)) < SNAP_PX) dropX = rowW - CHIP_W - 4
+  // Snap to right edge
+  const rightEdge = wrapRect.width - ds.chipW
+  if (Math.abs(x - rightEdge) < SNAP_PX) x = rightEdge
 
-  m.row = rowIdx
-  m.x   = Math.round(dropX)
+  ds.currentX = Math.round(x)
+}
+
+function macroDragEnd() {
+  const ds = dragState.value
+  if (!ds) return
+
+  ds.ghostEl.remove()
+  dragState.value = null
+  window.removeEventListener('mousemove', macroDragMove)
+  window.removeEventListener('mouseup',   macroDragEnd)
+
+  const m    = ds.macro
+  const newX = ds.currentX  // null = re-pack
+
+  // Anti-overlap check for floating placement
+  if (newX !== null) {
+    const siblings = macrosInRow(ds.currentRow).filter(s => s.id !== m.id && (s.x ?? null) !== null)
+    let safeX = newX
+    for (const s of siblings) {
+      const sEl = ds.wrapEl.querySelector(`[data-macro-id="${s.id}"]`)
+      const sW  = sEl ? sEl.offsetWidth : ds.chipW
+      // if we would overlap, push right of sibling
+      if (safeX < s.x + sW + 2 && safeX + ds.chipW + 2 > s.x) {
+        safeX = s.x + sW + 4
+      }
+    }
+    // clamp again after push
+    const rowW = ds.wrapEl.offsetWidth
+    safeX = Math.min(safeX, rowW - ds.chipW)
+    m.row = ds.currentRow
+    m.x   = Math.round(safeX)
+  } else {
+    m.row = ds.currentRow
+    m.x   = null
+  }
   settings.save()
 }
+
+// Stub dragover/drop (no longer used, but template refs kept for safety)
+function macroRowDragOver() {}
+function macroRowDrop() {}
 
 // ── Resize handle ─────────────────────────────────────────────────────────────
 function resizeHandleDown(evt) {
@@ -533,15 +604,79 @@ const availableKlipperMacros = computed(() => {
     .sort()
 })
 
+const rowAddEls   = {}      // rowIdx -> DOM el for per-row + buttons
+const macroAddRow = ref(0)  // which row the open menu targets
+
+function openMacroMenuAt(el, rowIdx) {
+  macroAddRow.value   = rowIdx
+  macroMenuOpen.value = true
+  nextTick(() => {
+    const r = el.getBoundingClientRect()
+    macroMenuStyle.value = { position: 'fixed', top: `${r.bottom + 4}px`, left: `${r.left}px`, zIndex: 9999 }
+  })
+}
+
+function toggleMacroMenu() {
+  if (macroMenuOpen.value && macroAddRow.value === 0) { macroMenuOpen.value = false; return }
+  openMacroMenuAt(macroAddEl.value, 0)
+}
+
+function toggleMacroMenuForRow(rowIdx) {
+  if (macroMenuOpen.value && macroAddRow.value === rowIdx) { macroMenuOpen.value = false; return }
+  openMacroMenuAt(rowAddEls[rowIdx], rowIdx)
+}
+
 function isPinned(name) { return settings.pinnedMacros.some(m => m.name === name) }
 
 function addMacro(name, label) {
   if (isPinned(name)) return
-  const entry = { id: Date.now().toString(36), name, row: 0, x: null }
+  const entry = { id: Date.now().toString(36), name, row: macroAddRow.value, x: null }
   if (label && label !== name) entry.label = label
   settings.pinnedMacros.push(entry)
   settings.save()
   macroMenuOpen.value = false
+}
+
+// ── Macro picker dialog ────────────────────────────────────────────────────────
+const macroPickerOpen    = ref(false)
+const macroPickerInput   = ref('')
+const macroPickerSearch  = ref('')
+const macroPickerLoading = ref(false)
+const gcodeHelpList      = ref([])
+
+const filteredGcodeHelp = computed(() => {
+  const q = macroPickerSearch.value.trim().toUpperCase()
+  return gcodeHelpList.value.filter(c => !q || c.name.includes(q) || c.description.toUpperCase().includes(q))
+})
+
+async function addCustomMacro() {
+  macroMenuOpen.value = false
+  macroPickerInput.value  = ''
+  macroPickerSearch.value = ''
+  macroPickerOpen.value   = true
+  if (gcodeHelpList.value.length === 0) {
+    macroPickerLoading.value = true
+    try {
+      const result = await send('printer.gcode.help', {})
+      gcodeHelpList.value = Object.entries(result ?? {})
+        .map(([name, description]) => ({ name, description: description || '' }))
+        .sort((a, b) => a.name.localeCompare(b.name))
+    } catch (e) {
+      console.warn('[bakesail] gcode help fetch failed:', e)
+    } finally {
+      macroPickerLoading.value = false
+    }
+  }
+}
+
+function confirmMacroPicker() {
+  const name = macroPickerInput.value.trim().toUpperCase()
+  if (!name) return
+  if (!isPinned(name)) {
+    settings.pinnedMacros.push({ id: Date.now().toString(36), name, row: macroAddRow.value, x: null })
+    settings.save()
+  }
+  macroPickerOpen.value = false
 }
 
 function removeMacro(m) {
@@ -1173,6 +1308,16 @@ a { color: inherit; text-decoration: none; }
   transition: background 0.1s, color 0.1s;
   user-select: none;
 }
+.topbar-macro-row-packed {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  height: 100%;
+  position: relative;
+  z-index: 1;
+}
+
 .topbar-macro-chip--float {
   pointer-events: auto;
 }
