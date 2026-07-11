@@ -1078,7 +1078,8 @@ a { color: inherit; text-decoration: none; }
 .content:has(.pd-root),
 .content:has(.ld-root),
 .content:has(.td-root),
-.content:has(.dashboard-root) {
+.content:has(.dashboard-root),
+.content:has(.cam-page) {
   padding: 0;
 }
 
