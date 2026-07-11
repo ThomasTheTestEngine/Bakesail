@@ -104,7 +104,8 @@
         <Teleport to="body">
           <div v-if="macroMenuOpen" class="topbar-macro-backdrop" @click="macroMenuOpen = false" />
           <div v-if="macroMenuOpen" class="topbar-macro-menu" :style="macroMenuStyle">
-            <div class="topbar-macro-menu-section">Common Commands</div>
+            <button class="topbar-macro-menu-item topbar-macro-menu-item--new" @click="addCustomMacro">+ New custom…</button>
+            <div class="topbar-macro-menu-section" style="margin-top:6px">Common Commands</div>
             <button v-for="m in COMMON_MACROS" :key="m.name"
                     class="topbar-macro-menu-item"
                     :disabled="isPinned(m.name)"
@@ -120,8 +121,6 @@
                 {{ name }}<span v-if="isPinned(name)" style="opacity:0.4;font-size:10px"> ✓</span>
               </button>
             </template>
-            <div class="topbar-macro-menu-section" style="margin-top:6px">Custom</div>
-            <button class="topbar-macro-menu-item" @click="addCustomMacro">+ New custom…</button>
           </div>
         </Teleport>
 
@@ -266,6 +265,45 @@
       </div>
     </div>
 
+    <!-- Macro picker dialog -->
+    <div v-if="macroPickerOpen" class="file-dialog-backdrop" @click.self="macroPickerOpen = false">
+      <div class="file-dialog macro-picker">
+        <div class="file-dialog-header">
+          <span class="file-dialog-title">Add Macro</span>
+          <button class="file-dialog-close" @click="macroPickerOpen = false">✕</button>
+        </div>
+        <div class="macro-picker-input-row">
+          <input class="macro-picker-input"
+                 v-model="macroPickerInput"
+                 placeholder="Type gcode command…"
+                 @keydown.enter="confirmMacroPicker"
+                 spellcheck="false"
+                 autocomplete="off" />
+          <button class="macro-picker-create"
+                  :disabled="!macroPickerInput.trim()"
+                  @click="confirmMacroPicker">Create</button>
+        </div>
+        <div class="macro-picker-search-row">
+          <input class="macro-picker-search"
+                 v-model="macroPickerSearch"
+                 placeholder="Search commands…"
+                 spellcheck="false"
+                 autocomplete="off" />
+        </div>
+        <div class="file-dialog-body">
+          <div v-if="macroPickerLoading" class="file-dialog-empty">Loading…</div>
+          <div v-else-if="filteredGcodeHelp.length === 0" class="file-dialog-empty">No commands found</div>
+          <button v-else v-for="cmd in filteredGcodeHelp" :key="cmd.name"
+                  class="file-dialog-item macro-picker-item"
+                  :class="{ 'macro-picker-item--selected': macroPickerInput === cmd.name }"
+                  @click="macroPickerInput = cmd.name">
+            <span class="file-dialog-name">{{ cmd.name }}</span>
+            <span class="file-dialog-meta macro-picker-desc">{{ cmd.description }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -286,7 +324,7 @@ const router   = useRouter()
 const store    = useDeviceStore()
 const settings = useSettingsStore()
 const editMode = useEditMode()
-const { connected, klippyState, connect, sendGcode, subscribeToConsole, fetchConsoleHistory } = useMoonraker()
+const { connected, klippyState, connect, send, sendGcode, subscribeToConsole, fetchConsoleHistory } = useMoonraker()
 
 // ── Macro bar ──────────────────────────────────────────────────────────────────
 const macroMenuOpen = ref(false)
@@ -340,12 +378,46 @@ function addMacro(name, label) {
   macroMenuOpen.value = false
 }
 
+// ── Macro picker dialog ────────────────────────────────────────────────────────
+const macroPickerOpen    = ref(false)
+const macroPickerInput   = ref('')
+const macroPickerSearch  = ref('')
+const macroPickerLoading = ref(false)
+const gcodeHelpList      = ref([])  // [{ name, description }]
+
+const filteredGcodeHelp = computed(() => {
+  const q = macroPickerSearch.value.trim().toUpperCase()
+  return gcodeHelpList.value.filter(c => !q || c.name.includes(q) || c.description.toUpperCase().includes(q))
+})
+
 async function addCustomMacro() {
-  const name = prompt('Macro name (the gcode command to send):')
-  if (!name?.trim()) return
-  settings.pinnedMacros.push({ id: Date.now().toString(36), name: name.trim().toUpperCase() })
-  settings.save()
   macroMenuOpen.value = false
+  macroPickerInput.value  = ''
+  macroPickerSearch.value = ''
+  macroPickerOpen.value   = true
+  if (gcodeHelpList.value.length === 0) {
+    macroPickerLoading.value = true
+    try {
+      const result = await send('printer.gcode.help', {})
+      gcodeHelpList.value = Object.entries(result ?? {})
+        .map(([name, description]) => ({ name, description: description || '' }))
+        .sort((a, b) => a.name.localeCompare(b.name))
+    } catch (e) {
+      console.warn('[bakesail] gcode help fetch failed:', e)
+    } finally {
+      macroPickerLoading.value = false
+    }
+  }
+}
+
+function confirmMacroPicker() {
+  const name = macroPickerInput.value.trim().toUpperCase()
+  if (!name) return
+  if (!isPinned(name)) {
+    settings.pinnedMacros.push({ id: Date.now().toString(36), name })
+    settings.save()
+  }
+  macroPickerOpen.value = false
 }
 
 function removeMacro(i) {
@@ -1729,4 +1801,78 @@ a { color: inherit; text-decoration: none; }
   border-color: var(--red);
 }
 .btn-danger:not(:disabled):hover { background: var(--red-glow); }
+/* ── Macro picker dialog ─────────────────────────────────────── */
+.macro-picker { width: 560px; max-height: 70vh; }
+
+.macro-picker-input-row {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px 6px;
+  flex-shrink: 0;
+}
+
+.macro-picker-input {
+  flex: 1;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 7px 10px;
+  outline: none;
+}
+.macro-picker-input:focus { border-color: var(--accent); }
+
+.macro-picker-create {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0 16px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.1s;
+}
+.macro-picker-create:disabled { opacity: 0.35; cursor: default; }
+.macro-picker-create:not(:disabled):hover { opacity: 0.85; }
+
+.macro-picker-search-row {
+  padding: 0 12px 8px;
+  flex-shrink: 0;
+}
+.macro-picker-search {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 12px;
+  padding: 6px 10px;
+  outline: none;
+}
+.macro-picker-search:focus { border-color: var(--accent); }
+
+.macro-picker-item { flex-direction: column; align-items: flex-start; gap: 2px; }
+.macro-picker-item--selected { background: var(--surface-2); outline: 1px solid var(--accent); }
+.macro-picker-desc {
+  font-family: var(--font-sans, inherit);
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: normal;
+  line-height: 1.3;
+}
+
+.topbar-macro-menu-item--new {
+  color: var(--accent);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  margin-bottom: 2px;
+}
+
 </style>
