@@ -80,6 +80,9 @@ function send(method, params = {}) {
 
 // Send a single gcode script to Klipper via Moonraker.
 function sendGcode(script) {
+  for (const cb of consoleSubscribers) {
+    try { cb('> ' + script) } catch {}
+  }
   return send('printer.gcode.script', { script })
 }
 

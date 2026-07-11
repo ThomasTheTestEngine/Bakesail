@@ -644,7 +644,6 @@ async function cbarSubmit() {
       cbarTermOutput.value += `<span style="color:#e05555">[not connected — click Console/Shell to connect]</span>\n`
     }
   } else {
-    cbarAddLine('> ' + text.trim())
     sendGcode(text.trim()).catch(e => cbarAddLine('!! ' + (e.message ?? e)))
   }
 }
