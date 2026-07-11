@@ -1234,16 +1234,19 @@ html, body {
 a { color: inherit; text-decoration: none; }
 
 /* ── Scrollbars ──────────────────────────────────────────────── */
-/* scrollbar-width:auto gives Firefox/Windows a normal-thickness bar  */
-/* that we recolour; webkit gets an explicit 6px bar                  */
+/* Scrollbars: normal width on Firefox/Windows but hidden until hover  */
 * {
   scrollbar-width: auto;
+  scrollbar-color: transparent transparent;
+}
+*:hover {
   scrollbar-color: var(--border-2) transparent;
 }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; transition: background 0.15s; }
+*:hover::-webkit-scrollbar-thumb { background: var(--border-2); }
+*:hover::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
 /* ── App shell ──────────────────────────────────────────────── */
 .app-shell {
