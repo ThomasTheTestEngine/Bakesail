@@ -58,6 +58,7 @@ const SUBSCRIBED_OBJECTS = {
   gcode_move:      ['speed_factor', 'extrude_factor', 'homing_origin', 'speed'],
   idle_timeout:         ['state'],
   system_stats:         ['cputime', 'memavail', 'sysload'],
+  'machine.proc_stats': null,   // live CPU%, per-core, network bandwidth, cpu_temp
   quad_gantry_level:    ['applied'],   // null if not configured — handled gracefully
 }
 
@@ -166,6 +167,9 @@ function applyStatusUpdate(status) {
   // System stats
   if (status.system_stats) {
     store.updateSystemStats(status.system_stats)
+  }
+  if (status['machine.proc_stats']) {
+    store.updateProcStats(status['machine.proc_stats'])
   }
 
   // MCU stats — any key matching 'mcu' or 'mcu *'

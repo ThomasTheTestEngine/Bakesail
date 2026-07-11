@@ -56,7 +56,7 @@
         </div>
       </div>
 
-      <!-- Host row -->
+      <!-- Host row — always shown once systemStats arrives -->
       <div class="wmon-load-row" v-if="deviceStore.systemStats">
         <div class="wmon-load-left">
           <div class="wmon-load-name">
@@ -66,56 +66,81 @@
             </span>
           </div>
           <div class="wmon-load-detail" v-if="deviceStore.hostInfo?.software_info?.moonraker_version">
-            Version: {{ deviceStore.hostInfo.software_info.moonraker_version }}
+            Moonraker: {{ deviceStore.hostInfo.software_info.moonraker_version }}
           </div>
           <div class="wmon-load-detail" v-if="deviceStore.hostInfo?.distribution">
             OS: {{ deviceStore.hostInfo.distribution.name }} {{ deviceStore.hostInfo.distribution.version_parts?.major ?? '' }}
             ({{ deviceStore.hostInfo.distribution.codename }})
-            · Distro: {{ deviceStore.hostInfo.distribution.like ?? '—' }}
           </div>
+          <!-- Live stats from proc_stats, fall back to system_stats -->
           <div class="wmon-load-detail">
-            Load: {{ deviceStore.systemStats.sysload?.toFixed(2) ?? '—' }}
-            <template v-if="deviceStore.systemStats.memavail != null && deviceStore.hostInfo?.cpu_info?.total_memory">
-              , Mem: {{ Math.round((deviceStore.hostInfo.cpu_info.total_memory - deviceStore.systemStats.memavail) / 1024) }} MB
-              / {{ (deviceStore.hostInfo.cpu_info.total_memory / 1024 / 1024).toFixed(1) }} GB
+            <template v-if="hostCpuPct != null">CPU: {{ hostCpuPct.toFixed(1) }}%</template>
+            <template v-else-if="deviceStore.systemStats.sysload != null">Load: {{ deviceStore.systemStats.sysload.toFixed(2) }}</template>
+            <template v-if="deviceStore.procStats?.cpu_temp != null">, Temp: {{ deviceStore.procStats.cpu_temp.toFixed(1) }}°C</template>
+            <template v-if="hostMemPct != null">, Mem: {{ hostMemPct.toFixed(1) }}%
+              <template v-if="deviceStore.hostInfo?.cpu_info?.total_memory">
+                ({{ Math.round(deviceStore.hostInfo.cpu_info.total_memory * hostMemPct / 100 / 1024) }} /
+                {{ (deviceStore.hostInfo.cpu_info.total_memory / 1024 / 1024).toFixed(1) }} GB)
+              </template>
             </template>
           </div>
+          <!-- Network interfaces: live bandwidth from proc_stats, static IP from hostInfo -->
           <template v-if="deviceStore.hostInfo?.network">
             <div class="wmon-load-detail" v-for="(iface, name) in deviceStore.hostInfo.network" :key="name">
-              {{ name }}
-              <template v-if="iface.ip_addresses?.[0]?.address"> ({{ iface.ip_addresses[0].address }})</template>
-              : Bandwidth: {{ ((iface.bandwidth ?? 0) / 1024).toFixed(1) }} kB/s,
-              Received: {{ ((iface.rx_bytes ?? 0) / 1048576).toFixed(1) }} MB,
-              Transmitted: {{ ((iface.tx_bytes ?? 0) / 1048576).toFixed(1) }} MB
+              {{ name }}<template v-if="iface.ip_addresses?.[0]?.address"> ({{ iface.ip_addresses[0].address }})</template>:
+              <template v-if="deviceStore.procStats?.network?.[name]">
+                ↓ {{ ((deviceStore.procStats.network[name].bandwidth ?? 0) / 1024).toFixed(1) }} kB/s
+                · Rx {{ ((deviceStore.procStats.network[name].rx_bytes ?? 0) / 1048576).toFixed(1) }} MB
+                · Tx {{ ((deviceStore.procStats.network[name].tx_bytes ?? 0) / 1048576).toFixed(1) }} MB
+              </template>
+              <template v-else>
+                {{ ((iface.bandwidth ?? 0) / 1024).toFixed(1) }} kB/s
+              </template>
             </div>
           </template>
         </div>
         <div class="wmon-gauge-pair">
-          <div class="wmon-gauge-wrap" v-if="deviceStore.systemStats.sysload != null">
+          <!-- CPU gauge — always visible, uses proc_stats cpu_usage avg or sysload -->
+          <div class="wmon-gauge-wrap">
             <svg viewBox="0 0 48 48" class="wmon-gauge-svg">
               <circle cx="24" cy="24" r="20" fill="none" stroke="var(--border-2)" stroke-width="4"/>
               <circle cx="24" cy="24" r="20" fill="none" stroke="var(--teal)" stroke-width="4"
                       stroke-dasharray="125.66"
-                      :stroke-dashoffset="125.66 * (1 - Math.min(deviceStore.systemStats.sysload / (deviceStore.hostInfo?.cpu_info?.cpu_count || 4), 1))"
+                      :stroke-dashoffset="125.66 * (1 - Math.max(Math.min((hostCpuPct ?? 0) / 100, 1), 0.01))"
                       stroke-linecap="round" transform="rotate(-90 24 24)"/>
               <text x="24" y="29" text-anchor="middle" font-size="12" fill="var(--teal)" font-family="var(--font-mono)">
-                {{ Math.round(Math.min(deviceStore.systemStats.sysload / (deviceStore.hostInfo?.cpu_info?.cpu_count || 4), 1) * 100) }}
+                {{ hostCpuPct != null ? Math.round(hostCpuPct) + '%' : '—' }}
               </text>
             </svg>
             <span class="wmon-gauge-label">CPU</span>
           </div>
-          <div class="wmon-gauge-wrap" v-if="deviceStore.systemStats.memavail != null && deviceStore.hostInfo?.cpu_info?.total_memory">
+          <!-- MEM gauge -->
+          <div class="wmon-gauge-wrap" v-if="hostMemPct != null">
             <svg viewBox="0 0 48 48" class="wmon-gauge-svg">
               <circle cx="24" cy="24" r="20" fill="none" stroke="var(--border-2)" stroke-width="4"/>
               <circle cx="24" cy="24" r="20" fill="none" stroke="var(--teal)" stroke-width="4"
                       stroke-dasharray="125.66"
-                      :stroke-dashoffset="125.66 * (deviceStore.systemStats.memavail / deviceStore.hostInfo.cpu_info.total_memory)"
+                      :stroke-dashoffset="125.66 * (1 - Math.max(Math.min(hostMemPct / 100, 1), 0.01))"
                       stroke-linecap="round" transform="rotate(-90 24 24)"/>
               <text x="24" y="29" text-anchor="middle" font-size="12" fill="var(--teal)" font-family="var(--font-mono)">
-                {{ Math.round((1 - deviceStore.systemStats.memavail / deviceStore.hostInfo.cpu_info.total_memory) * 100) }}
+                {{ Math.round(hostMemPct) }}%
               </text>
             </svg>
             <span class="wmon-gauge-label">MEM</span>
+          </div>
+          <!-- TEMP gauge -->
+          <div class="wmon-gauge-wrap" v-if="deviceStore.procStats?.cpu_temp != null">
+            <svg viewBox="0 0 48 48" class="wmon-gauge-svg">
+              <circle cx="24" cy="24" r="20" fill="none" stroke="var(--border-2)" stroke-width="4"/>
+              <circle cx="24" cy="24" r="20" fill="none" stroke="var(--amber)" stroke-width="4"
+                      stroke-dasharray="125.66"
+                      :stroke-dashoffset="125.66 * (1 - Math.max(Math.min(deviceStore.procStats.cpu_temp / 80, 1), 0.01))"
+                      stroke-linecap="round" transform="rotate(-90 24 24)"/>
+              <text x="24" y="29" text-anchor="middle" font-size="11" fill="var(--amber)" font-family="var(--font-mono)">
+                {{ Math.round(deviceStore.procStats.cpu_temp) }}°
+              </text>
+            </svg>
+            <span class="wmon-gauge-label">TEMP</span>
           </div>
         </div>
       </div>
@@ -124,10 +149,40 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useDeviceStore } from '../stores/device.js'
 
 const deviceStore = useDeviceStore()
+
+// CPU %: proc_stats gives per-core array 0-100; average them.
+// Fall back to sysload/cpu_count from system_stats.
+const hostCpuPct = computed(() => {
+  const ps = deviceStore.procStats
+  if (ps?.cpu_usage?.length) {
+    const avg = ps.cpu_usage.reduce((a, b) => a + b, 0) / ps.cpu_usage.length
+    return avg  // already 0-100
+  }
+  // sysload is 0..N (N = cpu_count); normalize to 0-100
+  const sl = deviceStore.systemStats?.sysload
+  const cores = deviceStore.hostInfo?.cpu_info?.cpu_count ?? 4
+  if (sl != null) return Math.min(sl / cores, 1) * 100
+  return null
+})
+
+// Mem %: proc_stats memory_usage is used KB; total from cpu_info (KB).
+// Fall back to memavail from system_stats.
+const hostMemPct = computed(() => {
+  const ps    = deviceStore.procStats
+  const total = deviceStore.hostInfo?.cpu_info?.total_memory  // KB
+  if (ps?.memory_usage != null && total) {
+    return Math.min(ps.memory_usage / total, 1) * 100
+  }
+  const avail = deviceStore.systemStats?.memavail
+  if (avail != null && total) {
+    return (1 - avail / total) * 100
+  }
+  return null
+})
 
 // Fetch host system info once (OS, distro, memory total, network interfaces).
 // MCU + system_stats arrive live via the shared status subscription; hostInfo

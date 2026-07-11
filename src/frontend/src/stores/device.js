@@ -59,6 +59,7 @@ export const useDeviceStore = defineStore('device', {
     // systemStats: { sysload, memavail, cputime }
     // mcus: [{ name, version, freq, load, awake, temp }]
     systemStats: null,
+    procStats:   null,   // machine.proc_stats: { cpu_usage[], memory_usage, network{}, cpu_temp }
     mcus: [],
     hostInfo: null,   // from /machine/system_info — OS, distro, mem total, network
     dynamicObjects: {}, // heater_fan *, temperature_sensor *, neopixel *, etc.
@@ -177,6 +178,11 @@ export const useDeviceStore = defineStore('device', {
 
     updateSystemStats(stats) {
       this.systemStats = stats
+    },
+
+    updateProcStats(stats) {
+      // Merge so partial diffs don't wipe previous fields
+      this.procStats = { ...(this.procStats ?? {}), ...stats }
     },
 
     updateHostInfo(info) {
