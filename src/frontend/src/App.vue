@@ -445,6 +445,7 @@ function macroDragStart(evt, m) {
       started = true
 
       const wrapEl   = macroBarEl.value?.closest('.topbar-wrap')
+      console.log('[drag start] wrapEl=', wrapEl, 'macroBarEl=', macroBarEl.value, 'topbarActionsEl=', topbarActionsEl.value)
       if (!wrapEl) { cleanup(); return }
 
       // Ghost: plain text label, no buttons, so there's nothing to accidentally activate
@@ -524,6 +525,9 @@ function macroDragStart(evt, m) {
     if (Math.abs(x - rightEdge) < 8) x = rightEdge
 
     ds.currentX = Math.round(x)
+    console.log('[drag] row=%d x=%d safeRight=%d packedEnd=%d currentX=%d',
+      rowIdx, Math.round(e.clientX - wrapRect.left - ds.offsetX), Math.round(safeRight),
+      0, ds.currentX)
   }
 
   function onUp(e) {
@@ -564,6 +568,7 @@ function macroDragStart(evt, m) {
       m.x   = null
     }
 
+    console.log('[drag commit] row=%d x=%d', m.row, m.x)
     ds.ghost.remove()
     ds = null
     settings.save()
