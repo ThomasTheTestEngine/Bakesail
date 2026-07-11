@@ -98,10 +98,17 @@ function close() { open.value = false }
 function positionPopover() {
   if (!wrapEl.value) return
   const r = wrapEl.value.getBoundingClientRect()
-  const spaceRight = window.innerWidth - r.right
+  const popH = 360  // approximate popover height
+  const spaceBelow = window.innerHeight - r.bottom
+  const spaceRight = window.innerWidth  - r.left
+
+  const top = spaceBelow > popH
+    ? `${r.bottom + 6}px`
+    : `${Math.max(6, r.top - popH - 6)}px`
+
   popoverStyle.value = {
     position: 'fixed',
-    top:  `${r.bottom + 6}px`,
+    top,
     ...(spaceRight > 260
       ? { left: `${r.left}px` }
       : { right: `${window.innerWidth - r.right}px` }),
