@@ -154,7 +154,6 @@
                        @keydown.enter.prevent="e => { setHotend(hotendInput); hotendInput = ''; e.target.blur() }"
                        @keydown.escape="e => { hotendInput = ''; e.target.blur() }" />
                 <span class="wmon-sensor-val">{{ printer.hotendTemp?.toFixed(1) ?? '—' }}°C</span>
-                <span class="wmon-sensor-target" v-if="printer.hotendTarget > 0">→ {{ printer.hotendTarget.toFixed(0) }}°</span>
               </div>
               <!-- Bed -->
               <div class="wmon-sensor-row wmon-sensor-row--heater">
@@ -170,7 +169,6 @@
                        @keydown.enter.prevent="e => { setBed(bedInput); bedInput = ''; e.target.blur() }"
                        @keydown.escape="e => { bedInput = ''; e.target.blur() }" />
                 <span class="wmon-sensor-val">{{ printer.bedTemp?.toFixed(1) ?? '—' }}°C</span>
-                <span class="wmon-sensor-target" v-if="printer.bedTarget > 0">→ {{ printer.bedTarget.toFixed(0) }}°</span>
               </div>
               <!-- Dynamic temperature_sensor * (read-only, no target input) -->
               <div class="wmon-sensor-row" v-for="(obj, name) in tempSensors" :key="name">
@@ -182,19 +180,35 @@
           </div>
         </template>
 
-        <!-- ── Fan List ──────────────────────────────────────── -->
+        <!-- ── Misc: fans + LED controls ──────────────────────── -->
         <template v-else-if="w.type === 'fanlist'">
           <div class="w-monitor">
-            <div class="wmon-section-title">FANS</div>
+            <div class="wmon-section-title">MISC</div>
             <div class="wmon-sensor-grid">
-              <div class="wmon-sensor-row">
+              <!-- Part fan with slider -->
+              <div class="wmon-sensor-row wmon-fan-row">
                 <span class="wmon-sensor-name">Part Fan</span>
+                <input class="wmon-fan-slider" type="range" min="0" max="100" step="1"
+                       :value="Math.round((printer.fanSpeed ?? 0) * 100)"
+                       @change="e => sendGcode(`M106 S${Math.round(+e.target.value * 2.55)}`)" />
                 <span class="wmon-sensor-val">{{ printer.fanSpeed != null ? (printer.fanSpeed*100).toFixed(0)+'%' : '—' }}</span>
               </div>
+              <!-- Other fans (read-only) -->
               <div class="wmon-sensor-row" v-for="(obj, name) in allFans" :key="name">
                 <span class="wmon-sensor-name">{{ name.replace(/^(heater_fan |fan_generic |temperature_fan )/,'') }}</span>
                 <span class="wmon-sensor-val">{{ obj.speed != null ? (obj.speed*100).toFixed(0)+'%' : '—' }}</span>
                 <span class="wmon-sensor-target" v-if="obj.rpm != null">{{ Math.round(obj.rpm) }} RPM</span>
+              </div>
+              <!-- LED controls -->
+              <div class="wmon-sensor-row" v-for="(obj, name) in ledObjects" :key="name">
+                <span class="wmon-sensor-name">{{ name.replace(/^(neopixel |led )/,'') }}</span>
+                <span class="wmon-heater-spacer"></span>
+                <LedColorPicker
+                  :led-name="name.replace(/^(neopixel |led )/,'')"
+                  :r="ledRgbw(obj).r" :g="ledRgbw(obj).g" :b="ledRgbw(obj).b" :w="ledRgbw(obj).w"
+                  :has-white="ledRgbw(obj).hasWhite"
+                  @change="c => setLed(name, c)"
+                />
               </div>
             </div>
           </div>
@@ -545,6 +559,7 @@ import CameraWidget   from '../components/CameraWidget.vue'
 import SystemMonitorWidget from '../components/SystemMonitorWidget.vue'
 import StatusHeaderWidget from '../components/StatusHeaderWidget.vue'
 import DashboardCustomizeBar from '../components/DashboardCustomizeBar.vue'
+import LedColorPicker from '../components/LedColorPicker.vue'
 import ConsoleWidget      from '../components/ConsoleWidget.vue'
 import Toolhead3DWidget   from '../components/Toolhead3DWidget.vue'
 
@@ -816,6 +831,26 @@ const canvasStyle = computed(() => ({ minHeight: '100%' }))
 // cleared on blur. Enter sends the gcode, Escape blurs without sending.
 const hotendInput = ref('')
 const bedInput    = ref('')
+
+// ── LED helpers ───────────────────────────────────────────────
+function ledRgbw(obj) {
+  const c = obj?.color_data?.[0] ?? [1,1,1,0]
+  const hasWhite = c.length >= 4 && c[3] !== undefined
+  return {
+    r: Math.round((c[0] ?? 1) * 255),
+    g: Math.round((c[1] ?? 1) * 255),
+    b: Math.round((c[2] ?? 1) * 255),
+    w: Math.round((c[3] ?? 0) * 255),
+    hasWhite,
+  }
+}
+
+function setLed(name, { r, g, b, w }) {
+  const led = name.replace(/^(neopixel |led )/, '')
+  const rf = (r/255).toFixed(4), gf = (g/255).toFixed(4)
+  const bf = (b/255).toFixed(4), wf = (w/255).toFixed(4)
+  sendGcode(`SET_LED LED=${led} RED=${rf} GREEN=${gf} BLUE=${bf} WHITE=${wf}`)
+}
 
 function setHotend(val) {
   const t = parseInt(val, 10)
@@ -1112,6 +1147,21 @@ onUnmounted(() => {
 .wmon-sensor-row--heater { align-items: center; }
 .wmon-heater-spacer { flex: 1; }
 
+.wmon-fan-row { align-items: center; }
+.wmon-fan-slider {
+  flex: 1; height: 4px; cursor: pointer;
+  -webkit-appearance: none; appearance: none;
+  background: var(--border-2); border-radius: 2px; outline: none;
+  margin: 0 8px;
+}
+.wmon-fan-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 12px; height: 12px;
+  border-radius: 50%; background: var(--amber); cursor: pointer;
+}
+.wmon-fan-slider::-moz-range-thumb {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--amber); border: none; cursor: pointer;
+}
 .wmon-heater-status {
   font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
   padding: 1px 5px; border-radius: 3px; border: 1px solid;
