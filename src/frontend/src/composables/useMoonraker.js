@@ -176,17 +176,19 @@ function applyStatusUpdate(status) {
       const raw = status[key]
       const ls  = raw.last_stats ?? {}
       const idx = existing.findIndex(m => m.name === key)
-      // mcu_task_avg is the main load metric; fall back to bytes_write delta
-      // as a proxy if task_avg is missing (some secondary MCU firmware variants)
-      const taskAvg = ls.mcu_task_avg ?? ls.mcu_task_stddev ?? null
+      // mcu_awake is a 0.0-1.0 fraction of time the MCU spends not sleeping —
+      // this is the meaningful load gauge metric. mcu_task_avg is average
+      // single-task duration in seconds (tiny even under load, not a %).
+      const awakeFrac = ls.mcu_awake ?? null
       const parsed = {
         name:    key,
         version: raw.mcu_version ?? existing[idx]?.version ?? '',
-        freq:    ls.freq         != null ? Math.round(ls.freq / 1e6)    : (existing[idx]?.freq  ?? null),
-        load:    taskAvg         != null ? taskAvg.toFixed(3)           : (existing[idx]?.load  ?? null),
-        awake:   ls.mcu_awake   != null ? ls.mcu_awake.toFixed(3)      : (existing[idx]?.awake ?? null),
-        temp:    ls.temp        != null ? Math.round(ls.temp)           : (existing[idx]?.temp  ?? null),
-        bw:      ls.bytes_write  != null ? ls.bytes_write               : (existing[idx]?.bw    ?? null),
+        freq:    ls.freq        != null ? Math.round(ls.freq / 1e6)  : (existing[idx]?.freq  ?? null),
+        load:    awakeFrac      != null ? awakeFrac                   : (existing[idx]?.load  ?? null),
+        awake:   awakeFrac      != null ? awakeFrac.toFixed(3)        : (existing[idx]?.awake ?? null),
+        taskAvg: ls.mcu_task_avg != null ? ls.mcu_task_avg.toFixed(4) : (existing[idx]?.taskAvg ?? null),
+        temp:    ls.temp        != null ? Math.round(ls.temp)         : (existing[idx]?.temp  ?? null),
+        bw:      ls.bytes_write != null ? ls.bytes_write              : (existing[idx]?.bw    ?? null),
       }
       if (idx >= 0) existing[idx] = parsed
       else existing.push(parsed)

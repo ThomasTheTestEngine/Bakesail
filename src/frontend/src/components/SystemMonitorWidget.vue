@@ -35,9 +35,9 @@
           </div>
           <div class="wmon-load-detail" v-if="mcu.version">Version: {{ mcu.version }}</div>
           <div class="wmon-load-detail">
-            <template v-if="mcu.load != null">Load: {{ mcu.load }}, </template>
-            <template v-if="mcu.awake != null">Awake: {{ mcu.awake }}, </template>
-            <template v-if="mcu.freq != null">Freq: {{ mcu.freq }} MHz</template>
+            <template v-if="mcu.awake != null">Awake: {{ (parseFloat(mcu.awake) * 100).toFixed(1) }}%</template>
+            <template v-if="mcu.taskAvg != null">, Task: {{ mcu.taskAvg }}s</template>
+            <template v-if="mcu.freq != null">, Freq: {{ mcu.freq }} MHz</template>
             <template v-if="mcu.temp != null">, Temp: {{ mcu.temp }}°C</template>
             <template v-if="mcu.bw != null">, Tx: {{ (mcu.bw / 1024).toFixed(1) }} KB</template>
           </div>
@@ -50,7 +50,7 @@
                     :stroke-dashoffset="125.66 * (1 - Math.max(Math.min(parseFloat(mcu.load ?? 0), 1), 0.01))"
                     stroke-linecap="round" transform="rotate(-90 24 24)"/>
             <text x="24" y="29" text-anchor="middle" font-size="12" fill="var(--teal)" font-family="var(--font-mono)">
-              {{ mcu.load != null ? Math.round(parseFloat(mcu.load) * 100) : '?' }}
+              {{ mcu.load != null ? Math.round(parseFloat(mcu.load) * 100) + '%' : '?' }}
             </text>
           </svg>
         </div>
