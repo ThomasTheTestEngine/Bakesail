@@ -1322,12 +1322,12 @@ a { color: inherit; text-decoration: none; }
   height: 6px;
   cursor: ns-resize;
   z-index: 10;
-  background: transparent;
+  background: rgba(198,120,221,0.45);  /* pink/magenta, visible in edit mode */
   transition: background 0.15s;
 }
 .topbar-resize-handle:hover,
 .topbar-resize-handle:active {
-  background: rgba(99,179,237,0.18);
+  background: rgba(198,120,221,0.85);
 }
 
 /* ── Macro bar ─────────────────────────────────────────────── */
