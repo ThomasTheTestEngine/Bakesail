@@ -142,6 +142,8 @@
             <div class="wmon-sensor-grid">
               <!-- Extruder -->
               <div class="wmon-sensor-row wmon-sensor-row--heater">
+                <span class="wmon-sensor-name">Extruder</span>
+                <span class="wmon-heater-spacer"></span>
                 <span class="wmon-heater-status" :class="printer.hotendTarget > 0 ? 'wmon-status--on' : 'wmon-status--off'">
                   {{ printer.hotendTarget > 0 ? 'ON' : 'OFF' }}
                 </span>
@@ -153,12 +155,13 @@
                        @keydown.enter="e => { setHotend(e.target.value); e.target.blur() }"
                        @keydown.escape="e => e.target.blur()"
                        @blur="e => { e.target.value = '' }" />
-                <span class="wmon-sensor-name">Extruder</span>
                 <span class="wmon-sensor-val">{{ printer.hotendTemp?.toFixed(1) ?? '—' }}°C</span>
                 <span class="wmon-sensor-target" v-if="printer.hotendTarget > 0">→ {{ printer.hotendTarget.toFixed(0) }}°</span>
               </div>
               <!-- Bed -->
               <div class="wmon-sensor-row wmon-sensor-row--heater">
+                <span class="wmon-sensor-name">Bed</span>
+                <span class="wmon-heater-spacer"></span>
                 <span class="wmon-heater-status" :class="printer.bedTarget > 0 ? 'wmon-status--on' : 'wmon-status--off'">
                   {{ printer.bedTarget > 0 ? 'ON' : 'OFF' }}
                 </span>
@@ -170,7 +173,6 @@
                        @keydown.enter="e => { setBed(e.target.value); e.target.blur() }"
                        @keydown.escape="e => e.target.blur()"
                        @blur="e => { e.target.value = '' }" />
-                <span class="wmon-sensor-name">Bed</span>
                 <span class="wmon-sensor-val">{{ printer.bedTemp?.toFixed(1) ?? '—' }}°C</span>
                 <span class="wmon-sensor-target" v-if="printer.bedTarget > 0">→ {{ printer.bedTarget.toFixed(0) }}°</span>
               </div>
@@ -1112,6 +1114,7 @@ onUnmounted(() => {
 .wmon-cooldown-btn:hover { background: var(--teal-glow); }
 
 .wmon-sensor-row--heater { align-items: center; }
+.wmon-heater-spacer { flex: 1; }
 
 .wmon-heater-status {
   font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
