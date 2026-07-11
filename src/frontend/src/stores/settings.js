@@ -165,6 +165,15 @@ export const useSettingsStore = defineStore('settings', {
 
         // ── Migration: ensure pinnedMacros array exists ────────────
         if (!Array.isArray(this.pinnedMacros)) this.pinnedMacros = []
+        // Pre-populate useful defaults for new installs
+        if (this.pinnedMacros.length === 0) {
+          this.pinnedMacros = [
+            { id: 'pm_g32',     name: 'G32' },
+            { id: 'pm_load',    name: 'LOAD_FILAMENT' },
+            { id: 'pm_unload',  name: 'UNLOAD_FILAMENT' },
+            { id: 'pm_cool',    name: 'TURN_OFF_ALL_HEATERS' },
+          ]
+        }
 
         this._loaded = true
         return true

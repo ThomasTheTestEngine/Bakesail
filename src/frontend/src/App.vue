@@ -76,47 +76,46 @@
 <i class="mdi mdi-engine-off" style="font-size:16px;vertical-align:-2px"></i>
             </button>
           </template>
+
+          <!-- ── Pinned macro chips — inside topbar-left, snug right of motor button -->
+          <!-- Dropdown is Teleported so topbar overflow:hidden doesn't clip it -->
+          <template v-if="(settings.pinnedMacros?.length > 0) || editMode.editing.value">
+            <div class="topbar-divider"></div>
+            <div class="topbar-macros" ref="macroBarEl">
+              <div v-for="(m, i) in (settings.pinnedMacros ?? [])" :key="m.id"
+                   class="topbar-macro-chip"
+                   :class="{ 'topbar-macro-chip--edit': editMode.editing.value }"
+                   :draggable="editMode.editing.value"
+                   @dragstart="macroDragStart(i)"
+                   @dragover.prevent="macroDragOver(i)"
+                   @dragend="macroDragEnd"
+                   @click="!editMode.editing.value && runMacro(m)">
+                <button v-if="editMode.editing.value" class="topbar-macro-remove" @click.stop="removeMacro(i)" title="Remove">−</button>
+                <span class="topbar-macro-name">{{ m.name }}</span>
+              </div>
+              <div v-if="editMode.editing.value" class="topbar-macro-add-wrap" ref="macroAddEl">
+                <button class="topbar-macro-add-btn" @click.stop="toggleMacroMenu" title="Add macro">+</button>
+              </div>
+            </div>
+          </template>
         </div>
 
-        <!-- ── Pinned macro chips (outside topbar-left so overflow:hidden doesn't clip dropdown) -->
-        <template v-if="klippyState === 'ready'">
-          <div class="topbar-divider" v-if="(settings.pinnedMacros?.length > 0) || editMode.editing.value"></div>
-          <div class="topbar-macros" ref="macroBarEl">
-            <div v-for="(m, i) in (settings.pinnedMacros ?? [])" :key="m.id"
-                 class="topbar-macro-chip"
-                 :class="{ 'topbar-macro-chip--edit': editMode.editing.value }"
-                 :draggable="editMode.editing.value"
-                 @dragstart="macroDragStart(i)"
-                 @dragover.prevent="macroDragOver(i)"
-                 @dragend="macroDragEnd"
-                 @click="!editMode.editing.value && runMacro(m)">
-              <button v-if="editMode.editing.value" class="topbar-macro-remove" @click.stop="removeMacro(i)" title="Remove">−</button>
-              <span class="topbar-macro-name">{{ m.name }}</span>
-            </div>
-
-            <!-- Add macro button (edit mode only) -->
-            <div v-if="editMode.editing.value" class="topbar-macro-add-wrap" ref="macroAddEl">
-              <button class="topbar-macro-add-btn" @click.stop="toggleMacroMenu" title="Add macro">+</button>
-            </div>
+        <!-- Macro dropdown — Teleported to body so topbar overflow:hidden can't clip it -->
+        <Teleport to="body">
+          <div v-if="macroMenuOpen" class="topbar-macro-backdrop" @click="macroMenuOpen = false" />
+          <div v-if="macroMenuOpen" class="topbar-macro-menu" :style="macroMenuStyle">
+            <div class="topbar-macro-menu-section">Klipper Macros</div>
+            <div v-if="availableKlipperMacros.length === 0" class="topbar-macro-menu-item" style="opacity:0.5;cursor:default">No macros found</div>
+            <button v-for="name in availableKlipperMacros" :key="name"
+                    class="topbar-macro-menu-item"
+                    :disabled="isPinned(name)"
+                    @click="addMacro(name)">
+              {{ name }}<span v-if="isPinned(name)" style="opacity:0.4;font-size:10px"> ✓</span>
+            </button>
+            <div class="topbar-macro-menu-section" style="margin-top:6px">Custom</div>
+            <button class="topbar-macro-menu-item" @click="addCustomMacro">+ New custom…</button>
           </div>
-
-          <!-- Macro dropdown — Teleported to body so topbar overflow can't clip it -->
-          <Teleport to="body">
-            <div v-if="macroMenuOpen" class="topbar-macro-backdrop" @click="macroMenuOpen = false" />
-            <div v-if="macroMenuOpen" class="topbar-macro-menu" :style="macroMenuStyle">
-              <div class="topbar-macro-menu-section">Klipper Macros</div>
-              <div v-if="availableKlipperMacros.length === 0" class="topbar-macro-menu-item" style="opacity:0.5;cursor:default">No macros found</div>
-              <button v-for="name in availableKlipperMacros" :key="name"
-                      class="topbar-macro-menu-item"
-                      :disabled="isPinned(name)"
-                      @click="addMacro(name)">
-                {{ name }}<span v-if="isPinned(name)" style="opacity:0.4;font-size:10px"> ✓</span>
-              </button>
-              <div class="topbar-macro-menu-section" style="margin-top:6px">Custom</div>
-              <button class="topbar-macro-menu-item" @click="addCustomMacro">+ New custom…</button>
-            </div>
-          </Teleport>
-        </template>
+        </Teleport>
 
         <!-- Center: file + progress (shown when printing/paused/complete) -->
         <div class="topbar-center" v-if="klippyState === 'ready' && deviceStore.printerState !== 'standby'">
