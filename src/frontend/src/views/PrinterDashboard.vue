@@ -149,12 +149,10 @@
                 </span>
                 <input class="wmon-temp-input"
                        type="number" min="0" max="350" step="5"
-                       :value="hotendInputVal"
+                       v-model="hotendInput"
                        :placeholder="printer.hotendTarget > 0 ? printer.hotendTarget.toFixed(0) : '0'"
-                       @focus="e => { e.target.value = printer.hotendTarget > 0 ? printer.hotendTarget.toFixed(0) : '' }"
-                       @keydown.enter="e => { setHotend(e.target.value); e.target.blur() }"
-                       @keydown.escape="e => e.target.blur()"
-                       @blur="e => { e.target.value = '' }" />
+                       @keydown.enter.prevent="e => { setHotend(hotendInput); hotendInput = ''; e.target.blur() }"
+                       @keydown.escape="e => { hotendInput = ''; e.target.blur() }" />
                 <span class="wmon-sensor-val">{{ printer.hotendTemp?.toFixed(1) ?? '—' }}°C</span>
                 <span class="wmon-sensor-target" v-if="printer.hotendTarget > 0">→ {{ printer.hotendTarget.toFixed(0) }}°</span>
               </div>
@@ -167,12 +165,10 @@
                 </span>
                 <input class="wmon-temp-input"
                        type="number" min="0" max="130" step="5"
-                       :value="bedInputVal"
+                       v-model="bedInput"
                        :placeholder="printer.bedTarget > 0 ? printer.bedTarget.toFixed(0) : '0'"
-                       @focus="e => { e.target.value = printer.bedTarget > 0 ? printer.bedTarget.toFixed(0) : '' }"
-                       @keydown.enter="e => { setBed(e.target.value); e.target.blur() }"
-                       @keydown.escape="e => e.target.blur()"
-                       @blur="e => { e.target.value = '' }" />
+                       @keydown.enter.prevent="e => { setBed(bedInput); bedInput = ''; e.target.blur() }"
+                       @keydown.escape="e => { bedInput = ''; e.target.blur() }" />
                 <span class="wmon-sensor-val">{{ printer.bedTemp?.toFixed(1) ?? '—' }}°C</span>
                 <span class="wmon-sensor-target" v-if="printer.bedTarget > 0">→ {{ printer.bedTarget.toFixed(0) }}°</span>
               </div>
@@ -818,8 +814,8 @@ const canvasStyle = computed(() => ({ minHeight: '100%' }))
 // ── Temperature target inputs ──────────────────────────────────
 // Uncontrolled inputs: value is empty by default, populated on focus,
 // cleared on blur. Enter sends the gcode, Escape blurs without sending.
-const hotendInputVal = ref('')
-const bedInputVal    = ref('')
+const hotendInput = ref('')
+const bedInput    = ref('')
 
 function setHotend(val) {
   const t = parseInt(val, 10)
