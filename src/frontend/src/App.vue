@@ -1319,15 +1319,15 @@ a { color: inherit; text-decoration: none; }
 .topbar-resize-handle {
   position: absolute;
   bottom: 0; left: 0; right: 0;
-  height: 6px;
+  height: 1px;
   cursor: ns-resize;
   z-index: 10;
-  background: rgba(198,120,221,0.45);  /* pink/magenta, visible in edit mode */
+  background: var(--amber-dim);
   transition: background 0.15s;
 }
 .topbar-resize-handle:hover,
 .topbar-resize-handle:active {
-  background: rgba(198,120,221,0.85);
+  background: var(--amber);
 }
 
 /* ── Macro bar ─────────────────────────────────────────────── */
