@@ -1441,6 +1441,7 @@ a { color: inherit; text-decoration: none; }
 .topbar-macro-menu-item:disabled { opacity: 0.45; cursor: default; }
 .topbar-macro-menu-item--pinned { opacity: 0.6; color: var(--red, #e05555); }
 .topbar-macro-menu-item--pinned:hover { background: rgba(224,85,85,0.1); color: var(--red, #e05555); opacity: 1; }
+.topbar-btn.topbar-btn--home-unset { color: var(--teal); border-color: var(--teal); opacity: 0.35; }
 .topbar-btn.topbar-btn--home-set   { color: var(--teal); border-color: var(--teal); }
 .topbar-btn.topbar-btn--home-set:hover { background: var(--teal-glow); }
 
