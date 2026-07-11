@@ -526,7 +526,7 @@
              title="Viewport bottom boundary"></div>
         <!-- Bottom drag handle -->
         <div class="canvas-resize-handle canvas-resize-handle--bottom"
-             :style="{ top: (canvasHeight - 6) + 'px' }"
+             :style="{ top: canvasHeight + 'px' }"
              @mousedown.prevent="startCanvasResize('bottom', $event)"
              title="Drag to extend canvas height"></div>
       </template>
@@ -873,10 +873,13 @@ const viewportW = computed(() => {
 const canvasHeight = computed(() => {
   const ws     = layout.widgets.value
   const bottom = ws.length ? ws.reduce((m, w) => Math.max(m, w.y + w.h), 0) : 0
-  const base   = Math.max(bottom + 10, viewportH.value + layout.canvasExtraH.value)
-  // In customize mode add 100px buffer below content for bottom-edge resizing
-  return layout.customizeMode.value ? base + 100 : base
+  return Math.max(bottom + 10, viewportH.value + layout.canvasExtraH.value)
 })
+
+// Total height of the canvas DOM element: content + 100px scrollable buffer in edit mode
+const canvasDomHeight = computed(() =>
+  canvasHeight.value + (layout.customizeMode.value ? 100 : 0)
+)
 
 const canvasWidth = computed(() => {
   if (!settings.dashboardAllowHorizontalScroll) return undefined  // CSS 100%
@@ -884,8 +887,8 @@ const canvasWidth = computed(() => {
 })
 
 const canvasStyle = computed(() => ({
-  height: canvasHeight.value + 'px',
-  width:  canvasWidth.value  ? canvasWidth.value + 'px' : '100%',
+  height: canvasDomHeight.value + 'px',
+  width:  canvasWidth.value ? canvasWidth.value + 'px' : '100%',
 }))
 
 // ── Canvas resize drag ─────────────────────────────────────────────────────────
