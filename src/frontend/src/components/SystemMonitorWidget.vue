@@ -37,19 +37,20 @@
           <div class="wmon-load-detail">
             <template v-if="mcu.load != null">Load: {{ mcu.load }}, </template>
             <template v-if="mcu.awake != null">Awake: {{ mcu.awake }}, </template>
-            <template v-if="mcu.freq != null">Freq: {{ mcu.freq }} MHz<template v-if="mcu.temp != null">, </template></template>
-            <template v-if="mcu.temp != null">Temp: {{ mcu.temp }}°C</template>
+            <template v-if="mcu.freq != null">Freq: {{ mcu.freq }} MHz</template>
+            <template v-if="mcu.temp != null">, Temp: {{ mcu.temp }}°C</template>
+            <template v-if="mcu.bw != null">, Tx: {{ (mcu.bw / 1024).toFixed(1) }} KB</template>
           </div>
         </div>
-        <div class="wmon-load-gauge" v-if="mcu.load != null">
+        <div class="wmon-load-gauge" v-if="mcu.load != null || mcu.freq != null">
           <svg viewBox="0 0 48 48" class="wmon-gauge-svg">
             <circle cx="24" cy="24" r="20" fill="none" stroke="var(--border-2)" stroke-width="4"/>
             <circle cx="24" cy="24" r="20" fill="none" stroke="var(--teal)" stroke-width="4"
                     stroke-dasharray="125.66"
-                    :stroke-dashoffset="125.66 * (1 - Math.min(parseFloat(mcu.load), 1))"
+                    :stroke-dashoffset="125.66 * (1 - Math.max(Math.min(parseFloat(mcu.load ?? 0), 1), 0.01))"
                     stroke-linecap="round" transform="rotate(-90 24 24)"/>
             <text x="24" y="29" text-anchor="middle" font-size="12" fill="var(--teal)" font-family="var(--font-mono)">
-              {{ Math.round(parseFloat(mcu.load) * 100) }}
+              {{ mcu.load != null ? Math.round(parseFloat(mcu.load) * 100) : '?' }}
             </text>
           </svg>
         </div>

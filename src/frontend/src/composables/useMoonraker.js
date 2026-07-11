@@ -176,13 +176,17 @@ function applyStatusUpdate(status) {
       const raw = status[key]
       const ls  = raw.last_stats ?? {}
       const idx = existing.findIndex(m => m.name === key)
+      // mcu_task_avg is the main load metric; fall back to bytes_write delta
+      // as a proxy if task_avg is missing (some secondary MCU firmware variants)
+      const taskAvg = ls.mcu_task_avg ?? ls.mcu_task_stddev ?? null
       const parsed = {
         name:    key,
         version: raw.mcu_version ?? existing[idx]?.version ?? '',
         freq:    ls.freq         != null ? Math.round(ls.freq / 1e6)    : (existing[idx]?.freq  ?? null),
-        load:    ls.mcu_task_avg != null ? ls.mcu_task_avg.toFixed(3)   : (existing[idx]?.load  ?? null),
+        load:    taskAvg         != null ? taskAvg.toFixed(3)           : (existing[idx]?.load  ?? null),
         awake:   ls.mcu_awake   != null ? ls.mcu_awake.toFixed(3)      : (existing[idx]?.awake ?? null),
         temp:    ls.temp        != null ? Math.round(ls.temp)           : (existing[idx]?.temp  ?? null),
+        bw:      ls.bytes_write  != null ? ls.bytes_write               : (existing[idx]?.bw    ?? null),
       }
       if (idx >= 0) existing[idx] = parsed
       else existing.push(parsed)
