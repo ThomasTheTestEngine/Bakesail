@@ -92,8 +92,9 @@ export function defaultSettings() {
     cameras: [],
 
     // Macro buttons pinned to the topbar.
-    // { id, name, gcode? }  gcode is set for custom macros only.
+    // { id, name, label?, row, x }  row=0 is topbar; x=null means packed-left.
     pinnedMacros: [],
+    macroBarRows: 0,   // number of extra rows below row 0
 
     // Motion
     motion: {
@@ -165,6 +166,7 @@ export const useSettingsStore = defineStore('settings', {
 
         // ── Migration: ensure pinnedMacros array exists ────────────
         if (!Array.isArray(this.pinnedMacros)) this.pinnedMacros = []
+        if (this.macroBarRows === undefined) this.macroBarRows = 0
         // Pre-populate useful defaults for new installs
         if (this.pinnedMacros.length === 0) {
           this.pinnedMacros = [

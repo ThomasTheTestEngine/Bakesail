@@ -47,135 +47,169 @@
     <div class="content-col">
 
       <!-- Topbar — visible on all tabs -->
-      <header class="topbar">
-        <!-- Left: printer / klippy status + action buttons -->
-        <div class="topbar-left">
-          <span class="topbar-status-dot" :style="{ background: topbarColour }"></span>
-          <span class="topbar-status-label">{{ topbarLabel }}</span>
+      <!-- Topbar — visible on all tabs -->
+      <header class="topbar-wrap" :style="{ height: topbarTotalHeight + 'px' }">
 
-          <!-- Quick actions: only meaningful when klippy is ready -->
-          <template v-if="klippyState === 'ready'">
-            <div class="topbar-divider"></div>
-            <!-- Home: blue when homed, dim blue when not -->
-            <button class="topbar-btn topbar-btn--action"
-                    :class="isHomed ? 'topbar-btn--home-set' : 'topbar-btn--home-unset'"
-                    @click="topbarGcode('G28')" title="Home All">
+        <!-- ── Row 0: the fixed status/action bar ─────────────────── -->
+        <div class="topbar">
+          <!-- Left: printer / klippy status + action buttons -->
+          <div class="topbar-left">
+            <span class="topbar-status-dot" :style="{ background: topbarColour }"></span>
+            <span class="topbar-status-label">{{ topbarLabel }}</span>
+
+            <!-- Quick actions: only meaningful when klippy is ready -->
+            <template v-if="klippyState === 'ready'">
+              <div class="topbar-divider"></div>
+              <button class="topbar-btn topbar-btn--action"
+                      :class="isHomed ? 'topbar-btn--home-set' : 'topbar-btn--home-unset'"
+                      @click="topbarGcode('G28')" title="Home All">
 <i class="mdi mdi-home" style="font-size:15px;margin-right:3px;vertical-align:-2px"></i>Home
-            </button>
-            <!-- QGL: pink when leveled, dim pink when not -->
-            <button class="topbar-btn topbar-btn--action"
-                    :class="deviceStore.qglApplied ? 'topbar-btn--qgl-set' : 'topbar-btn--qgl-unset'"
-                    @click="topbarGcode('QUAD_GANTRY_LEVEL')" title="Quad Gantry Level">
+              </button>
+              <button class="topbar-btn topbar-btn--action"
+                      :class="deviceStore.qglApplied ? 'topbar-btn--qgl-set' : 'topbar-btn--qgl-unset'"
+                      @click="topbarGcode('QUAD_GANTRY_LEVEL')" title="Quad Gantry Level">
 <i class="mdi mdi-arrow-collapse-vertical" style="font-size:15px;margin-right:3px;vertical-align:-2px"></i>QGL
-            </button>
-            <!-- Motors: yellow when on, dim yellow when off -->
-            <button class="topbar-btn topbar-btn--action"
-                    :class="deviceStore.motorsEnabled ? 'topbar-btn--motors-on' : 'topbar-btn--motors-off'"
-                    @click="topbarToggleMotors"
-                    :title="deviceStore.motorsEnabled ? 'Disable motors' : 'Enable motors'">
+              </button>
+              <button class="topbar-btn topbar-btn--action"
+                      :class="deviceStore.motorsEnabled ? 'topbar-btn--motors-on' : 'topbar-btn--motors-off'"
+                      @click="topbarToggleMotors"
+                      :title="deviceStore.motorsEnabled ? 'Disable motors' : 'Enable motors'">
 <i class="mdi mdi-engine-off" style="font-size:16px;vertical-align:-2px"></i>
-            </button>
-          </template>
-
-          <!-- ── Pinned macro chips — inside topbar-left, snug right of motor button -->
-          <!-- Dropdown is Teleported so topbar overflow:hidden doesn't clip it -->
-          <template v-if="(settings.pinnedMacros?.length > 0) || editMode.editing.value">
-            <div class="topbar-divider"></div>
-            <div class="topbar-macros" ref="macroBarEl">
-              <div v-for="(m, i) in (settings.pinnedMacros ?? [])" :key="m.id"
-                   class="topbar-macro-chip"
-                   :class="{ 'topbar-macro-chip--edit': editMode.editing.value }"
-                   :draggable="editMode.editing.value"
-                   @dragstart="macroDragStart(i)"
-                   @dragover.prevent="macroDragOver(i)"
-                   @dragend="macroDragEnd"
-                   @click="!editMode.editing.value && runMacro(m)">
-                <button v-if="editMode.editing.value" class="topbar-macro-remove" @click.stop="removeMacro(i)" title="Remove">−</button>
-                <span class="topbar-macro-name">{{ m.label ?? m.name }}</span>
-              </div>
-              <div v-if="editMode.editing.value" class="topbar-macro-add-wrap" ref="macroAddEl">
-                <button class="topbar-macro-add-btn" @click.stop="toggleMacroMenu" title="Add macro">+</button>
-              </div>
-            </div>
-          </template>
-        </div>
-
-        <!-- Macro dropdown — Teleported to body so topbar overflow:hidden can't clip it -->
-        <Teleport to="body">
-          <div v-if="macroMenuOpen" class="topbar-macro-backdrop" @click="macroMenuOpen = false" />
-          <div v-if="macroMenuOpen" class="topbar-macro-menu" :style="macroMenuStyle">
-            <button class="topbar-macro-menu-item topbar-macro-menu-item--new" @click="addCustomMacro">+ New custom…</button>
-            <div class="topbar-macro-menu-section" style="margin-top:6px">Common Commands</div>
-            <button v-for="m in COMMON_MACROS" :key="m.name"
-                    class="topbar-macro-menu-item"
-                    :disabled="isPinned(m.name)"
-                    @click="addMacro(m.name, m.label)">
-              {{ m.label }}<span v-if="isPinned(m.name)" style="opacity:0.4;font-size:10px"> ✓</span>
-            </button>
-            <template v-if="availableKlipperMacros.length > 0">
-              <div class="topbar-macro-menu-section" style="margin-top:6px">Klipper Macros</div>
-              <button v-for="name in availableKlipperMacros" :key="name"
-                      class="topbar-macro-menu-item"
-                      :disabled="isPinned(name)"
-                      @click="addMacro(name)">
-                {{ name }}<span v-if="isPinned(name)" style="opacity:0.4;font-size:10px"> ✓</span>
               </button>
             </template>
-          </div>
-        </Teleport>
 
-        <!-- Center: file + progress (shown when printing/paused/complete) -->
-        <div class="topbar-center" v-if="klippyState === 'ready' && deviceStore.printerState !== 'standby'">
-          <div class="topbar-file">
-            <span class="topbar-filename">{{ deviceStore.filename || 'No file' }}</span>
-            <span class="topbar-pct" v-if="deviceStore.progress > 0">{{ (deviceStore.progress * 100).toFixed(1) }}%</span>
+            <!-- Row 0 macro chips -->
+            <template v-if="(macrosInRow(0).length > 0) || editMode.editing.value">
+              <div class="topbar-divider"></div>
+              <div class="topbar-macros topbar-macros--row0" ref="macroBarEl"
+                   @dragover.prevent="macroRowDragOver($event, 0)"
+                   @drop.prevent="macroRowDrop($event, 0)">
+                <!-- packed (x===null) chips flow left naturally -->
+                <div v-for="m in packedInRow(0)" :key="m.id"
+                     class="topbar-macro-chip"
+                     :class="{ 'topbar-macro-chip--edit': editMode.editing.value }"
+                     :draggable="editMode.editing.value"
+                     @dragstart="macroDragStart($event, m)"
+                     @click="!editMode.editing.value && runMacro(m)">
+                  <button v-if="editMode.editing.value" class="topbar-macro-remove" @click.stop="removeMacro(m)" title="Remove">−</button>
+                  <span class="topbar-macro-name">{{ m.label ?? m.name }}</span>
+                </div>
+                <!-- floating (x!==null) chips in row 0 -->
+                <div v-for="m in floatingInRow(0)" :key="m.id"
+                     class="topbar-macro-chip topbar-macro-chip--float"
+                     :class="{ 'topbar-macro-chip--edit': editMode.editing.value }"
+                     :style="chipFloatStyle(m)"
+                     :draggable="editMode.editing.value"
+                     @dragstart="macroDragStart($event, m)"
+                     @click="!editMode.editing.value && runMacro(m)">
+                  <button v-if="editMode.editing.value" class="topbar-macro-remove" @click.stop="removeMacro(m)" title="Remove">−</button>
+                  <span class="topbar-macro-name">{{ m.label ?? m.name }}</span>
+                </div>
+                <!-- add button -->
+                <div v-if="editMode.editing.value" class="topbar-macro-add-wrap" ref="macroAddEl">
+                  <button class="topbar-macro-add-btn" @click.stop="toggleMacroMenu" title="Add macro">+</button>
+                </div>
+              </div>
+            </template>
           </div>
-          <div class="topbar-progress-track" v-if="deviceStore.progress > 0">
-            <div class="topbar-progress-fill" :style="{ width: (deviceStore.progress * 100).toFixed(1) + '%' }"></div>
-          </div>
-          <span class="topbar-eta" v-if="deviceStore.progress > 0 && deviceStore.progress < 1 && deviceStore.printDuration > 0">
-            ETA {{ topbarEta }}
-          </span>
-        </div>
 
-        <!-- Right: print controls + system buttons -->
-        <div class="topbar-actions">
-          <!-- Load file button — always visible when klippy ready and not printing -->
-          <button v-if="klippyState === 'ready' && deviceStore.printerState === 'standby'"
-                  class="topbar-btn topbar-btn--lit" @click="openFileDialog" title="Load file">
-<i class="mdi mdi-file-upload-outline" style="font-size:14px;margin-right:3px;vertical-align:-2px"></i>Load
-          </button>
-          <!-- Pause/Resume + Cancel — shown when printing or paused -->
-          <template v-if="deviceStore.printerState === 'printing' || deviceStore.printerState === 'paused'">
-            <button class="topbar-btn"
-                    @click="topbarGcode(deviceStore.printerState === 'printing' ? 'PAUSE' : 'RESUME')">
-              {{ deviceStore.printerState === 'printing' ? '⏸ Pause' : '▶ Resume' }}
-            </button>
-            <button class="topbar-btn topbar-btn--danger" @click="topbarGcode('CANCEL_PRINT')">✕ Cancel</button>
-          </template>
-          <!-- FW/Power dropdown -->
-          <div class="topbar-dropdown-wrap" @click.stop>
-            <button class="topbar-btn" @click="powerMenuOpen = !powerMenuOpen" title="System Controls">
-              <i class="mdi mdi-power" style="font-size:16px"></i>
-            </button>
-            <div v-if="powerMenuOpen" class="topbar-dropdown" @click="powerMenuOpen = false">
-              <div class="topbar-dropdown-section">Klipper Control</div>
-              <button class="topbar-dropdown-item" @click="klipperRestart">↺ Restart</button>
-              <button class="topbar-dropdown-item" @click="firmwareRestart">↺ Firmware Restart</button>
-              <div class="topbar-dropdown-section">Host Control</div>
-              <button class="topbar-dropdown-item topbar-dropdown-item--danger" @click="hostReboot">⏻ Reboot</button>
-              <button class="topbar-dropdown-item topbar-dropdown-item--danger" @click="hostShutdown">⏻ Shutdown</button>
+          <!-- Macro dropdown teleported to body -->
+          <Teleport to="body">
+            <div v-if="macroMenuOpen" class="topbar-macro-backdrop" @click="macroMenuOpen = false" />
+            <div v-if="macroMenuOpen" class="topbar-macro-menu" :style="macroMenuStyle">
+              <button class="topbar-macro-menu-item topbar-macro-menu-item--new" @click="addCustomMacro">+ New custom…</button>
+              <div class="topbar-macro-menu-section" style="margin-top:6px">Common Commands</div>
+              <button v-for="m in COMMON_MACROS" :key="m.name"
+                      class="topbar-macro-menu-item"
+                      :disabled="isPinned(m.name)"
+                      @click="addMacro(m.name, m.label)">
+                {{ m.label }}<span v-if="isPinned(m.name)" style="opacity:0.4;font-size:10px"> ✓</span>
+              </button>
+              <template v-if="availableKlipperMacros.length > 0">
+                <div class="topbar-macro-menu-section" style="margin-top:6px">Klipper Macros</div>
+                <button v-for="name in availableKlipperMacros" :key="name"
+                        class="topbar-macro-menu-item"
+                        :disabled="isPinned(name)"
+                        @click="addMacro(name)">
+                  {{ name }}<span v-if="isPinned(name)" style="opacity:0.4;font-size:10px"> ✓</span>
+                </button>
+              </template>
             </div>
+          </Teleport>
+
+          <!-- Center: file + progress -->
+          <div class="topbar-center" v-if="klippyState === 'ready' && deviceStore.printerState !== 'standby'">
+            <div class="topbar-file">
+              <span class="topbar-filename">{{ deviceStore.filename || 'No file' }}</span>
+              <span class="topbar-pct" v-if="deviceStore.progress > 0">{{ (deviceStore.progress * 100).toFixed(1) }}%</span>
+            </div>
+            <div class="topbar-progress-track" v-if="deviceStore.progress > 0">
+              <div class="topbar-progress-fill" :style="{ width: (deviceStore.progress * 100).toFixed(1) + '%' }"></div>
+            </div>
+            <span class="topbar-eta" v-if="deviceStore.progress > 0 && deviceStore.progress < 1 && deviceStore.printDuration > 0">
+              ETA {{ topbarEta }}
+            </span>
           </div>
 
-          <button class="topbar-btn topbar-btn--estop" @click="emergencyStop" title="Emergency Stop">
-            <i class="mdi mdi-octagon" style="font-size:14px;margin-right:4px;vertical-align:-2px"></i>E-Stop
-          </button>
-
-          <!-- Slot for page-specific topbar content (e.g. customize gear) -->
-          <div id="topbar-page-slot"></div>
+          <!-- Right: print controls + system -->
+          <div class="topbar-actions">
+            <button v-if="klippyState === 'ready' && deviceStore.printerState === 'standby'"
+                    class="topbar-btn topbar-btn--lit" @click="openFileDialog" title="Load file">
+<i class="mdi mdi-file-upload-outline" style="font-size:14px;margin-right:3px;vertical-align:-2px"></i>Load
+            </button>
+            <template v-if="deviceStore.printerState === 'printing' || deviceStore.printerState === 'paused'">
+              <button class="topbar-btn"
+                      @click="topbarGcode(deviceStore.printerState === 'printing' ? 'PAUSE' : 'RESUME')">
+                {{ deviceStore.printerState === 'printing' ? '⏸ Pause' : '▶ Resume' }}
+              </button>
+              <button class="topbar-btn topbar-btn--danger" @click="topbarGcode('CANCEL_PRINT')">✕ Cancel</button>
+            </template>
+            <div class="topbar-dropdown-wrap" @click.stop>
+              <button class="topbar-btn" @click="powerMenuOpen = !powerMenuOpen" title="System Controls">
+                <i class="mdi mdi-power" style="font-size:16px"></i>
+              </button>
+              <div v-if="powerMenuOpen" class="topbar-dropdown" @click="powerMenuOpen = false">
+                <div class="topbar-dropdown-section">Klipper Control</div>
+                <button class="topbar-dropdown-item" @click="klipperRestart">↺ Restart</button>
+                <button class="topbar-dropdown-item" @click="firmwareRestart">↺ Firmware Restart</button>
+                <div class="topbar-dropdown-section">Host Control</div>
+                <button class="topbar-dropdown-item topbar-dropdown-item--danger" @click="hostReboot">⏻ Reboot</button>
+                <button class="topbar-dropdown-item topbar-dropdown-item--danger" @click="hostShutdown">⏻ Shutdown</button>
+              </div>
+            </div>
+            <button class="topbar-btn topbar-btn--estop" @click="emergencyStop" title="Emergency Stop">
+              <i class="mdi mdi-octagon" style="font-size:14px;margin-right:4px;vertical-align:-2px"></i>E-Stop
+            </button>
+            <div id="topbar-page-slot"></div>
+          </div>
         </div>
+
+        <!-- Extra macro rows (rows 1+) -->
+        <div v-for="rowIdx in extraRowIndices" :key="rowIdx"
+             class="topbar-macro-row"
+             :style="{ top: (rowIdx * BAR_H) + 'px' }"
+             @dragover.prevent="macroRowDragOver($event, rowIdx)"
+             @drop.prevent="macroRowDrop($event, rowIdx)">
+          <div v-for="m in macrosInRow(rowIdx)" :key="m.id"
+               class="topbar-macro-chip topbar-macro-chip--float"
+               :class="{ 'topbar-macro-chip--edit': editMode.editing.value }"
+               :style="chipFloatStyle(m)"
+               :draggable="editMode.editing.value"
+               @dragstart="macroDragStart($event, m)"
+               @click="!editMode.editing.value && runMacro(m)">
+            <button v-if="editMode.editing.value" class="topbar-macro-remove" @click.stop="removeMacro(m)" title="Remove">−</button>
+            <span class="topbar-macro-name">{{ m.label ?? m.name }}</span>
+          </div>
+        </div>
+
+        <!-- Resize handle (edit mode only) -->
+        <div v-if="editMode.editing.value"
+             class="topbar-resize-handle"
+             @mousedown.prevent="resizeHandleDown"
+             title="Drag to add / remove macro rows"></div>
+
       </header>
+
 
       <!-- ── Console bar ─────────────────────────────────────────── -->
       <div class="cbar" :style="cbarOpen ? { height: cbarHeight + 'px' } : {}" ref="cbarEl">
@@ -327,26 +361,158 @@ const editMode = useEditMode()
 const { connected, klippyState, connect, send, sendGcode, subscribeToConsole, fetchConsoleHistory } = useMoonraker()
 
 // ── Macro bar ──────────────────────────────────────────────────────────────────
-const macroMenuOpen = ref(false)
-const macroBarEl    = ref(null)
-const macroAddEl    = ref(null)
+const BAR_H = 42          // px per row
+const SNAP_PX = 14        // snap radius for chip edges
+const macroMenuOpen  = ref(false)
+const macroBarEl     = ref(null)
+const macroAddEl     = ref(null)
 const macroMenuStyle = ref({})
-let   macroDragIdx  = null
+
+// Number of extra rows (0 = just the topbar row). Persisted in settings.
+// Migration: ensure it exists.
+if (settings.macroBarRows === undefined) settings.macroBarRows = 0
+
+const macroBarRows = computed({
+  get: () => settings.macroBarRows ?? 0,
+  set: v => { settings.macroBarRows = v; settings.save() }
+})
+
+const topbarTotalHeight = computed(() => BAR_H * (1 + macroBarRows.value))
+const extraRowIndices   = computed(() => Array.from({ length: macroBarRows.value }, (_, i) => i + 1))
+
+// Migration: ensure every macro has row/x fields
+function migrateMacros() {
+  let dirty = false
+  for (const m of settings.pinnedMacros) {
+    if (m.row === undefined) { m.row = 0; dirty = true }
+    if (!('x' in m))         { m.x   = null; dirty = true }
+  }
+  if (dirty) settings.save()
+}
+
+// Helpers
+function macrosInRow(row)   { return settings.pinnedMacros.filter(m => m.row === row) }
+function packedInRow(row)   { return macrosInRow(row).filter(m => m.x === null) }
+function floatingInRow(row) { return macrosInRow(row).filter(m => m.x !== null) }
+
+function chipFloatStyle(m) {
+  // Clamp to row width on render
+  const rowW = macroBarEl.value?.closest('.topbar-wrap')?.offsetWidth ?? window.innerWidth
+  const x = Math.min(m.x ?? 0, rowW - 80)
+  return { position: 'absolute', left: x + 'px', top: '50%', transform: 'translateY(-50%)' }
+}
 
 function toggleMacroMenu() {
   macroMenuOpen.value = !macroMenuOpen.value
   if (macroMenuOpen.value && macroAddEl.value) {
     const r = macroAddEl.value.getBoundingClientRect()
-    macroMenuStyle.value = {
-      position: 'fixed',
-      top:  `${r.bottom + 4}px`,
-      left: `${r.left}px`,
-      zIndex: 9999,
-    }
+    macroMenuStyle.value = { position: 'fixed', top: `${r.bottom + 4}px`, left: `${r.left}px`, zIndex: 9999 }
   }
 }
 
-// Built-in gcodes / Klipper commands that don't appear as gcode_macro objects
+// ── Drag state ────────────────────────────────────────────────────────────────
+let dragMacro      = null   // the macro object being dragged
+let dragOffsetX    = 0      // cursor x offset within chip at dragstart
+
+function macroDragStart(evt, m) {
+  dragMacro   = m
+  dragOffsetX = evt.offsetX ?? 0
+  evt.dataTransfer.effectAllowed = 'move'
+  // ghost image — transparent 1x1
+  const ghost = document.createElement('div')
+  ghost.style.cssText = 'position:fixed;left:-999px;top:-999px;width:1px;height:1px'
+  document.body.appendChild(ghost)
+  evt.dataTransfer.setDragImage(ghost, 0, 0)
+  setTimeout(() => ghost.remove(), 0)
+}
+
+// Per-row dragover: show snap guides (future), nothing stored yet
+function macroRowDragOver(evt, rowIdx) {
+  evt.dataTransfer.dropEffect = 'move'
+}
+
+function macroRowDrop(evt, rowIdx) {
+  if (!dragMacro) return
+
+  const m = dragMacro
+  dragMacro = null
+
+  // Find the row container to get its bounding rect
+  // For row 0 use macroBarEl; for others find the .topbar-macro-row
+  const wrap = macroBarEl.value?.closest('.topbar-wrap')
+  if (!wrap) return
+  const wrapRect = wrap.getBoundingClientRect()
+  const rowW     = wrapRect.width
+
+  // Drop x relative to row left edge
+  let dropX = evt.clientX - wrapRect.left - dragOffsetX
+
+  // For row 0: if dropX is within the packed zone + 1 chip width, snap back to packed
+  const packed = packedInRow(rowIdx)
+  if (rowIdx === 0 && packed.length > 0) {
+    // Estimate packed zone width: sum of ~chips. We use a rough 70px/chip heuristic
+    // or we can check actual DOM — but keep it simple: if dropping within first 60px after packed group, repack
+    // Simpler rule: if dropX < 0 (drop target is the flex group itself), go packed
+    // We detect this by checking if evt.target is inside .topbar-macros--row0's flex part
+    const packedZone = macroBarEl.value
+    if (packedZone) {
+      const pRect = packedZone.getBoundingClientRect()
+      const packedEnd = pRect.left - wrapRect.left + pRect.width - 30 // minus add-btn
+      if (dropX < packedEnd + BAR_H) {
+        // drop into packed group
+        m.row = rowIdx
+        m.x   = null
+        settings.save()
+        return
+      }
+    }
+  }
+
+  // Snap to row right edge
+  if (dropX > rowW - 80) dropX = rowW - 80
+  if (dropX < 0) dropX = 0
+
+  // Snap to edges of sibling chips
+  const siblings = macrosInRow(rowIdx).filter(s => s.id !== m.id && s.x !== null)
+  const CHIP_W   = 80 // rough estimate; real snap is close enough
+  for (const s of siblings) {
+    if (Math.abs(dropX - s.x) < SNAP_PX)             { dropX = s.x; break }
+    if (Math.abs(dropX - (s.x + CHIP_W)) < SNAP_PX)  { dropX = s.x + CHIP_W + 4; break }
+    if (Math.abs((dropX + CHIP_W) - s.x) < SNAP_PX)  { dropX = s.x - CHIP_W - 4; break }
+  }
+  // Snap right edge of row
+  if (Math.abs(dropX - (rowW - CHIP_W)) < SNAP_PX) dropX = rowW - CHIP_W - 4
+
+  m.row = rowIdx
+  m.x   = Math.round(dropX)
+  settings.save()
+}
+
+// ── Resize handle ─────────────────────────────────────────────────────────────
+function resizeHandleDown(evt) {
+  const startY    = evt.clientY
+  const startRows = macroBarRows.value
+
+  function onMove(e) {
+    const dy   = e.clientY - startY
+    const rows = Math.max(0, Math.round(startRows + dy / BAR_H))
+    // Don't allow removing a row that has chips
+    const safe = Math.max(rows, highestOccupiedRow())
+    macroBarRows.value = safe
+  }
+  function onUp() {
+    window.removeEventListener('mousemove', onMove)
+    window.removeEventListener('mouseup',   onUp)
+  }
+  window.addEventListener('mousemove', onMove)
+  window.addEventListener('mouseup',   onUp)
+}
+
+function highestOccupiedRow() {
+  return settings.pinnedMacros.reduce((max, m) => Math.max(max, m.row ?? 0), 0)
+}
+
+// ── Built-in common commands ───────────────────────────────────────────────────
 const COMMON_MACROS = [
   { name: 'G28',                  label: 'Home All'         },
   { name: 'G32',                  label: 'G32'              },
@@ -371,73 +537,20 @@ function isPinned(name) { return settings.pinnedMacros.some(m => m.name === name
 
 function addMacro(name, label) {
   if (isPinned(name)) return
-  const entry = { id: Date.now().toString(36), name }
+  const entry = { id: Date.now().toString(36), name, row: 0, x: null }
   if (label && label !== name) entry.label = label
   settings.pinnedMacros.push(entry)
   settings.save()
   macroMenuOpen.value = false
 }
 
-// ── Macro picker dialog ────────────────────────────────────────────────────────
-const macroPickerOpen    = ref(false)
-const macroPickerInput   = ref('')
-const macroPickerSearch  = ref('')
-const macroPickerLoading = ref(false)
-const gcodeHelpList      = ref([])  // [{ name, description }]
-
-const filteredGcodeHelp = computed(() => {
-  const q = macroPickerSearch.value.trim().toUpperCase()
-  return gcodeHelpList.value.filter(c => !q || c.name.includes(q) || c.description.toUpperCase().includes(q))
-})
-
-async function addCustomMacro() {
-  macroMenuOpen.value = false
-  macroPickerInput.value  = ''
-  macroPickerSearch.value = ''
-  macroPickerOpen.value   = true
-  if (gcodeHelpList.value.length === 0) {
-    macroPickerLoading.value = true
-    try {
-      const result = await send('printer.gcode.help', {})
-      gcodeHelpList.value = Object.entries(result ?? {})
-        .map(([name, description]) => ({ name, description: description || '' }))
-        .sort((a, b) => a.name.localeCompare(b.name))
-    } catch (e) {
-      console.warn('[bakesail] gcode help fetch failed:', e)
-    } finally {
-      macroPickerLoading.value = false
-    }
-  }
-}
-
-function confirmMacroPicker() {
-  const name = macroPickerInput.value.trim().toUpperCase()
-  if (!name) return
-  if (!isPinned(name)) {
-    settings.pinnedMacros.push({ id: Date.now().toString(36), name })
-    settings.save()
-  }
-  macroPickerOpen.value = false
-}
-
-function removeMacro(i) {
-  settings.pinnedMacros.splice(i, 1)
+function removeMacro(m) {
+  const idx = settings.pinnedMacros.findIndex(p => p.id === m.id)
+  if (idx >= 0) settings.pinnedMacros.splice(idx, 1)
   settings.save()
 }
 
-function runMacro(m) {
-  sendGcode(m.name)
-}
-
-function macroDragStart(i) { macroDragIdx = i }
-function macroDragOver(i) {
-  if (macroDragIdx === null || macroDragIdx === i) return
-  const arr = settings.pinnedMacros
-  const item = arr.splice(macroDragIdx, 1)[0]
-  arr.splice(i, 0, item)
-  macroDragIdx = i
-}
-function macroDragEnd() { macroDragIdx = null; settings.save() }
+function runMacro(m) { sendGcode(m.name) }
 
 // Close macro menu on outside click
 if (typeof window !== 'undefined') {
@@ -662,6 +775,8 @@ function cbarHistoryDown() {
 // Subscribe to console feed
 let cbarUnsub = null
 onMounted(async () => {
+  migrateMacros()
+
   cbarUnsub = subscribeToConsole(cbarAddLine)
   if (klippyState.value === 'ready') {
     await fetchConsoleHistory()
@@ -970,17 +1085,25 @@ a { color: inherit; text-decoration: none; }
   overflow: hidden;
 }
 
-/* ── Topbar ─────────────────────────────────────────────────── */
-.topbar {
+/* ── Topbar wrapper (multi-row capable) ────────────────────── */
+.topbar-wrap {
   flex-shrink: 0;
+  position: relative;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  transition: height 0.12s ease;
+}
+
+/* Row 0 — the main bar */
+.topbar {
   height: 42px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 12px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
   gap: 8px;
+  position: relative;
+  z-index: 1;
 }
 
 .topbar-left {
@@ -989,7 +1112,7 @@ a { color: inherit; text-decoration: none; }
   gap: 8px;
   flex: 1;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .topbar-divider {
@@ -1004,9 +1127,38 @@ a { color: inherit; text-decoration: none; }
   padding: 3px 10px;
 }
 
-/* ── Macro bar ──────────────────────────────────────────── */
-.topbar-macros {
-  display: flex; align-items: center; gap: 4px; flex-wrap: nowrap;
+/* Extra macro rows (rows 1+) */
+.topbar-macro-row {
+  position: absolute;
+  left: 0; right: 0;
+  height: 42px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+/* Resize handle */
+.topbar-resize-handle {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 6px;
+  cursor: ns-resize;
+  z-index: 10;
+  background: transparent;
+  transition: background 0.15s;
+}
+.topbar-resize-handle:hover,
+.topbar-resize-handle:active {
+  background: rgba(99,179,237,0.18);
+}
+
+/* ── Macro bar ─────────────────────────────────────────────── */
+.topbar-macros--row0 {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+  position: relative;
+  min-height: 28px;
 }
 
 .topbar-macro-chip {
@@ -1020,6 +1172,9 @@ a { color: inherit; text-decoration: none; }
   cursor: pointer; white-space: nowrap;
   transition: background 0.1s, color 0.1s;
   user-select: none;
+}
+.topbar-macro-chip--float {
+  pointer-events: auto;
 }
 .topbar-macro-chip:hover:not(.topbar-macro-chip--edit) {
   background: var(--surface-2); color: var(--text);
