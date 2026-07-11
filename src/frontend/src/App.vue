@@ -483,21 +483,27 @@ function macroDragStart(evt, m) {
 
     // Row 0 packed zone: if cursor is left of the end of the packed group, signal re-pack
     if (rowIdx === 0 && macroBarEl.value) {
-      const pRect      = macroBarEl.value.getBoundingClientRect()
-      // packed group right edge = right of the last packed chip (add-btn excluded)
-      const packedChips = macroBarEl.value.querySelectorAll('.topbar-macro-chip:not(.topbar-macro-chip--float)')
+      const pRect = macroBarEl.value.getBoundingClientRect()
+      // packed group right edge — exclude the chip being dragged from measurement
+      const packedChips = [...macroBarEl.value.querySelectorAll('.topbar-macro-chip:not(.topbar-macro-chip--float)')]
+        .filter(c => c.dataset.macroId !== ds.m.id)
       let packedEnd = pRect.left - wrapRect.left  // fallback: left edge of bar
-      packedChips.forEach(c => {
+      for (const c of packedChips) {
         const r = c.getBoundingClientRect()
         packedEnd = Math.max(packedEnd, r.right - wrapRect.left)
-      })
+      }
       if (x < packedEnd + 12) { ds.currentX = null; return }
     }
 
     // Right boundary: row 0 stops before actions panel; other rows use full width
-    const safeRight = rowIdx === 0 && topbarActionsEl.value
-      ? topbarActionsEl.value.getBoundingClientRect().left - wrapRect.left - 8
-      : wrapRect.width
+    let safeRight
+    if (rowIdx === 0) {
+      safeRight = topbarActionsEl.value
+        ? topbarActionsEl.value.getBoundingClientRect().left - wrapRect.left - 8
+        : wrapRect.width * 0.6  // conservative fallback: 60% of wrap width
+    } else {
+      safeRight = wrapRect.width
+    }
 
     // Clamp to row bounds
     x = Math.max(0, Math.min(x, safeRight - ds.chipW))
@@ -513,9 +519,9 @@ function macroDragStart(evt, m) {
       if (Math.abs(x - (s.x + sW + 4)) < SNAP_PX)       { x = s.x + sW + 4; break }
       if (Math.abs((x + ds.chipW + 4) - s.x) < SNAP_PX) { x = s.x - ds.chipW - 4; break }
     }
-    // Snap right edge of safe area
+    // Snap right edge of safe area (tighter threshold — right edge snap only at 8px)
     const rightEdge = safeRight - ds.chipW
-    if (Math.abs(x - rightEdge) < SNAP_PX) x = rightEdge
+    if (Math.abs(x - rightEdge) < 8) x = rightEdge
 
     ds.currentX = Math.round(x)
   }
@@ -1288,6 +1294,8 @@ a { color: inherit; text-decoration: none; }
   height: 42px;
   border-top: 1px solid var(--border);
   background: var(--surface);
+  z-index: 2;
+  pointer-events: auto;
 }
 
 /* Resize handle */
@@ -1339,6 +1347,7 @@ a { color: inherit; text-decoration: none; }
 
 .topbar-macro-chip--float {
   pointer-events: auto;
+  cursor: pointer;
 }
 .topbar-macro-chip--ghost {
   cursor: grabbing;
