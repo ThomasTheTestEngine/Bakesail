@@ -570,18 +570,6 @@ def _full_parse_worker():
 _tf = threading.Thread(target=_full_parse_worker, daemon=True)
 _tf.start()
 
-if __name__ == '__main__':
-    import socketserver
-    class ThreadingServer(socketserver.ThreadingMixIn, http.server.HTTPServer): pass
-    server = ThreadingServer(('127.0.0.1', FS_PORT), FSHandler)
-    logging.info('Bakesail FS server listening on 127.0.0.1:%d', FS_PORT)
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        server.server_close()
-
 # ── Gcode Preview Parser ──────────────────────────────────────────────────────
 
 
@@ -764,3 +752,15 @@ def _parse_worker():
 # Start background parse thread
 _t = threading.Thread(target=_parse_worker, daemon=True)
 _t.start()
+
+if __name__ == '__main__':
+    import socketserver
+    class ThreadingServer(socketserver.ThreadingMixIn, http.server.HTTPServer): pass
+    server = ThreadingServer(('127.0.0.1', FS_PORT), FSHandler)
+    logging.info('Bakesail FS server listening on 127.0.0.1:%d', FS_PORT)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
