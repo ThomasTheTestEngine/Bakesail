@@ -237,17 +237,22 @@ async function openFile(filename) {
 async function pollUntilReady(fsPath) {
   return new Promise(resolve => {
     let elapsed = 0
+    let failures = 0
     const iv = setInterval(async () => {
       elapsed += 2
-      // Asymptotic progress: fast early, slows down, never hits 100
       parseProgress.value = Math.round(100 - 100 / (1 + elapsed / 20))
       try {
         const r = await fetch(`/bakesail/gcode-full-meta?path=${encodeURIComponent(fsPath)}`)
-        if (!r.ok) return
+        if (!r.ok) {
+          failures++
+          if (failures > 3) { clearInterval(iv); parseState.value = 'error'; resolve() }
+          return
+        }
+        failures = 0
         const m = await r.json()
         if (m.ready) { clearInterval(iv); parseProgress.value = 99; resolve() }
         if (m.error) { clearInterval(iv); parseState.value = 'error'; resolve() }
-      } catch { /* network blip, keep polling */ }
+      } catch { failures++; if (failures > 5) { clearInterval(iv); parseState.value = 'error'; resolve() } }
     }, 2000)
   })
 }

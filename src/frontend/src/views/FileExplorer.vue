@@ -172,6 +172,7 @@ import { useRouter } from 'vue-router'
 import FileEditorModal from '../components/FileEditorModal.vue'
 
 // ── Mode ───────────────────────────────────────────────────────────────────────
+const router = useRouter()
 const adv = ref(false)   // false = safe/Moonraker, true = advanced/bakesail
 
 // ── Path state ────────────────────────────────────────────────────────────────
