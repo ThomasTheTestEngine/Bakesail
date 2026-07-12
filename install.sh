@@ -167,7 +167,7 @@ install_fs_server() {
     [[ -f "${script_src}" ]]  || die "bakesail-fs.py not found at ${script_src}"
     [[ -f "${service_src}" ]] || die "bakesail-fs.service not found at ${service_src}"
 
-    chmod +x "${script_src}"
+    # chmod +x not needed — service calls python3 explicitly
 
     sed "s|FS_USER|${USER}|g; s|FS_SCRIPT_PATH|${script_src}|g" \
         "${service_src}" | sudo tee "${service_dest}" > /dev/null
