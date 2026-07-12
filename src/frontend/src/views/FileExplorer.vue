@@ -49,6 +49,12 @@
                 :disabled="!canWrite">+ File</button>
         <button class="btn btn-ghost btn-sm fe-btn" @click="promptNewDir"
                 :disabled="!canWrite">+ Dir</button>
+        <button class="btn btn-ghost btn-sm fe-btn" @click="parseAllGcode"
+                v-if="isInGcodesDir"
+                :disabled="parsing"
+                :title="parsing ? 'Parsing…' : 'Parse all gcode files for preview'">
+          {{ parsing ? '⟳ Parsing…' : '⬡ Parse All' }}
+        </button>
         <button class="btn btn-ghost btn-sm fe-btn fe-btn--danger" @click="confirmDelete"
                 :disabled="selected.size === 0 || !canWrite">✕ Delete</button>
       </div>
@@ -665,6 +671,7 @@ function fileIcon(name) {
 .fe-btn--danger { color: var(--red) !important; border-color: var(--red) !important; }
 .fe-btn--danger:hover { background: var(--red-glow) !important; }
 .fe-btn--disabled { opacity: 0.4; pointer-events: none; }
+.fe-parse-msg { font-size: 11px; color: var(--teal); font-family: var(--font-mono); margin-left: 4px; }
 
 /* Path bar */
 .fe-path-bar {
