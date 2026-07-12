@@ -33,6 +33,7 @@ const klippyState = ref('disconnected') // disconnected | startup | ready | shut
 // Every notify_status_update is forwarded to all registered handlers.
 const statusSubscribers  = new Set()
 const consoleSubscribers = []
+let gcodesRootPath = null   // filled from server.files.roots on connect
 
 function subscribeToStatus(callback) {
   statusSubscribers.add(callback)
@@ -141,6 +142,14 @@ async function subscribe() {
     if (result?.status) {
       applyStatusUpdate(result.status)
     }
+
+    // Resolve gcodes filesystem root path for parse triggers
+    try {
+      const roots = await send('server.files.roots', {})
+      const gcodes = roots?.find?.(r => r.name === 'gcodes')
+      if (gcodes?.path) gcodesRootPath = gcodes.path
+    } catch { /* non-critical */ }
+
 
     // Subscribe to gcode console feed — Moonraker only pushes
     // notify_gcode_response after this explicit subscription
@@ -281,6 +290,20 @@ function handleMessage(event) {
       for (const line of lines.flat()) {
         for (const cb of consoleSubscribers) {
           try { cb(String(line)) } catch {}
+        }
+      }
+      break
+    }
+    case 'notify_filelist_changed': {
+      // Trigger preview parse when a gcode file is uploaded
+      const info = msg.params?.[0]
+      if (info?.action === 'create_file' && info?.item?.root === 'gcodes') {
+        const filename = info.item.path ?? info.item.name
+        if (/\.(gcode|gc|g|gco)$/i.test(filename)) {
+          // Ask Moonraker for the full filesystem path via metadata
+          fetch(`/bakesail/gcode-parse?path=${encodeURIComponent(
+            `${gcodesRootPath ?? '/home/cunt/printer_data/gcodes'}/${filename}`
+          )}`, { method: 'POST' }).catch(() => {})
         }
       }
       break

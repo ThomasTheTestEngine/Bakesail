@@ -46,8 +46,10 @@ class FSHandler(http.server.BaseHTTPRequestHandler):
         elif ep == '/list':      self._list(get('path', os.path.expanduser('~')))
         elif ep == '/download':  self._download(get('path'))
         elif ep == '/read':      self._read(get('path'))
-        elif ep == '/search':    self._search(get('path', '/'), get('q', ''))
-        else:                    self._err(404, 'Not found')
+        elif ep == '/search':         self._search(get('path', '/'), get('q', ''))
+        elif ep == '/gcode-preview':      self._gcode_preview(get('path'))
+        elif ep == '/gcode-preview-meta': self._gcode_preview_meta(get('path'))
+        else:                             self._err(404, 'Not found')
 
     def do_POST(self):
         p, _, qs_raw = self.path.partition('?')
@@ -60,8 +62,9 @@ class FSHandler(http.server.BaseHTTPRequestHandler):
         elif ep == '/delete':    self._delete(get('path'))
         elif ep == '/duplicate': self._duplicate(get('path'))
         elif ep == '/rename':    self._rename(get('path'), get('name'))
-        elif ep == '/write':     self._write(get('path'))
-        else:                    self._err(404, 'Not found')
+        elif ep == '/write':          self._write(get('path'))
+        elif ep == '/gcode-parse':        self._gcode_parse(get('path'))
+        else:                             self._err(404, 'Not found')
 
     def do_DELETE(self):
         _, _, qs_raw = self.path.partition('?')
@@ -221,6 +224,58 @@ class FSHandler(http.server.BaseHTTPRequestHandler):
         except Exception as e:
             self._err(500, str(e))
 
+    def _gcode_parse(self, path):
+        """Trigger async parse of a gcode file. Returns immediately."""
+        path = os.path.realpath(os.path.expanduser(path))
+        if not os.path.isfile(path):
+            return self._err(404, 'File not found: ' + path)
+        if not path.lower().endswith(('.gcode', '.gc', '.g', '.gco')):
+            return self._err(400, 'Not a gcode file')
+        out = path + PREVIEW_SUFFIX
+        if path not in PARSE_LOCK:
+            PARSE_LOCK[path] = True
+            PARSE_QUEUE.put(path)
+            self._json({'status': 'queued', 'path': path, 'out': out})
+        else:
+            self._json({'status': 'already_parsing', 'path': path})
+
+    def _gcode_preview(self, path):
+        """Serve the binary preview file for a gcode path."""
+        path = os.path.realpath(os.path.expanduser(path))
+        out  = path + PREVIEW_SUFFIX
+        if not os.path.isfile(out):
+            return self._err(404, 'Preview not ready: ' + out)
+        try:
+            size = os.path.getsize(out)
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/octet-stream')
+            self.send_header('Content-Length', str(size))
+            self.end_headers()
+            with open(out, 'rb') as f:
+                while True:
+                    chunk = f.read(65536)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+        except Exception as e:
+            logging.warning('Preview serve error: %s', e)
+
+    def _gcode_preview_meta(self, path):
+        """Return JSON metadata about parse status for a gcode file."""
+        path = os.path.realpath(os.path.expanduser(path))
+        out  = path + PREVIEW_SUFFIX
+        parsing = path in PARSE_LOCK
+        ready   = os.path.isfile(out)
+        meta = {
+            'path':    path,
+            'out':     out,
+            'ready':   ready,
+            'parsing': parsing,
+            'size':    os.path.getsize(out) if ready else 0,
+            'mtime':   int(os.path.getmtime(out)) if ready else 0,
+        }
+        self._json(meta)
+
     def _search(self, root, q):
         root = os.path.realpath(os.path.expanduser(root))
         q    = q.lower()
@@ -274,3 +329,190 @@ if __name__ == '__main__':
         pass
     finally:
         server.server_close()
+
+# ── Gcode Preview Parser ──────────────────────────────────────────────────────
+
+import re
+import struct
+import threading
+import queue
+
+PREVIEW_SUFFIX  = '.bspreview'   # compact binary cache
+PARSE_QUEUE     = queue.Queue()
+PARSE_LOCK      = {}             # path → True while parsing
+
+# Feature type tags for common slicers
+# Returns True if the comment line changes feature type to one we want
+_OUTER_WALL_RE = re.compile(
+    r'TYPE:(?:External perimeter|WALL-OUTER|Outer wall)'
+    r'|feature outer wall'
+    r'|FEATURE:Outer wall',
+    re.IGNORECASE
+)
+_INNER_WALL_RE = re.compile(
+    r'TYPE:(?:Perimeter|WALL-INNER|Inner wall|Inner Wall)'
+    r'|feature inner wall'
+    r'|FEATURE:Inner wall',
+    re.IGNORECASE
+)
+_SUPPORT_RE = re.compile(
+    r'TYPE:(?:Support|SUPPORT|Support material|Support interface)'
+    r'|feature support'
+    r'|FEATURE:Support',
+    re.IGNORECASE
+)
+_LAYER_RE  = re.compile(r'(?:^;LAYER:|layer_num|layer_change)', re.IGNORECASE)
+_Z_MOVE_RE = re.compile(r'^G[01]\s[^;]*Z([\d.]+)', re.IGNORECASE)
+_XY_RE     = re.compile(r'X([\d.]+)\s*Y([\d.]+)(?:\s*E([\d.eE+\-]+))?', re.IGNORECASE)
+
+def _parse_gcode_preview(gcode_path, out_path):
+    """Parse gcode for preview: outer walls + inner walls + supports.
+
+    Output binary format (little-endian):
+      Header (32 bytes):
+        4s  magic   b'BSPV'
+        I   version 1
+        f   min_x
+        f   min_y
+        f   min_z
+        f   max_x
+        f   max_y
+        f   max_z
+        f   layer_height (modal average)
+        I   layer_count
+
+      Per layer (variable):
+        f   z
+        f   height          (this layer's thickness)
+        I   seg_count       (number of XY segments = pairs of floats)
+        <seg_count * 4 * f> x1 y1 x2 y2 ...
+    """
+    try:
+        logging.info('[preview] parsing %s', gcode_path)
+        layers   = []          # list of {'z': float, 'segs': list of (x1,y1,x2,y2)}
+        cur_z    = 0.0
+        prev_z   = None
+        cur_segs = []
+        want_extrusion = False  # are we in a feature we care about?
+        last_x   = None
+        last_y   = None
+        min_x = min_y = min_z =  1e9
+        max_x = max_y = max_z = -1e9
+
+        def flush_layer():
+            nonlocal cur_segs
+            if cur_segs and prev_z is not None:
+                layers.append({'z': prev_z, 'segs': cur_segs})
+                cur_segs = []
+
+        with open(gcode_path, 'r', errors='replace', buffering=1 << 20) as f:
+            for raw in f:
+                line = raw.strip()
+                if not line:
+                    continue
+
+                # Comment lines — detect feature/layer changes
+                if line.startswith(';'):
+                    if _OUTER_WALL_RE.search(line):
+                        want_extrusion = True
+                    elif _INNER_WALL_RE.search(line):
+                        want_extrusion = True
+                    elif _SUPPORT_RE.search(line):
+                        want_extrusion = True
+                    elif re.search(r'TYPE:|FEATURE:', line, re.IGNORECASE):
+                        # Any other feature type: don't capture
+                        want_extrusion = False
+                    continue
+
+                # Z change → new layer boundary
+                zm = _Z_MOVE_RE.match(line)
+                if zm:
+                    new_z = float(zm.group(1))
+                    if new_z != cur_z:
+                        flush_layer()
+                        prev_z = cur_z
+                        cur_z  = new_z
+                        min_z = min(min_z, new_z)
+                        max_z = max(max_z, new_z)
+                        last_x = last_y = None  # reset position on layer change
+
+                # XY moves in a wanted feature
+                if not want_extrusion:
+                    continue
+                if not line.upper().startswith('G1'):
+                    continue
+                m = _XY_RE.search(line)
+                if not m:
+                    continue
+                x, y = float(m.group(1)), float(m.group(2))
+                e_str = m.group(3)
+                is_extrusion = e_str is not None and float(e_str) > 0
+
+                if is_extrusion and last_x is not None:
+                    cur_segs.append((last_x, last_y, x, y))
+                    min_x = min(min_x, last_x, x)
+                    max_x = max(max_x, last_x, x)
+                    min_y = min(min_y, last_y, y)
+                    max_y = max(max_y, last_y, y)
+
+                last_x, last_y = x, y
+
+        flush_layer()
+
+        # Compute modal layer height
+        heights = []
+        for i in range(1, len(layers)):
+            dz = round(layers[i]['z'] - layers[i-1]['z'], 4)
+            if 0.01 < dz < 1.0:
+                heights.append(dz)
+        modal_h = max(set(heights), key=heights.count) if heights else 0.2
+
+        # Write binary
+        with open(out_path, 'wb') as f:
+            # Header
+            f.write(struct.pack('<4sIfffffff I',
+                b'BSPV', 1,
+                min_x if min_x < 1e8 else 0,
+                min_y if min_y < 1e8 else 0,
+                min_z if min_z < 1e8 else 0,
+                max_x if max_x > -1e8 else 0,
+                max_y if max_y > -1e8 else 0,
+                max_z if max_z > -1e8 else 0,
+                modal_h,
+                len(layers),
+            ))
+            # Layers
+            for i, layer in enumerate(layers):
+                segs = layer['segs']
+                if i + 1 < len(layers):
+                    h = round(layers[i+1]['z'] - layer['z'], 4)
+                else:
+                    h = modal_h
+                h = max(0.05, min(h, 1.0))
+                f.write(struct.pack('<ffI', layer['z'], h, len(segs)))
+                if segs:
+                    flat = [v for s in segs for v in s]
+                    f.write(struct.pack('<%df' % len(flat), *flat))
+
+        logging.info('[preview] wrote %s (%d layers, %d total segs)',
+                     out_path, len(layers),
+                     sum(len(l['segs']) for l in layers))
+    except Exception as e:
+        logging.exception('[preview] parse error for %s: %s', gcode_path, e)
+    finally:
+        PARSE_LOCK.pop(gcode_path, None)
+
+
+def _parse_worker():
+    while True:
+        path = PARSE_QUEUE.get()
+        try:
+            out = path + PREVIEW_SUFFIX
+            _parse_gcode_preview(path, out)
+        finally:
+            PARSE_QUEUE.task_done()
+
+
+# Start background parse thread
+_t = threading.Thread(target=_parse_worker, daemon=True)
+_t.start()

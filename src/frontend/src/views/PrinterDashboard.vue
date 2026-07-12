@@ -497,6 +497,10 @@
 
 
         <!-- ── System Loads ───────────────────────────────────── -->
+        <template v-else-if="w.type === 'gcode_preview'">
+          <GcodePreviewWidget />
+        </template>
+
         <template v-else-if="w.type === 'sysloads'">
           <SystemMonitorWidget />
         </template>

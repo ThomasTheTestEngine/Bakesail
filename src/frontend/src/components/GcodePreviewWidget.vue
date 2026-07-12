@@ -1,0 +1,379 @@
+<!--
+  GcodePreviewWidget.vue
+  Live print progress 3D viewer.
+  - Loads .bspreview binary from FS server
+  - Renders outer-wall paths as extruded ribbons
+  - Ghost (unprinted): translucent teal, no horizontal caps except top of model
+  - Finished (printed): opaque pink, bottom cap + current-layer top cap
+  - Orbitable/zoomable via OrbitControls
+  - Updates as current_layer changes via Moonraker subscription
+-->
+<template>
+  <div class="gpw-root" ref="rootEl">
+    <canvas ref="canvasEl" class="gpw-canvas"></canvas>
+
+    <!-- Overlay when no print / no preview -->
+    <div v-if="!printing" class="gpw-overlay">
+      <span class="gpw-overlay-text">No print in progress</span>
+    </div>
+    <div v-else-if="state === 'no-preview'" class="gpw-overlay">
+      <span class="gpw-overlay-text">No preview cached</span>
+      <button class="btn btn-ghost btn-sm" style="margin-top:8px" @click="triggerParse">Parse now</button>
+    </div>
+    <div v-else-if="state === 'parsing'" class="gpw-overlay">
+      <span class="gpw-overlay-text">Parsing gcode…</span>
+    </div>
+    <div v-else-if="state === 'loading'" class="gpw-overlay">
+      <span class="gpw-overlay-text">Loading preview…</span>
+    </div>
+
+    <!-- Gear settings -->
+    <div class="gpw-hud">
+      <span class="gpw-layer-info" v-if="totalLayers > 0">
+        {{ currentLayer }} / {{ totalLayers }}
+      </span>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
+import * as THREE from 'three'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { useDeviceStore } from '../stores/device.js'
+import { useMoonraker } from '../composables/useMoonraker.js'
+import { useSettingsStore } from '../stores/settings.js'
+
+const rootEl   = ref(null)
+const canvasEl = ref(null)
+const deviceStore  = useDeviceStore()
+const settings     = useSettingsStore()
+const { subscribeToStatus } = useMoonraker()
+
+// ── State ──────────────────────────────────────────────────────────────────────
+// state: 'idle' | 'no-preview' | 'parsing' | 'loading' | 'ready'
+const state        = ref('idle')
+const totalLayers  = ref(0)
+const currentLayer = ref(0)
+
+const printing = computed(() =>
+  deviceStore.printerState === 'printing' || deviceStore.printerState === 'paused'
+)
+
+// ── Three.js ──────────────────────────────────────────────────────────────────
+let renderer, scene, camera, controls
+let ghostGroup, finishedGroup
+let topCapMesh = null, bottomCapMesh = null
+let layerMeshes = []   // Array of { ghost: Mesh, finished: Mesh, polygon: Vector2[] }
+let animId = null
+let resizeObs = null
+
+const C = {
+  ghost:    0x1a3344,  // dark teal-blue (--teal unset)
+  finished: 0xF07FAA,  // bakesail pink (--amber)
+  bg:       0x0d1117,
+}
+
+function initThree() {
+  const W = rootEl.value.offsetWidth
+  const H = rootEl.value.offsetHeight
+
+  renderer = new THREE.WebGLRenderer({ canvas: canvasEl.value, antialias: true, alpha: true })
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  renderer.setSize(W, H)
+  renderer.setClearColor(C.bg, 0)
+
+  scene  = new THREE.Scene()
+  camera = new THREE.PerspectiveCamera(40, W / H, 0.1, 5000)
+  camera.position.set(200, 300, 400)
+
+  controls = new OrbitControls(camera, canvasEl.value)
+  controls.enableDamping = true
+  controls.dampingFactor = 0.08
+
+  const ambLight = new THREE.AmbientLight(0xffffff, 0.6)
+  const dirLight = new THREE.DirectionalLight(0xffffff, 0.8)
+  dirLight.position.set(1, 2, 1.5)
+  scene.add(ambLight, dirLight)
+
+  ghostGroup    = new THREE.Group()
+  finishedGroup = new THREE.Group()
+  scene.add(ghostGroup, finishedGroup)
+
+  function animate() {
+    animId = requestAnimationFrame(animate)
+    controls.update()
+    renderer.render(scene, camera)
+  }
+  animate()
+
+  resizeObs = new ResizeObserver(() => {
+    if (!rootEl.value) return
+    const W = rootEl.value.offsetWidth
+    const H = rootEl.value.offsetHeight
+    renderer.setSize(W, H)
+    camera.aspect = W / H
+    camera.updateProjectionMatrix()
+  })
+  resizeObs.observe(rootEl.value)
+}
+
+// ── Binary preview loader ─────────────────────────────────────────────────────
+async function getGcodesRoot() {
+  try {
+    const r = await fetch('/server/files/roots')
+    const d = await r.json()
+    const g = (d.result ?? d).find?.(x => x.name === 'gcodes')
+    return g?.path ?? '/home/cunt/printer_data/gcodes'
+  } catch { return '/home/cunt/printer_data/gcodes' }
+}
+
+async function loadPreview(filename) {
+  state.value = 'loading'
+  const root  = await getGcodesRoot()
+  const fsPath = `${root}/${filename}`
+  const metaUrl = `/bakesail/gcode-preview-meta?path=${encodeURIComponent(fsPath)}`
+  const binUrl  = `/bakesail/gcode-preview?path=${encodeURIComponent(fsPath)}`
+
+  // Check if preview exists
+  try {
+    const mr = await fetch(metaUrl)
+    const meta = await mr.json()
+    if (meta.error) {
+      state.value = 'no-preview'
+      return
+    }
+    if (!meta.ready) {
+      if (meta.parsing) { state.value = 'parsing'; return }
+      state.value = 'no-preview'
+      return
+    }
+  } catch { state.value = 'no-preview'; return }
+
+  // Fetch binary
+  try {
+    const br = await fetch(binUrl)
+    if (!br.ok) { state.value = 'no-preview'; return }
+    const buf = await br.arrayBuffer()
+    parseBinary(buf)
+    state.value = 'ready'
+  } catch { state.value = 'no-preview' }
+}
+
+function parseBinary(buf) {
+  const dv = new DataView(buf)
+  let off = 0
+
+  const magic = String.fromCharCode(...new Uint8Array(buf, 0, 4))
+  if (magic !== 'BSPV') { console.warn('[gpw] bad magic'); return }
+  off = 4
+
+  /* version */ dv.getUint32(off, true); off += 4
+  const minX = dv.getFloat32(off, true); off += 4
+  const minY = dv.getFloat32(off, true); off += 4
+  const minZ = dv.getFloat32(off, true); off += 4
+  const maxX = dv.getFloat32(off, true); off += 4
+  const maxY = dv.getFloat32(off, true); off += 4
+  const maxZ = dv.getFloat32(off, true); off += 4
+  const layerH = dv.getFloat32(off, true); off += 4
+  const nLayers = dv.getUint32(off, true); off += 4
+
+  totalLayers.value = nLayers
+
+  // Centre offset
+  const cx = (minX + maxX) / 2
+  const cy = (minY + maxY) / 2
+
+  // Clear previous
+  ghostGroup.clear()
+  finishedGroup.clear()
+  layerMeshes = []
+  topCapMesh = bottomCapMesh = null
+
+  const ghostMat    = new THREE.MeshLambertMaterial({ color: C.ghost,    transparent: true, opacity: 0.22, side: THREE.DoubleSide })
+  const finishedMat = new THREE.MeshLambertMaterial({ color: C.finished, transparent: false, side: THREE.DoubleSide })
+
+  for (let li = 0; li < nLayers; li++) {
+    const z      = dv.getFloat32(off, true); off += 4
+    const h      = dv.getFloat32(off, true); off += 4
+    const nSegs  = dv.getUint32(off, true);  off += 4
+
+    if (nSegs === 0) {
+      layerMeshes.push(null)
+      continue
+    }
+
+    // Build segment geometry as flat ribbon (quad per segment, layer_height tall)
+    const verts = []
+    const polyPoints = []   // for caps
+
+    for (let si = 0; si < nSegs; si++) {
+      const x1 = dv.getFloat32(off, true) - cx; off += 4
+      const y1 = dv.getFloat32(off, true) - cy; off += 4
+      const x2 = dv.getFloat32(off, true) - cx; off += 4
+      const y2 = dv.getFloat32(off, true) - cy; off += 4
+
+      // Extrude segment to a thin quad (extrusionWidth wide, h tall)
+      // Direction vector
+      const dx = x2 - x1, dy = y2 - y1
+      const len = Math.sqrt(dx*dx + dy*dy)
+      if (len < 0.001) continue
+
+      const EW = 0.35 / 2  // half extrusion width
+      const nx = -dy/len * EW, ny = dx/len * EW
+
+      // 4 corners of the ribbon, at this layer's Z
+      const z0 = z - minZ, z1 = z - minZ + h
+
+      // Two triangles per segment face (XZ plane side, ignoring top/bottom for perf)
+      // We just draw the path as a rectangle facing the camera — use two tris
+      verts.push(
+        x1+nx, z0, -(y1+ny),   x1-nx, z0, -(y1-ny),   x2+nx, z1, -(y2+ny),
+        x2+nx, z1, -(y2+ny),   x1-nx, z0, -(y1-ny),   x2-nx, z1, -(y2-ny),
+      )
+      polyPoints.push(new THREE.Vector2(x1, -y1))
+      if (si === nSegs - 1) polyPoints.push(new THREE.Vector2(x2, -y2))
+    }
+
+    if (verts.length === 0) { layerMeshes.push(null); continue }
+
+    const geo  = new THREE.BufferGeometry()
+    const arr  = new Float32Array(verts)
+    geo.setAttribute('position', new THREE.BufferAttribute(arr, 3))
+    geo.computeVertexNormals()
+
+    const gMesh = new THREE.Mesh(geo, ghostMat.clone())
+    const fMesh = new THREE.Mesh(geo, finishedMat.clone())
+    gMesh.visible = true
+    fMesh.visible = false
+    ghostGroup.add(gMesh)
+    finishedGroup.add(fMesh)
+
+    layerMeshes.push({ ghost: gMesh, finished: fMesh, z: z - minZ, h, poly: polyPoints })
+  }
+
+  // Bottom cap (layer 0)
+  if (layerMeshes[0]?.poly?.length > 2) {
+    bottomCapMesh = buildCap(layerMeshes[0].poly, layerMeshes[0].z, finishedMat.clone())
+    bottomCapMesh.visible = false
+    finishedGroup.add(bottomCapMesh)
+  }
+
+  // Position camera to frame the model
+  const diagXY = Math.sqrt((maxX-minX)**2 + (maxY-minY)**2)
+  const diagZ  = maxZ - minZ
+  const dist   = Math.max(diagXY, diagZ) * 1.8
+  camera.position.set(dist * 0.6, dist * 0.7, dist * 0.9)
+  controls.target.set(0, (maxZ - minZ) / 2, 0)
+  controls.update()
+}
+
+function buildCap(polyPoints, zPos, mat) {
+  const shape = new THREE.Shape(polyPoints)
+  const geo   = new THREE.ShapeGeometry(shape)
+  // Rotate from XY to XZ plane
+  geo.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI / 2))
+  geo.translate(0, zPos, 0)
+  return new THREE.Mesh(geo, mat)
+}
+
+// ── Layer updates ─────────────────────────────────────────────────────────────
+function updateLayers(layer) {
+  if (state.value !== 'ready') return
+  currentLayer.value = layer
+
+  for (let i = 0; i < layerMeshes.length; i++) {
+    const lm = layerMeshes[i]
+    if (!lm) continue
+    const done = i < layer
+    lm.ghost.visible    = !done
+    lm.finished.visible = done
+  }
+
+  // Bottom cap: show once layer 1 is done
+  if (bottomCapMesh) bottomCapMesh.visible = layer > 0
+
+  // Top cap: remove old, add new at current finished layer top
+  if (topCapMesh) {
+    finishedGroup.remove(topCapMesh)
+    topCapMesh.geometry.dispose()
+    topCapMesh = null
+  }
+  const topIdx = layer - 1
+  if (topIdx >= 0 && topIdx < layerMeshes.length && layerMeshes[topIdx]?.poly?.length > 2) {
+    const lm = layerMeshes[topIdx]
+    const mat = new THREE.MeshLambertMaterial({ color: C.finished, side: THREE.DoubleSide })
+    topCapMesh = buildCap(lm.poly, lm.z + lm.h, mat)
+    finishedGroup.add(topCapMesh)
+  }
+}
+
+// ── Subscription & print tracking ─────────────────────────────────────────────
+let currentFile = null
+let unsub = null
+
+onMounted(() => {
+  initThree()
+  unsub = subscribeToStatus(data => {
+    if (data.print_stats) {
+      const ps = data.print_stats
+      const newFile = ps.filename
+      if (newFile && newFile !== currentFile) {
+        currentFile = newFile
+        loadPreview(newFile)
+      }
+      if (ps.current_layer != null) updateLayers(ps.current_layer)
+    }
+  })
+  // Load immediately if already printing
+  if (printing.value && deviceStore.filename) {
+    currentFile = deviceStore.filename
+    loadPreview(deviceStore.filename)
+  }
+  if (deviceStore.currentLayer != null) {
+    updateLayers(deviceStore.currentLayer)
+  }
+})
+
+onUnmounted(() => {
+  unsub?.()
+  cancelAnimationFrame(animId)
+  resizeObs?.disconnect()
+  renderer?.dispose()
+})
+
+async function triggerParse() {
+  if (!currentFile) return
+  state.value = 'parsing'
+  const root = await getGcodesRoot()
+  const fsPath = `${root}/${currentFile}`
+  await fetch(`/bakesail/gcode-parse?path=${encodeURIComponent(fsPath)}`, { method: 'POST' })
+  // Poll until ready
+  const poll = setInterval(async () => {
+    const mr = await fetch(`/bakesail/gcode-preview-meta?path=${encodeURIComponent(fsPath)}`)
+    const meta = await mr.json()
+    if (meta.ready) {
+      clearInterval(poll)
+      loadPreview(currentFile)
+    }
+  }, 2000)
+}
+</script>
+
+<style scoped>
+.gpw-root   { position: relative; width: 100%; height: 100%; overflow: hidden; background: #0d1117; border-radius: inherit; }
+.gpw-canvas { width: 100%; height: 100%; display: block; }
+.gpw-overlay {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: rgba(13,17,23,0.7);
+  pointer-events: none;
+}
+.gpw-overlay > button { pointer-events: auto; }
+.gpw-overlay-text { font-size: 12px; color: var(--text-muted); }
+.gpw-hud {
+  position: absolute; bottom: 8px; left: 10px;
+  font-size: 11px; font-family: var(--font-mono); color: var(--text-muted);
+  pointer-events: none;
+}
+</style>
