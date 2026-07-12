@@ -179,13 +179,31 @@ function initThree() {
 }
 
 // ── Binary loader ─────────────────────────────────────────────────────────────
+// Cache the gcodes root path
+let _gcodesRoot = null
 async function getGcodesRoot() {
+  if (_gcodesRoot) return _gcodesRoot
   try {
+    // Try server.info which has roots in some versions
     const r = await fetch('/server/files/roots')
-    const d = await r.json()
-    const g = (d.result ?? d).find?.(x => x.name === 'gcodes')
-    return g?.path ?? '/home/cunt/printer_data/gcodes'
-  } catch { return '/home/cunt/printer_data/gcodes' }
+    if (r.ok) {
+      const d = await r.json()
+      const items = d.result ?? d
+      const g = Array.isArray(items) ? items.find(x => x.name === 'gcodes') : null
+      if (g?.path) { _gcodesRoot = g.path; return _gcodesRoot }
+    }
+  } catch { /* fall through */ }
+  // Fallback: query Moonraker info for data_path
+  try {
+    const r2 = await fetch('/server/info')
+    if (r2.ok) {
+      const d2 = await r2.json()
+      const dataPath = d2.result?.data_path ?? d2.data_path
+      if (dataPath) { _gcodesRoot = dataPath + '/gcodes'; return _gcodesRoot }
+    }
+  } catch { /* fall through */ }
+  _gcodesRoot = '/home/cunt/printer_data/gcodes'
+  return _gcodesRoot
 }
 
 async function openFile(filename) {
@@ -196,10 +214,15 @@ async function openFile(filename) {
 
   const root   = await getGcodesRoot()
   const fsPath = `${root}/${filename}`
+  console.log('[gcv] opening:', fsPath)
 
   // Check if full parse exists
-  const metaR = await fetch(`/bakesail/gcode-full-meta?path=${encodeURIComponent(fsPath)}`)
-  const meta  = await metaR.json()
+  let meta = {}
+  try {
+    const metaR = await fetch(`/bakesail/gcode-full-meta?path=${encodeURIComponent(fsPath)}`)
+    if (metaR.ok) meta = await metaR.json()
+    console.log('[gcv] meta:', meta)
+  } catch (e) { console.warn('[gcv] meta fetch failed:', e) }
 
   if (!meta.ready) {
     // Trigger parse and poll
