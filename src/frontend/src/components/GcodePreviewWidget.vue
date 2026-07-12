@@ -10,7 +10,7 @@
 -->
 <template>
   <div class="gpw-root" ref="rootEl">
-    <canvas ref="canvasEl" class="gpw-canvas"></canvas>
+    <canvas ref="canvasEl" class="gpw-canvas" :style="{ opacity: state === 'ready' ? 1 : 0 }"></canvas>
 
     <!-- Overlay states -->
     <div v-if="state === 'idle'" class="gpw-overlay">

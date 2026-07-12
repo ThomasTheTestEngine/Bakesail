@@ -658,7 +658,9 @@ onUnmounted(() => {
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
   gap: 16px;
-  pointer-events: none;
+  background: #0d1117;
+  z-index: 5;
+  pointer-events: auto;
 }
 .gcv-splash-icon { font-size: 48px; opacity: 0.15; }
 .gcv-splash-text { font-size: 14px; color: var(--text-muted); }
