@@ -142,9 +142,11 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useMoonraker } from '../composables/useMoonraker.js'
 
 const { send, sendGcode, subscribeToStatus } = useMoonraker()
+const router = useRouter()
 
 // ── Live job state ─────────────────────────────────────────────────────────────
 const job = reactive({
@@ -219,9 +221,17 @@ async function loadFiles() {
 
 async function startPrint(f) {
   try {
-    // Use Moonraker's server API (not raw Klipper) so job queue and
-    // slicer start gcode (PRINT_START macro) are handled correctly
-    await send('printer.print.start', { filename: f.path })
+    // Use Moonraker's REST endpoint — triggers full gcode file including
+    // slicer start gcode (PRINT_START macro with temp parameters)
+    const params = new URLSearchParams({ filename: f.path })
+    const r = await fetch(`/printer/print/start?${params}`, { method: 'POST' })
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}))
+      console.warn('[JobManager] startPrint failed:', err)
+      return
+    }
+    // Navigate to dashboard to watch the print
+    router.push('/')
   } catch (e) {
     console.warn('[JobManager] startPrint failed:', e)
   }
