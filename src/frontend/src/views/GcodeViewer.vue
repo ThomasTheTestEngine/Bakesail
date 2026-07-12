@@ -81,6 +81,12 @@
         </div>
         <div class="gcv-splash-sub">This runs once and is cached for future opens.</div>
       </div>
+      <div v-if="parseState === 'error'" class="gcv-splash">
+        <div class="gcv-splash-icon" style="color:#e05555">✗</div>
+        <div class="gcv-splash-text" style="color:#e05555">Failed to reach FS server</div>
+        <div class="gcv-splash-sub">Check: sudo systemctl status bakesail-fs</div>
+        <button class="gcv-retry-btn" @click="openFile(currentFile)">Retry</button>
+      </div>
     </div>
 
   </div>
@@ -644,6 +650,14 @@ onUnmounted(() => {
   background: var(--border);
   border-radius: 2px;
 }
+.gcv-retry-btn {
+  margin-top: 12px; padding: 6px 18px;
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 4px; color: #aaaacc; font-size: 12px; cursor: pointer;
+  pointer-events: auto;
+}
+.gcv-retry-btn:hover { background: rgba(255,255,255,0.15); }
+
 .gcv-parse-fill {
   height: 100%; background: var(--amber); border-radius: 2px;
   transition: width 1.5s ease;

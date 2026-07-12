@@ -571,7 +571,9 @@ _tf = threading.Thread(target=_full_parse_worker, daemon=True)
 _tf.start()
 
 if __name__ == '__main__':
-    server = http.server.HTTPServer(('127.0.0.1', FS_PORT), FSHandler)
+    import socketserver
+    class ThreadingServer(socketserver.ThreadingMixIn, http.server.HTTPServer): pass
+    server = ThreadingServer(('127.0.0.1', FS_PORT), FSHandler)
     logging.info('Bakesail FS server listening on 127.0.0.1:%d', FS_PORT)
     try:
         server.serve_forever()
