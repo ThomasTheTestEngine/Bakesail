@@ -380,21 +380,21 @@ onMounted(() => {
   unsub = subscribeToStatus(data => {
     if (data.print_stats) {
       const ps = data.print_stats
-      const newFile = ps.filename
-      if (newFile && newFile !== currentFile) {
-        currentFile = newFile
-        loadPreview(newFile)
+      // Only auto-load when actively printing/paused
+      if (ps.filename && ps.filename !== currentFile) {
+        const st = ps.state ?? deviceStore.printerState
+        if (st === 'printing' || st === 'paused') {
+          currentFile = ps.filename
+          loadPreview(ps.filename)
+        }
       }
       if (ps.current_layer != null) updateLayers(ps.current_layer)
     }
   })
-  // Load immediately if already printing
+  // Load immediately if already printing on mount
   if (printing.value && deviceStore.filename) {
     currentFile = deviceStore.filename
     loadPreview(deviceStore.filename)
-  }
-  if (deviceStore.currentLayer != null) {
-    updateLayers(deviceStore.currentLayer)
   }
 })
 
