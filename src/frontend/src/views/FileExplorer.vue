@@ -180,6 +180,48 @@ import FileEditorModal from '../components/FileEditorModal.vue'
 // ── Mode ───────────────────────────────────────────────────────────────────────
 const router = useRouter()
 const adv = ref(false)   // false = safe/Moonraker, true = advanced/bakesail
+const parsing  = ref(false)
+const parseMsg = ref('')
+
+const isInGcodesDir = computed(() => {
+  if (adv.value) return absPath.value !== '/'
+  return segments.value.length > 0
+})
+
+async function parseAllGcode() {
+  if (parsing.value) return
+  parsing.value = true
+  parseMsg.value = ''
+  try {
+    const gcodeFiles = files.value.filter(f => /\.(gcode|gc|g|gco)$/i.test(f.name))
+    if (!gcodeFiles.length) { parseMsg.value = 'No gcode files here'; return }
+    let queued = 0
+    for (const f of gcodeFiles) {
+      let fsPath
+      if (adv.value) {
+        fsPath = absPath.value.replace(/\/$/, '') + '/' + f.name
+      } else {
+        try {
+          const r = await fetch('/server/files/roots')
+          const d = await r.json()
+          const items = d.result ?? d
+          const root = Array.isArray(items) ? items.find(x => x.name === 'gcodes')?.path : null
+          const sub  = segments.value.slice(1).join('/')
+          fsPath = root ? `${root}/${sub ? sub + '/' : ''}${f.name}` : null
+        } catch { fsPath = null }
+      }
+      if (!fsPath) continue
+      await fetch(`/bakesail/gcode-parse?path=${encodeURIComponent(fsPath)}`, { method: 'POST' }).catch(() => {})
+      await fetch(`/bakesail/gcode-parse-full?path=${encodeURIComponent(fsPath)}`, { method: 'POST' }).catch(() => {})
+      queued++
+    }
+    parseMsg.value = `Queued ${queued} file${queued !== 1 ? 's' : ''}`
+    setTimeout(() => { parseMsg.value = '' }, 4000)
+  } finally {
+    parsing.value = false
+  }
+}
+
 
 // ── Path state ────────────────────────────────────────────────────────────────
 // Safe mode:    segments = [] → virtual root; ['config'] → /config/; etc.
