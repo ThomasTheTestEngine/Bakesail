@@ -14,7 +14,9 @@
           <div v-if="fileListLoading" class="gcv-file-item gcv-dim">Loading…</div>
           <button v-else v-for="f in fileList" :key="f.filename"
                   class="gcv-file-item" @click="openFile(f.filename)">
-            {{ f.filename }}
+            <img v-if="thumbUrl(f)" :src="thumbUrl(f)" class="gcv-thumb" alt="" />
+            <div v-else class="gcv-thumb-placeholder">◈</div>
+            <span class="gcv-file-item-name">{{ f.filename }}</span>
           </button>
         </div>
       </div>
@@ -211,14 +213,19 @@ async function openFile(filename) {
 
 async function pollUntilReady(fsPath) {
   return new Promise(resolve => {
-    let dots = 0
+    let elapsed = 0
     const iv = setInterval(async () => {
-      dots = (dots + 1) % 4
-      parseProgress.value = Math.min(parseProgress.value + 2, 90)
-      const r = await fetch(`/bakesail/gcode-full-meta?path=${encodeURIComponent(fsPath)}`)
-      const m = await r.json()
-      if (m.ready) { clearInterval(iv); parseProgress.value = 100; resolve() }
-    }, 1500)
+      elapsed += 2
+      // Asymptotic progress: fast early, slows down, never hits 100
+      parseProgress.value = Math.round(100 - 100 / (1 + elapsed / 20))
+      try {
+        const r = await fetch(`/bakesail/gcode-full-meta?path=${encodeURIComponent(fsPath)}`)
+        if (!r.ok) return
+        const m = await r.json()
+        if (m.ready) { clearInterval(iv); parseProgress.value = 99; resolve() }
+        if (m.error) { clearInterval(iv); parseState.value = 'error'; resolve() }
+      } catch { /* network blip, keep polling */ }
+    }, 2000)
   })
 }
 
@@ -411,15 +418,39 @@ function setColourMode(mode) {
 watch(showTravel, v => { if (travelLine) travelLine.visible = v })
 
 // ── File list ─────────────────────────────────────────────────────────────────
+// thumbnails are served by Moonraker at /server/files/thumbnails
+function thumbUrl(f) {
+  if (!f.thumbnails?.length) return null
+  const thumb = f.thumbnails.find(t => t.width >= 32) ?? f.thumbnails[0]
+  // Moonraker serves thumbnails from the .thumbs subdirectory
+  if (!thumb?.thumbnail_path) return null
+  return `/server/files/${encodeURIComponent(thumb.thumbnail_path)}`
+}
+
 async function fetchFileList() {
   fileListLoading.value = true
   try {
+    // Use Moonraker's metadata list which includes thumbnails
     const r = await fetch('/server/files/list?root=gcodes')
     const d = await r.json()
-    const items = d.result ?? d
-    fileList.value = items
-      .filter(f => /\.(gcode|gc|g|gco)$/i.test(f.filename ?? f.path ?? ''))
+    const items = (d.result ?? d)
+    // Fetch metadata for thumbnails in parallel (batch of 10)
+    const filtered = items
+      .filter(f => /\.(gcode|gc|g|gco)$/i.test(f.filename ?? ''))
       .sort((a, b) => (b.modified ?? 0) - (a.modified ?? 0))
+      .slice(0, 100)  // cap at 100 files
+
+    // Fetch metadata (includes thumbnails) for each file
+    const withMeta = await Promise.all(
+      filtered.map(async f => {
+        try {
+          const mr = await fetch(`/server/files/metadata?filename=${encodeURIComponent(f.filename)}`)
+          const md = await mr.json()
+          return { ...f, thumbnails: (md.result ?? md).thumbnails ?? [] }
+        } catch { return f }
+      })
+    )
+    fileList.value = withMeta
   } catch { fileList.value = [] }
   finally { fileListLoading.value = false }
 }
@@ -510,14 +541,26 @@ onUnmounted(() => {
   z-index: 999;
 }
 .gcv-file-item {
-  display: block; width: 100%;
-  padding: 6px 12px; text-align: left;
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 6px 10px; text-align: left;
   background: none; border: none;
   font-family: var(--font-mono); font-size: 11px;
-  color: var(--text-dim); cursor: pointer;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: #aaaacc;  /* explicit colour — var() may not resolve in dropdown */
+  cursor: pointer;
 }
-.gcv-file-item:hover { background: var(--surface-2); color: var(--text); }
+.gcv-file-item:hover { background: rgba(255,255,255,0.06); color: #ffffff; }
+.gcv-file-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.gcv-thumb {
+  width: 36px; height: 36px; object-fit: cover;
+  border-radius: 3px; flex-shrink: 0;
+  background: #1a1a2a;
+}
+.gcv-thumb-placeholder {
+  width: 36px; height: 36px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: #1a1a2a; border-radius: 3px;
+  font-size: 18px; opacity: 0.3; color: #aaaacc;
+}
 .gcv-dim { opacity: 0.5; cursor: default; }
 
 /* Layer range */

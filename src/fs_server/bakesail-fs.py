@@ -24,6 +24,10 @@ import urllib.parse
 import shutil
 import logging
 import sys
+import re
+import struct
+import threading
+import queue
 
 logging.basicConfig(
     level=logging.INFO,
@@ -578,10 +582,6 @@ if __name__ == '__main__':
 
 # ── Gcode Preview Parser ──────────────────────────────────────────────────────
 
-import re
-import struct
-import threading
-import queue
 
 PREVIEW_SUFFIX  = '.bspreview'   # compact binary cache
 PARSE_QUEUE     = queue.Queue()

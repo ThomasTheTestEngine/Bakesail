@@ -3,7 +3,7 @@
 
     <!-- ── Sidebar ────────────────────────────────────────────────── -->
     <aside class="sidebar">
-      <div class="sidebar-logo">
+      <div class="sidebar-logo" @click="$router.push('/')" style="cursor:pointer" title="Home">
         <img
           :src="isDark ? '/bakesail_logo_dark.png' : '/bakesail_logo_light.png'"
           alt="Bakesail"
