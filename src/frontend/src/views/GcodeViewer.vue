@@ -14,7 +14,7 @@
           <div v-if="fileListLoading" class="gcv-file-item gcv-dim">Loading…</div>
           <button v-else v-for="f in fileList" :key="f.filename"
                   class="gcv-file-item" @click="openFile(f.filename)">
-            <img v-if="thumbUrl(f)" :src="thumbUrl(f)" class="gcv-thumb" alt="" />
+            <img v-if="thumbSrc(f)" :src="thumbSrc(f)" class="gcv-thumb" alt="" />
             <div v-else class="gcv-thumb-placeholder">◈</div>
             <span class="gcv-file-item-name">{{ f.filename }}</span>
           </button>
@@ -419,40 +419,33 @@ watch(showTravel, v => { if (travelLine) travelLine.visible = v })
 
 // ── File list ─────────────────────────────────────────────────────────────────
 // thumbnails are served by Moonraker at /server/files/thumbnails
-function thumbUrl(f) {
-  if (!f.thumbnails?.length) return null
-  const thumb = f.thumbnails.find(t => t.width >= 32) ?? f.thumbnails[0]
-  // Moonraker serves thumbnails from the .thumbs subdirectory
-  if (!thumb?.thumbnail_path) return null
-  return `/server/files/${encodeURIComponent(thumb.thumbnail_path)}`
-}
+
 
 async function fetchFileList() {
   fileListLoading.value = true
   try {
-    // Use Moonraker's metadata list which includes thumbnails
     const r = await fetch('/server/files/list?root=gcodes')
     const d = await r.json()
     const items = (d.result ?? d)
-    // Fetch metadata for thumbnails in parallel (batch of 10)
-    const filtered = items
+    fileList.value = items
       .filter(f => /\.(gcode|gc|g|gco)$/i.test(f.filename ?? ''))
       .sort((a, b) => (b.modified ?? 0) - (a.modified ?? 0))
-      .slice(0, 100)  // cap at 100 files
-
-    // Fetch metadata (includes thumbnails) for each file
-    const withMeta = await Promise.all(
-      filtered.map(async f => {
-        try {
-          const mr = await fetch(`/server/files/metadata?filename=${encodeURIComponent(f.filename)}`)
-          const md = await mr.json()
-          return { ...f, thumbnails: (md.result ?? md).thumbnails ?? [] }
-        } catch { return f }
-      })
-    )
-    fileList.value = withMeta
+      .slice(0, 200)
   } catch { fileList.value = [] }
   finally { fileListLoading.value = false }
+}
+
+// Thumbnail: Moonraker stores them in .thumbs/ sibling directories
+// Path comes from /server/files/list extended response or metadata
+function thumbSrc(f) {
+  // Some Moonraker versions include thumbnails in list response
+  if (f.thumbnails?.length) {
+    const t = f.thumbnails.find(th => th.width >= 32) ?? f.thumbnails[0]
+    if (t?.thumbnail_path) return `/server/files/${t.thumbnail_path}`
+    if (t?.relative_path)  return `/server/files/gcodes/${t.relative_path}`
+  }
+  // Fallback: check .thumbs directory by convention (PrusaSlicer/Orca embed as sidecar)
+  return null
 }
 
 function togglePicker() {

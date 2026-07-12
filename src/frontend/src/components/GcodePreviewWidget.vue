@@ -12,12 +12,22 @@
   <div class="gpw-root" ref="rootEl">
     <canvas ref="canvasEl" class="gpw-canvas"></canvas>
 
-    <!-- Overlay when no print / no preview -->
-    <div v-if="!printing" class="gpw-overlay">
+    <!-- Overlay states -->
+    <div v-if="state === 'idle'" class="gpw-overlay">
       <span class="gpw-overlay-text">No print in progress</span>
+      <div class="gpw-file-pick" ref="pickerWrapEl">
+        <button class="gpw-pick-btn" @click="toggleFilePicker">Load preview…</button>
+        <div v-if="filePickerOpen" class="gpw-pick-menu">
+          <div v-if="fileListLoading" class="gpw-pick-item gpw-dim">Loading…</div>
+          <button v-else v-for="f in fileList" :key="f.filename"
+                  class="gpw-pick-item" @click="manualLoad(f.filename)">
+            {{ f.filename }}
+          </button>
+        </div>
+      </div>
     </div>
     <div v-else-if="state === 'no-preview'" class="gpw-overlay">
-      <span class="gpw-overlay-text">No preview cached</span>
+      <span class="gpw-overlay-text">No preview cached for {{ currentFile }}</span>
       <button class="btn btn-ghost btn-sm" style="margin-top:8px" @click="triggerParse">Parse now</button>
     </div>
     <div v-else-if="state === 'parsing'" class="gpw-overlay">
@@ -59,6 +69,37 @@ const currentLayer = ref(0)
 const printing = computed(() =>
   deviceStore.printerState === 'printing' || deviceStore.printerState === 'paused'
 )
+
+// File picker for idle/manual load
+const pickerWrapEl    = ref(null)
+const filePickerOpen  = ref(false)
+const fileList        = ref([])
+const fileListLoading = ref(false)
+
+async function fetchFileList() {
+  if (fileList.value.length) return  // cached
+  fileListLoading.value = true
+  try {
+    const r = await fetch('/server/files/list?root=gcodes')
+    const d = await r.json()
+    fileList.value = (d.result ?? d)
+      .filter(f => /\.(gcode|gc|g|gco)$/i.test(f.filename ?? ''))
+      .sort((a, b) => (b.modified ?? 0) - (a.modified ?? 0))
+      .slice(0, 100)
+  } catch { fileList.value = [] }
+  finally { fileListLoading.value = false }
+}
+
+function toggleFilePicker() {
+  filePickerOpen.value = !filePickerOpen.value
+  if (filePickerOpen.value) fetchFileList()
+}
+
+function manualLoad(filename) {
+  filePickerOpen.value = false
+  currentFile = filename
+  loadPreview(filename)
+}
 
 // ── Three.js ──────────────────────────────────────────────────────────────────
 let renderer, scene, camera, controls
@@ -376,4 +417,27 @@ async function triggerParse() {
   font-size: 11px; font-family: var(--font-mono); color: var(--text-muted);
   pointer-events: none;
 }
+.gpw-file-pick { position: relative; margin-top: 10px; pointer-events: auto; }
+.gpw-pick-btn {
+  padding: 4px 14px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: var(--radius, 4px);
+  color: #aaaacc; font-size: 12px; cursor: pointer;
+}
+.gpw-pick-btn:hover { background: rgba(255,255,255,0.15); }
+.gpw-pick-menu {
+  position: absolute; top: calc(100% + 4px); left: 50%; transform: translateX(-50%);
+  min-width: 200px; max-height: 200px; overflow-y: auto;
+  background: #1a1a2e; border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 4px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); z-index: 10;
+}
+.gpw-pick-item {
+  display: block; width: 100%; padding: 6px 12px; text-align: left;
+  background: none; border: none; color: #aaaacc;
+  font-size: 11px; font-family: monospace; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.gpw-pick-item:hover { background: rgba(255,255,255,0.08); color: #fff; }
+.gpw-dim { opacity: 0.5; cursor: default; }
 </style>
