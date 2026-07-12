@@ -12,6 +12,7 @@
         </button>
         <div v-if="pickerOpen" class="gcv-file-menu">
           <div v-if="fileListLoading" class="gcv-file-item gcv-dim">Loading…</div>
+          <div v-else-if="fileList.length === 0" class="gcv-file-item gcv-dim">No gcode files found</div>
           <button v-else v-for="f in fileList" :key="f.filename"
                   class="gcv-file-item" @click="openFile(f.filename)">
             <img v-if="thumbSrc(f)" :src="thumbSrc(f)" class="gcv-thumb" alt="" />
@@ -470,12 +471,19 @@ async function fetchFileList() {
   try {
     const r = await fetch('/server/files/list?root=gcodes')
     const d = await r.json()
-    const items = (d.result ?? d)
-    fileList.value = items
-      .filter(f => /\.(gcode|gc|g|gco)$/i.test(f.filename ?? ''))
+    console.log('[gcv] filelist raw:', d)
+    const items = d.result ?? d ?? []
+    const arr = Array.isArray(items) ? items : Object.values(items)
+    fileList.value = arr
+      .filter(f => /\.(gcode|gc|g|gco)$/i.test(f.filename ?? f.name ?? f.path ?? ''))
+      .map(f => ({ ...f, filename: f.filename ?? f.name ?? f.path ?? '' }))
       .sort((a, b) => (b.modified ?? 0) - (a.modified ?? 0))
       .slice(0, 200)
-  } catch { fileList.value = [] }
+    console.log('[gcv] filelist parsed:', fileList.value.length, 'files')
+  } catch (e) {
+    console.error('[gcv] filelist error:', e)
+    fileList.value = []
+  }
   finally { fileListLoading.value = false }
 }
 

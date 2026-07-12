@@ -19,6 +19,7 @@
         <button class="gpw-pick-btn" @click="toggleFilePicker">Load preview…</button>
         <div v-if="filePickerOpen" class="gpw-pick-menu">
           <div v-if="fileListLoading" class="gpw-pick-item gpw-dim">Loading…</div>
+          <div v-else-if="fileList.length === 0" class="gpw-pick-item gpw-dim">No gcode files found</div>
           <button v-else v-for="f in fileList" :key="f.filename"
                   class="gpw-pick-item" @click="manualLoad(f.filename)">
             {{ f.filename }}
@@ -82,11 +83,17 @@ async function fetchFileList() {
   try {
     const r = await fetch('/server/files/list?root=gcodes')
     const d = await r.json()
-    fileList.value = (d.result ?? d)
-      .filter(f => /\.(gcode|gc|g|gco)$/i.test(f.filename ?? ''))
+    const items = d.result ?? d ?? []
+    const arr = Array.isArray(items) ? items : Object.values(items)
+    fileList.value = arr
+      .filter(f => /\.(gcode|gc|g|gco)$/i.test(f.filename ?? f.name ?? ''))
+      .map(f => ({ ...f, filename: f.filename ?? f.name ?? '' }))
       .sort((a, b) => (b.modified ?? 0) - (a.modified ?? 0))
       .slice(0, 100)
-  } catch { fileList.value = [] }
+  } catch (e) {
+    console.error('[gpw] filelist error:', e)
+    fileList.value = []
+  }
   finally { fileListLoading.value = false }
 }
 
