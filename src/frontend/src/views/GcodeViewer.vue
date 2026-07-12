@@ -470,6 +470,12 @@ function onDocClick(e) {
 onMounted(() => {
   initThree()
   document.addEventListener('click', onDocClick)
+  // Opened via double-click from file manager
+  const pending = sessionStorage.getItem('bakesail_gcode_open')
+  if (pending) {
+    sessionStorage.removeItem('bakesail_gcode_open')
+    openFile(pending)
+  }
 })
 
 onUnmounted(() => {

@@ -116,7 +116,7 @@
 
           <div v-for="f in files" :key="'f:'+f.name"
                class="fe-row" :class="{ 'fe-row--sel': selected.has('f:'+f.name) }"
-               @dblclick="openFileEditor(f.name)">
+               @dblclick="onFileDblClick(f.name)">
             <label class="fe-check-cell" @click.stop>
               <input type="checkbox" :checked="selected.has('f:'+f.name)"
                      @change="toggle('f:'+f.name)" />
@@ -168,6 +168,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import FileEditorModal from '../components/FileEditorModal.vue'
 
 // ── Mode ───────────────────────────────────────────────────────────────────────
@@ -438,6 +439,19 @@ const editorOpen      = ref(false)
 const editorFilePath  = ref('')
 const editorFileName  = ref('')
 const editorMoonraker = ref(null)
+
+function onFileDblClick(name) {
+  if (/\.(gcode|gc|g|gco)$/i.test(name)) {
+    // Switch to gcode viewer and open the file
+    // Store filename in sessionStorage so GcodeViewer can pick it up
+    const moonPath = segments.value.slice(1).join('/')
+    const filePath = moonPath ? moonPath + '/' + name : name
+    sessionStorage.setItem('bakesail_gcode_open', filePath)
+    router.push('/gcode-viewer')
+  } else {
+    openFileEditor(name)
+  }
+}
 
 function openFileEditor(name) {
   editorFileName.value = name
