@@ -389,56 +389,58 @@ function updateLayers(layer) {
 let currentFile = null
 let unsub = null
 
+// File metadata cache for layer calculation
+let fileMeta = null
+async function fetchFileMeta(filename) {
+  try {
+    const r = await fetch(`/server/files/metadata?filename=${encodeURIComponent(filename)}`)
+    if (r.ok) fileMeta = (await r.json()).result ?? null
+  } catch { fileMeta = null }
+}
+
+function computeLayerFromPosition(filePos) {
+  if (!fileMeta) return null
+  const total  = fileMeta.layer_count ?? 0
+  const size   = fileMeta.size ?? 0
+  const start  = fileMeta.gcode_start_byte ?? 0
+  if (total < 1 || size <= start) return null
+  return Math.max(0, Math.min(total, Math.floor(((filePos - start) / (size - start)) * total)))
+}
+
 onMounted(() => {
   initThree()
   unsub = subscribeToStatus(data => {
     if (data.print_stats) {
       const ps = data.print_stats
-      // Auto-load when actively printing/paused and file changes
       if (ps.filename && ps.filename !== currentFile) {
         const st = ps.state ?? deviceStore.printerState
         if (st === 'printing' || st === 'paused') {
           currentFile = ps.filename
+          fetchFileMeta(ps.filename)
           loadPreview(ps.filename)
         }
       }
-      // current_layer lives in print_stats.info.current_layer (Klipper/Orca)
-      // or directly as print_stats.current_layer (some configs)
       const layer = ps.info?.current_layer ?? ps.current_layer
       if (layer != null) updateLayers(layer)
-
-      // Also trigger load if state just changed to printing and we have a file
       if ((ps.state === 'printing' || ps.state === 'paused') &&
           !currentFile && deviceStore.filename) {
         currentFile = deviceStore.filename
+        fetchFileMeta(deviceStore.filename)
         loadPreview(deviceStore.filename)
       }
     }
+    // Compute layer from virtual_sdcard file position (same method Mainsail uses)
+    if (data.virtual_sdcard?.file_position != null) {
+      const layer = computeLayerFromPosition(data.virtual_sdcard.file_position)
+      if (layer != null && layer > 0) updateLayers(layer)
+    }
   })
-  // Load immediately if already printing on mount
+
   if (printing.value && deviceStore.filename) {
     currentFile = deviceStore.filename
+    fetchFileMeta(deviceStore.filename)
     loadPreview(deviceStore.filename)
   }
-
-  // Poll current_layer every 5s — Moonraker only diffs changed fields
-  // so if SET_PRINT_STATS_INFO isn't in slicer layer change gcode,
-  // current_layer never appears in subscription diffs
-  const layerPollTimer = setInterval(async () => {
-    if (!printing.value) return
-    try {
-      const r = await fetch('/printer/objects/query?print_stats=current_layer,info')
-      if (!r.ok) return
-      const d = await r.json()
-      const ps = d.result?.status?.print_stats
-      const layer = ps?.info?.current_layer ?? ps?.current_layer
-      if (layer != null) {
-        console.log('[gpw] polled layer:', layer)
-        updateLayers(layer)
-      }
-    } catch { /* ignore */ }
-  }, 5000)
-  window._gpwLayerTimer = layerPollTimer  // cleaned up in onUnmounted
 })
 
 onUnmounted(() => {
@@ -446,7 +448,6 @@ onUnmounted(() => {
   cancelAnimationFrame(animId)
   resizeObs?.disconnect()
   renderer?.dispose()
-  clearInterval(window._gpwLayerTimer)
 })
 
 async function triggerParse() {
