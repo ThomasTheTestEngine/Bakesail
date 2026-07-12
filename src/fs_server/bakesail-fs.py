@@ -48,8 +48,10 @@ class FSHandler(http.server.BaseHTTPRequestHandler):
         elif ep == '/read':      self._read(get('path'))
         elif ep == '/search':         self._search(get('path', '/'), get('q', ''))
         elif ep == '/gcode-preview':      self._gcode_preview(get('path'))
-        elif ep == '/gcode-preview-meta': self._gcode_preview_meta(get('path'))
-        else:                             self._err(404, 'Not found')
+        elif ep == '/gcode-preview-meta':  self._gcode_preview_meta(get('path'))
+        elif ep == '/gcode-full':             self._gcode_full(get('path'))
+        elif ep == '/gcode-full-meta':        self._gcode_full_meta(get('path'))
+        else:                                 self._err(404, 'Not found')
 
     def do_POST(self):
         p, _, qs_raw = self.path.partition('?')
@@ -63,8 +65,9 @@ class FSHandler(http.server.BaseHTTPRequestHandler):
         elif ep == '/duplicate': self._duplicate(get('path'))
         elif ep == '/rename':    self._rename(get('path'), get('name'))
         elif ep == '/write':          self._write(get('path'))
-        elif ep == '/gcode-parse':        self._gcode_parse(get('path'))
-        else:                             self._err(404, 'Not found')
+        elif ep == '/gcode-parse':         self._gcode_parse(get('path'))
+        elif ep == '/gcode-parse-full':     self._gcode_parse_full(get('path'))
+        else:                               self._err(404, 'Not found')
 
     def do_DELETE(self):
         _, _, qs_raw = self.path.partition('?')
@@ -276,6 +279,49 @@ class FSHandler(http.server.BaseHTTPRequestHandler):
         }
         self._json(meta)
 
+    def _gcode_parse_full(self, path):
+        path = os.path.realpath(os.path.expanduser(path))
+        if not os.path.isfile(path):
+            return self._err(404, 'File not found: ' + path)
+        key = path + ':full'
+        out = path + FULL_SUFFIX
+        if key not in PARSE_LOCK:
+            PARSE_LOCK[key] = True
+            FULL_PARSE_QUEUE.put(path)
+            self._json({'status': 'queued', 'out': out})
+        else:
+            self._json({'status': 'already_parsing'})
+
+    def _gcode_full(self, path):
+        path = os.path.realpath(os.path.expanduser(path))
+        out  = path + FULL_SUFFIX
+        if not os.path.isfile(out):
+            return self._err(404, 'Full parse not ready')
+        try:
+            size = os.path.getsize(out)
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/octet-stream')
+            self.send_header('Content-Length', str(size))
+            self.end_headers()
+            with open(out, 'rb') as f:
+                while True:
+                    chunk = f.read(65536)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+        except Exception as e:
+            logging.warning('gcode-full serve error: %s', e)
+
+    def _gcode_full_meta(self, path):
+        path = os.path.realpath(os.path.expanduser(path))
+        out  = path + FULL_SUFFIX
+        key  = path + ':full'
+        self._json({
+            'ready':   os.path.isfile(out),
+            'parsing': key in PARSE_LOCK,
+            'size':    os.path.getsize(out) if os.path.isfile(out) else 0,
+        })
+
     def _search(self, root, q):
         root = os.path.realpath(os.path.expanduser(root))
         q    = q.lower()
@@ -319,6 +365,206 @@ class FSHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         logging.info(fmt, *args)
 
+
+
+FULL_SUFFIX = '.bsgcode'   # full gcode parse cache
+
+# Feature type → index mapping (shared with frontend)
+FEATURE_TYPES = {
+    'outer_wall':   0,
+    'inner_wall':   1,
+    'infill':       2,
+    'support':      3,
+    'skin':         4,   # top/bottom solid layers
+    'travel':       5,
+    'other':        6,
+}
+
+_FEATURE_MAP = [
+    (re.compile(r'TYPE:(?:External perimeter|WALL-OUTER|Outer wall)|FEATURE:Outer wall', re.I), 'outer_wall'),
+    (re.compile(r'TYPE:(?:Perimeter|WALL-INNER|Inner wall|Inner Wall)|FEATURE:Inner wall', re.I), 'inner_wall'),
+    (re.compile(r'TYPE:(?:fill|FILL|Infill|Internal infill)|FEATURE:Internal infill', re.I), 'infill'),
+    (re.compile(r'TYPE:(?:Support|SUPPORT|Support material|Support interface)|FEATURE:Support', re.I), 'support'),
+    (re.compile(r'TYPE:(?:Top surface skin|Solid infill|Bridge infill|skin|Skin)|FEATURE:(?:Top surface|Bridge)', re.I), 'skin'),
+]
+
+def _detect_feature(line):
+    for pat, name in _FEATURE_MAP:
+        if pat.search(line):
+            return name
+    return None
+
+
+def _parse_gcode_full(gcode_path, out_path):
+    """Full gcode parse: all extrusion types + travel moves + feature colours.
+
+    Binary format (BSGF v1):
+      Header 44 bytes:
+        4s  b'BSGF'
+        I   version=1
+        f   minX minY minZ maxX maxY maxZ
+        f   layerHeight
+        I   layerCount
+        I   extrusionSegCount
+        I   travelSegCount
+
+      Layer boundary table (layerCount * 2 * I):
+        Per layer: extr_start_idx, travel_start_idx
+        (index into the flat segment arrays below)
+
+      Extrusion segments (extrusionSegCount * 8 floats + 1 byte feature):
+        Stored sorted by layer.
+        x1 y1 z  x2 y2 z  [unused_f unused_f]  feature_type_byte
+        = 8 floats (32 bytes) + 1 byte, padded to 33 bytes per seg
+
+      Travel segments (travelSegCount * 6 floats):
+        x1 y1 z  x2 y2 z
+    """
+    try:
+        logging.info('[full-parse] parsing %s', gcode_path)
+
+        layers = []          # [{'z': f, 'h': f, 'extr': [(x1,y1,x2,y2,feat)], 'trav': [(x1,y1,x2,y2)]}]
+        cur_z = 0.0
+        prev_z = None
+        cur_extr = []
+        cur_trav = []
+        cur_feature = 'other'
+        last_x = last_y = None
+        is_traveling = False
+
+        min_x = min_y = min_z =  1e9
+        max_x = max_y = max_z = -1e9
+
+        def flush():
+            nonlocal cur_extr, cur_trav, prev_z
+            if prev_z is not None:
+                layers.append({'z': prev_z, 'extr': cur_extr, 'trav': cur_trav})
+            cur_extr = []
+            cur_trav = []
+
+        with open(gcode_path, 'r', errors='replace', buffering=1<<20) as f:
+            for raw in f:
+                line = raw.strip()
+                if not line:
+                    continue
+
+                if line.startswith(';'):
+                    feat = _detect_feature(line)
+                    if feat:
+                        cur_feature = feat
+                        is_traveling = False
+                    continue
+
+                zm = _Z_MOVE_RE.match(line)
+                if zm:
+                    new_z = float(zm.group(1))
+                    if abs(new_z - cur_z) > 0.001:
+                        flush()
+                        prev_z = cur_z
+                        cur_z  = new_z
+                        min_z = min(min_z, new_z)
+                        max_z = max(max_z, new_z)
+                        last_x = last_y = None
+                    continue
+
+                if not line.upper().startswith('G1'):
+                    if line.upper().startswith('G0'):
+                        is_traveling = True
+                    continue
+
+                m = _XY_RE.search(line)
+                if not m:
+                    continue
+                x, y = float(m.group(1)), float(m.group(2))
+                e_str = m.group(3)
+                has_e = e_str is not None
+                extruding = has_e and float(e_str) > 0
+
+                if last_x is not None:
+                    if extruding and not is_traveling:
+                        fi = FEATURE_TYPES.get(cur_feature, 6)
+                        cur_extr.append((last_x, last_y, x, y, fi))
+                        min_x = min(min_x, last_x, x)
+                        max_x = max(max_x, last_x, x)
+                        min_y = min(min_y, last_y, y)
+                        max_y = max(max_y, last_y, y)
+                    elif not extruding:
+                        cur_trav.append((last_x, last_y, x, y))
+                        is_traveling = True
+
+                if has_e and extruding:
+                    is_traveling = False
+                last_x, last_y = x, y
+
+        flush()
+
+        # Modal layer height
+        heights = []
+        for i in range(1, len(layers)):
+            dz = round(layers[i]['z'] - layers[i-1]['z'], 4)
+            if 0.01 < dz < 1.0:
+                heights.append(dz)
+        modal_h = max(set(heights), key=heights.count) if heights else 0.2
+
+        total_extr  = sum(len(l['extr']) for l in layers)
+        total_trav  = sum(len(l['trav']) for l in layers)
+
+        with open(out_path, 'wb') as f:
+            # Header
+            f.write(struct.pack('<4sIfffffffiIII',
+                b'BSGF', 1,
+                min_x if min_x < 1e8 else 0,
+                min_y if min_y < 1e8 else 0,
+                min_z if min_z < 1e8 else 0,
+                max_x if max_x > -1e8 else 0,
+                max_y if max_y > -1e8 else 0,
+                max_z if max_z > -1e8 else 0,
+                modal_h,
+                len(layers), total_extr, total_trav,
+            ))
+
+            # Layer boundary table: [extr_start, trav_start] per layer
+            ei = ti = 0
+            for layer in layers:
+                f.write(struct.pack('<II', ei, ti))
+                ei += len(layer['extr'])
+                ti += len(layer['trav'])
+            # sentinel
+            f.write(struct.pack('<II', total_extr, total_trav))
+
+            # Extrusion segments (sorted by layer naturally)
+            for layer in layers:
+                z = layer['z']
+                for (x1, y1, x2, y2, fi) in layer['extr']:
+                    f.write(struct.pack('<ffffffB', x1, y1, z, x2, y2, z, fi))
+
+            # Travel segments
+            for layer in layers:
+                z = layer['z']
+                for (x1, y1, x2, y2) in layer['trav']:
+                    f.write(struct.pack('<ffffff', x1, y1, z, x2, y2, z))
+
+        logging.info('[full-parse] wrote %s (%d layers, %d extr, %d trav)',
+                     out_path, len(layers), total_extr, total_trav)
+    except Exception as e:
+        logging.exception('[full-parse] error for %s: %s', gcode_path, e)
+    finally:
+        PARSE_LOCK.pop(gcode_path + ':full', None)
+
+
+FULL_PARSE_QUEUE = queue.Queue()
+
+def _full_parse_worker():
+    while True:
+        path = FULL_PARSE_QUEUE.get()
+        try:
+            out = path + FULL_SUFFIX
+            _parse_gcode_full(path, out)
+        finally:
+            FULL_PARSE_QUEUE.task_done()
+
+_tf = threading.Thread(target=_full_parse_worker, daemon=True)
+_tf.start()
 
 if __name__ == '__main__':
     server = http.server.HTTPServer(('127.0.0.1', FS_PORT), FSHandler)

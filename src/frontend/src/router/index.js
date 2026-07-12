@@ -13,6 +13,7 @@ import JobQueue        from '../views/JobQueue.vue'
 import MaterialLibrary from '../views/MaterialLibrary.vue'
 import FileExplorer      from '../views/FileExplorer.vue'
 import PrinterJobManager from '../views/PrinterJobManager.vue'
+import GcodeViewer      from '../views/GcodeViewer.vue'
 
 export const routes_extra = [
   { path: '/wizard', name: 'wizard', component: SetupWizard },
@@ -52,6 +53,14 @@ export const ALL_TABS = [
     label: 'Job Manager',
     icon: '⊡',
     component: PrinterJobManager,
+    onlyFor: ['3d_printer'],
+  },
+  {
+    path: '/gcode-viewer',
+    name: 'gcode-viewer',
+    label: 'Gcode Viewer',
+    icon: '◈',
+    component: GcodeViewer,
     onlyFor: ['3d_printer'],
   },
   {
