@@ -211,7 +211,9 @@ async function loadFiles() {
     const r = await fetch('/server/files/directory?path=gcodes&extended=true')
     if (!r.ok) throw new Error(`HTTP ${r.status}`)
     const d = await r.json()
-    files.value = (d.result?.files ?? []).sort((a, b) => b.modified - a.modified)
+    files.value = (d.result?.files ?? [])
+      .filter(f => /\.(gcode|gc|g|gco)$/i.test(f.filename))
+      .sort((a, b) => b.modified - a.modified)
   } catch (e) {
     filesError.value = `Failed to load file list: ${e.message}`
   } finally {
