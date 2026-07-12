@@ -132,17 +132,20 @@ function initThree() {
   renderer.setClearColor(C.bg, 0)
 
   scene  = new THREE.Scene()
-  camera = new THREE.PerspectiveCamera(40, W / H, 0.1, 5000)
+  camera = new THREE.PerspectiveCamera(40, W / H, 0.01, 5000)
   camera.position.set(200, 300, 400)
 
   controls = new OrbitControls(camera, canvasEl.value)
   controls.enableDamping = true
   controls.dampingFactor = 0.08
+  controls.minDistance = 0.5
 
-  const ambLight = new THREE.AmbientLight(0xffffff, 0.6)
-  const dirLight = new THREE.DirectionalLight(0xffffff, 0.8)
+  const ambLight = new THREE.AmbientLight(0xffffff, 0.7)
+  const dirLight = new THREE.DirectionalLight(0xffffff, 1.0)
   dirLight.position.set(1, 2, 1.5)
-  scene.add(ambLight, dirLight)
+  const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.4)
+  dirLight2.position.set(-1, -1, -1)
+  scene.add(ambLight, dirLight, dirLight2)
 
   ghostGroup    = new THREE.Group()
   finishedGroup = new THREE.Group()
@@ -276,23 +279,33 @@ function parseBinary(buf) {
       const x2 = dv.getFloat32(off, true) - cx; off += 4
       const y2 = dv.getFloat32(off, true) - cy; off += 4
 
-      // Extrude segment to a thin quad (extrusionWidth wide, h tall)
-      // Direction vector
+      // Flat horizontal quad lying on XY plane like deposited filament
+      // Width across the bead, height = layer height (h)
       const dx = x2 - x1, dy = y2 - y1
       const len = Math.sqrt(dx*dx + dy*dy)
       if (len < 0.001) continue
 
-      const EW = 0.35 / 2  // half extrusion width
+      const EW = 0.2  // half bead width
       const nx = -dy/len * EW, ny = dx/len * EW
+      const zb = z - minZ        // bottom of layer
+      const zt = zb + h          // top of layer
 
-      // 4 corners of the ribbon, at this layer's Z
-      const z0 = z - minZ, z1 = z - minZ + h
-
-      // Two triangles per segment face (XZ plane side, ignoring top/bottom for perf)
-      // We just draw the path as a rectangle facing the camera — use two tris
+      // Top face (facing up, always lit by ambient)
       verts.push(
-        x1+nx, z0, -(y1+ny),   x1-nx, z0, -(y1-ny),   x2+nx, z1, -(y2+ny),
-        x2+nx, z1, -(y2+ny),   x1-nx, z0, -(y1-ny),   x2-nx, z1, -(y2-ny),
+        x1+nx, zt, -(y1+ny),   x1-nx, zt, -(y1-ny),   x2-nx, zt, -(y2-ny),
+        x1+nx, zt, -(y1+ny),   x2-nx, zt, -(y2-ny),   x2+nx, zt, -(y2+ny),
+      )
+      // Bottom face
+      verts.push(
+        x1+nx, zb, -(y1+ny),   x2+nx, zb, -(y2+ny),   x2-nx, zb, -(y2-ny),
+        x1+nx, zb, -(y1+ny),   x2-nx, zb, -(y2-ny),   x1-nx, zb, -(y1-ny),
+      )
+      // Side faces
+      verts.push(
+        x1+nx, zb, -(y1+ny),   x1+nx, zt, -(y1+ny),   x2+nx, zt, -(y2+ny),
+        x1+nx, zb, -(y1+ny),   x2+nx, zt, -(y2+ny),   x2+nx, zb, -(y2+ny),
+        x1-nx, zt, -(y1-ny),   x1-nx, zb, -(y1-ny),   x2-nx, zb, -(y2-ny),
+        x1-nx, zt, -(y1-ny),   x2-nx, zb, -(y2-ny),   x2-nx, zt, -(y2-ny),
       )
       polyPoints.push(new THREE.Vector2(x1, -y1))
       if (si === nSegs - 1) polyPoints.push(new THREE.Vector2(x2, -y2))

@@ -155,13 +155,14 @@ function initThree() {
   scene  = new THREE.Scene()
   scene.background = new THREE.Color(0x0d1117)
 
-  camera = new THREE.PerspectiveCamera(40, W / H, 0.1, 10000)
+  camera = new THREE.PerspectiveCamera(40, W / H, 0.01, 10000)
   camera.position.set(200, 300, 400)
 
   controls = new OrbitControls(camera, canvasEl.value)
   controls.enableDamping  = true
   controls.dampingFactor  = 0.07
   controls.screenSpacePanning = true
+  controls.minDistance = 0.5
 
   // Grid
   const grid = new THREE.GridHelper(300, 30, 0x222233, 0x1a1a2a)

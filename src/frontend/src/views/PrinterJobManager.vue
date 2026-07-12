@@ -219,11 +219,9 @@ async function loadFiles() {
 
 async function startPrint(f) {
   try {
-    await fetch('/printer/print/start', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename: f.path }),
-    })
+    // Use Moonraker's server API (not raw Klipper) so job queue and
+    // slicer start gcode (PRINT_START macro) are handled correctly
+    await send('printer.print.start', { filename: f.path })
   } catch (e) {
     console.warn('[JobManager] startPrint failed:', e)
   }
