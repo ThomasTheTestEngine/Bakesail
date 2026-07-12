@@ -394,7 +394,6 @@ onMounted(() => {
   unsub = subscribeToStatus(data => {
     if (data.print_stats) {
       const ps = data.print_stats
-      console.log('[gpw] print_stats:', JSON.stringify(ps))
       // Auto-load when actively printing/paused and file changes
       if (ps.filename && ps.filename !== currentFile) {
         const st = ps.state ?? deviceStore.printerState
@@ -421,6 +420,25 @@ onMounted(() => {
     currentFile = deviceStore.filename
     loadPreview(deviceStore.filename)
   }
+
+  // Poll current_layer every 5s — Moonraker only diffs changed fields
+  // so if SET_PRINT_STATS_INFO isn't in slicer layer change gcode,
+  // current_layer never appears in subscription diffs
+  const layerPollTimer = setInterval(async () => {
+    if (!printing.value) return
+    try {
+      const r = await fetch('/printer/objects/query?print_stats=current_layer,info')
+      if (!r.ok) return
+      const d = await r.json()
+      const ps = d.result?.status?.print_stats
+      const layer = ps?.info?.current_layer ?? ps?.current_layer
+      if (layer != null) {
+        console.log('[gpw] polled layer:', layer)
+        updateLayers(layer)
+      }
+    } catch { /* ignore */ }
+  }, 5000)
+  window._gpwLayerTimer = layerPollTimer  // cleaned up in onUnmounted
 })
 
 onUnmounted(() => {
@@ -428,6 +446,7 @@ onUnmounted(() => {
   cancelAnimationFrame(animId)
   resizeObs?.disconnect()
   renderer?.dispose()
+  clearInterval(window._gpwLayerTimer)
 })
 
 async function triggerParse() {
