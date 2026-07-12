@@ -275,9 +275,14 @@ async function loadAndRender(fsPath) {
   parseProgress.value = 40
   await nextTick()
 
-  buildScene(buf)
-  parseProgress.value = 100
-  parseState.value    = 'ready'
+  try {
+    buildScene(buf)
+    parseProgress.value = 100
+    parseState.value    = 'ready'
+  } catch (e) {
+    console.error('[gcv] buildScene error:', e)
+    parseState.value = 'error'
+  }
 }
 
 // ── Build Three.js scene from binary ─────────────────────────────────────────
@@ -289,8 +294,10 @@ function buildScene(buf) {
   const dv   = new DataView(buf)
   let off    = 0
 
-  const magic = String.fromCharCode(...new Uint8Array(buf, 0, 4))
-  if (magic !== 'BSGF') { parseState.value = 'error'; return }
+  const magicBytes = new Uint8Array(buf, 0, 4)
+  const magic = String.fromCharCode(magicBytes[0], magicBytes[1], magicBytes[2], magicBytes[3])
+  console.log('[gcv] magic:', magic, 'bufsize:', buf.byteLength)
+  if (magic !== 'BSGF') { parseState.value = 'error'; console.error('[gcv] bad magic:', magic); return }
   off = 4
 
   /* version */dv.getUint32(off, true); off += 4
@@ -309,6 +316,7 @@ function buildScene(buf) {
   cy   = (bMinY + bMaxY) / 2
   minZ = bMinZ
 
+  console.log('[gcv] layers:', nLayers, 'extr:', nExtr, 'trav:', nTrav, 'off after header:', off)
   totalLayers.value = nLayers
   totalSegs.value   = nExtr
   layerMin.value    = 1
@@ -352,7 +360,7 @@ function buildScene(buf) {
     const x2 = dv.getFloat32(o + 12, true) - cx
     const y2 = dv.getFloat32(o + 16, true) - cy
     const z2 = dv.getFloat32(o + 20, true) - minZ
-    const fi = new Uint8Array(buf, o + 24, 1)[0]
+    const fi = dv.getUint8(o + 24)
 
     const pi = s * 6
     extrPos[pi]   = x1;  extrPos[pi+1] = z1;  extrPos[pi+2] = -y1
