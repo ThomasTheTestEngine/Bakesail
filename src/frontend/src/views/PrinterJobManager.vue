@@ -223,7 +223,7 @@ async function startPrint(f) {
   try {
     // Use Moonraker's REST endpoint — triggers full gcode file including
     // slicer start gcode (PRINT_START macro with temp parameters)
-    const params = new URLSearchParams({ filename: f.path })
+    const params = new URLSearchParams({ filename: f.filename })
     const r = await fetch(`/printer/print/start?${params}`, { method: 'POST' })
     if (!r.ok) {
       const err = await r.json().catch(() => ({}))
