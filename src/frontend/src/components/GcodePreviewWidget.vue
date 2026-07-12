@@ -394,6 +394,7 @@ onMounted(() => {
   unsub = subscribeToStatus(data => {
     if (data.print_stats) {
       const ps = data.print_stats
+      console.log('[gpw] print_stats:', JSON.stringify(ps))
       // Auto-load when actively printing/paused and file changes
       if (ps.filename && ps.filename !== currentFile) {
         const st = ps.state ?? deviceStore.printerState
