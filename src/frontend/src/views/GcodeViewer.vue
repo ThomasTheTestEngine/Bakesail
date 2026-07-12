@@ -266,8 +266,10 @@ async function pollUntilReady(fsPath) {
 async function loadAndRender(fsPath) {
   parseState.value    = 'loading'
   parseProgress.value = 0
+  console.log('[gcv] loadAndRender:', fsPath)
 
   const r = await fetch(`/bakesail/gcode-full?path=${encodeURIComponent(fsPath)}`)
+  console.log('[gcv] binary fetch status:', r.status, r.ok)
   if (!r.ok) { parseState.value = 'error'; return }
 
   parseProgress.value = 10
