@@ -429,12 +429,12 @@ async function triggerParse() {
 .gpw-overlay {
   position: absolute; inset: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  background: rgba(13,17,23,0.85);
+  background: #0d1117;
   pointer-events: none;
   z-index: 10;
 }
 .gpw-overlay > button { pointer-events: auto; }
-.gpw-overlay-text { font-size: 12px; color: var(--text-muted); }
+.gpw-overlay-text { font-size: 12px; color: #8888aa; }
 .gpw-hud {
   position: absolute; bottom: 8px; left: 10px;
   font-size: 11px; font-family: var(--font-mono); color: var(--text-muted);
