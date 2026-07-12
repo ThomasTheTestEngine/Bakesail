@@ -356,6 +356,7 @@ function buildCap(polyPoints, zPos, mat) {
 // ── Layer updates ─────────────────────────────────────────────────────────────
 function updateLayers(layer) {
   if (state.value !== 'ready') return
+  console.log('[gpw] updateLayers:', layer, 'of', layerMeshes.length)
   currentLayer.value = layer
 
   for (let i = 0; i < layerMeshes.length; i++) {
@@ -393,7 +394,7 @@ onMounted(() => {
   unsub = subscribeToStatus(data => {
     if (data.print_stats) {
       const ps = data.print_stats
-      // Only auto-load when actively printing/paused
+      // Auto-load when actively printing/paused and file changes
       if (ps.filename && ps.filename !== currentFile) {
         const st = ps.state ?? deviceStore.printerState
         if (st === 'printing' || st === 'paused') {
@@ -401,7 +402,17 @@ onMounted(() => {
           loadPreview(ps.filename)
         }
       }
-      if (ps.current_layer != null) updateLayers(ps.current_layer)
+      // current_layer lives in print_stats.info.current_layer (Klipper/Orca)
+      // or directly as print_stats.current_layer (some configs)
+      const layer = ps.info?.current_layer ?? ps.current_layer
+      if (layer != null) updateLayers(layer)
+
+      // Also trigger load if state just changed to printing and we have a file
+      if ((ps.state === 'printing' || ps.state === 'paused') &&
+          !currentFile && deviceStore.filename) {
+        currentFile = deviceStore.filename
+        loadPreview(deviceStore.filename)
+      }
     }
   })
   // Load immediately if already printing on mount

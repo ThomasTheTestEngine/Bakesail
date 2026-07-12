@@ -51,7 +51,7 @@ const SUBSCRIBED_OBJECTS = {
   extruder:        ['temperature', 'target', 'power', 'pressure_advance', 'smooth_time'],
   heater_bed:      ['temperature', 'target', 'power'],
   fan:             ['speed'],
-  print_stats:     ['filename', 'state', 'print_duration', 'filament_used', 'info'],
+  print_stats:     ['filename', 'state', 'print_duration', 'filament_used', 'info', 'current_layer', 'total_layer'],
   display_status:  ['progress', 'message'],
   virtual_sdcard:  ['progress', 'is_active', 'file_position', 'file_size'],
   toolhead:        ['position', 'homed_axes', 'max_velocity', 'max_accel', 'square_corner_velocity'],
