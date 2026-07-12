@@ -515,7 +515,7 @@ def _parse_gcode_full(gcode_path, out_path):
 
         with open(out_path, 'wb') as f:
             # Header
-            f.write(struct.pack('<4sIfffffffiIII',
+            f.write(struct.pack('<4sIfffffffIII',
                 b'BSGF', 1,
                 min_x if min_x < 1e8 else 0,
                 min_y if min_y < 1e8 else 0,
