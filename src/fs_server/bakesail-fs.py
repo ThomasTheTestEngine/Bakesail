@@ -461,14 +461,17 @@ def _parse_gcode_full(gcode_path, out_path):
 
                 zm = _Z_MOVE_RE.match(line)
                 if zm:
-                    new_z = float(zm.group(1))
-                    if abs(new_z - cur_z) > 0.001:
+                    new_z = round(float(zm.group(1)), 4)
+                    # Ignore Z-hops: only treat as new layer if Z increases
+                    # by at least 0.05mm above the current print Z
+                    if new_z > cur_z + 0.04:
                         flush()
                         prev_z = cur_z
                         cur_z  = new_z
                         min_z = min(min_z, new_z)
                         max_z = max(max_z, new_z)
                         last_x = last_y = None
+                    # Z-hops (up then back) are silently ignored
                     continue
 
                 if not line.upper().startswith('G1'):
@@ -660,17 +663,17 @@ def _parse_gcode_preview(gcode_path, out_path):
                         want_extrusion = False
                     continue
 
-                # Z change → new layer boundary
+                # Z change → new layer boundary (ignore Z-hops < 0.05mm rise)
                 zm = _Z_MOVE_RE.match(line)
                 if zm:
-                    new_z = float(zm.group(1))
-                    if new_z != cur_z:
+                    new_z = round(float(zm.group(1)), 4)
+                    if new_z > cur_z + 0.04:
                         flush_layer()
                         prev_z = cur_z
                         cur_z  = new_z
                         min_z = min(min_z, new_z)
                         max_z = max(max_z, new_z)
-                        last_x = last_y = None  # reset position on layer change
+                        last_x = last_y = None
 
                 # XY moves in a wanted feature
                 if not want_extrusion:
