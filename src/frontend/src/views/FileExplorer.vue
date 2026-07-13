@@ -179,6 +179,25 @@ import FileEditorModal from '../components/FileEditorModal.vue'
 
 // ── Mode ───────────────────────────────────────────────────────────────────────
 const router = useRouter()
+
+function savePosition() {
+  sessionStorage.setItem('fe_adv',      String(adv.value))
+  sessionStorage.setItem('fe_segments', JSON.stringify(segments.value))
+  sessionStorage.setItem('fe_absPath',  absPath.value)
+}
+
+async function restorePosition() {
+  const savedAdv = sessionStorage.getItem('fe_adv')
+  if (savedAdv === null) return  // first visit, nothing to restore
+  if (savedAdv === 'true') {
+    adv.value     = true
+    absPath.value = sessionStorage.getItem('fe_absPath') || '/'
+  } else {
+    const seg = sessionStorage.getItem('fe_segments')
+    segments.value = seg ? JSON.parse(seg) : []
+  }
+  // fetchDir fires via watcher automatically
+}
 const adv = ref(false)   // false = safe/Moonraker, true = advanced/bakesail
 const parsing  = ref(false)
 const parseMsg = ref('')
@@ -350,8 +369,15 @@ async function toggleMode() {
 }
 
 // Watch path changes and refetch
-watch([segments, absPath, adv], fetchDir, { deep: true })
-onMounted(fetchDir)
+watch([segments, absPath, adv], async () => {
+  await fetchDir()
+  savePosition()
+}, { deep: true })
+onMounted(async () => {
+  await restorePosition()
+  // If nothing to restore, fetchDir fires via watcher on initial segments=[]
+  if (!sessionStorage.getItem('fe_adv')) await fetchDir()
+})
 
 // ── Selection ─────────────────────────────────────────────────────────────────
 function toggle(key) {

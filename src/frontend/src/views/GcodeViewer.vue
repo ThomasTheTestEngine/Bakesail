@@ -211,12 +211,28 @@ function initThree() {
   const grid = new THREE.GridHelper(300, 30, 0x222233, 0x1a1a2a)
   scene.add(grid)
 
+  // Keep rendering in background — Three.js at idle uses <1% CPU.
+  // Only pause if page is hidden AND user has been away >10 minutes.
+  let hiddenAt = null
+  const PAUSE_AFTER_MS = 10 * 60 * 1000  // 10 minutes
+
   function animate() {
     animId = requestAnimationFrame(animate)
+    if (document.hidden && hiddenAt && Date.now() - hiddenAt > PAUSE_AFTER_MS) return
     controls.update()
     renderer.render(scene, camera)
   }
   animate()
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      hiddenAt = Date.now()
+    } else {
+      hiddenAt = null
+      // Resume — request a new frame in case the loop stalled
+      if (!animId) animate()
+    }
+  })
 
   resizeObs = new ResizeObserver(() => {
     if (!wrapEl.value) return
@@ -749,9 +765,9 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('click', onDocClick)
-  cancelAnimationFrame(animId)
+  // Don't cancel animId — keep rendering in background for quick return
   resizeObs?.disconnect()
-  renderer?.dispose()
+  // renderer?.dispose() — intentionally not disposing so scene persists
   extrusionGeo?.dispose()
   travelGeo?.dispose()
 })
