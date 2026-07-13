@@ -513,9 +513,9 @@ function buildRibbonGeometry(buf) {
 
   totalModelLayers.value = nLayers
 
-  // Clear old model geometry
-  if (modelGhostGroup)    { scene.remove(modelGhostGroup);    modelGhostGroup.clear() }
-  if (modelFinishedGroup) { scene.remove(modelFinishedGroup); modelFinishedGroup.clear() }
+  // Always create fresh groups (buildScene may have null'd the old ones)
+  if (modelGhostGroup)    scene.remove(modelGhostGroup)
+  if (modelFinishedGroup) scene.remove(modelFinishedGroup)
   modelGhostGroup    = new THREE.Group()
   modelFinishedGroup = new THREE.Group()
   modelLayerMeshes   = []
@@ -625,18 +625,19 @@ async function setViewMode(mode) {
 
 function applyViewModeVisibility() {
   if (!modelLayerMeshes.length) return
+  if (!modelGhostGroup || !modelFinishedGroup) return
   if (viewMode.value === 'model') {
-    // All layers opaque, support layers visible based on toggle
-    if (modelGhostGroup)    modelGhostGroup.visible    = false
-    if (modelFinishedGroup) modelFinishedGroup.visible = true
+    modelGhostGroup.visible    = false
+    modelFinishedGroup.visible = true
     for (const lm of modelLayerMeshes) {
       if (!lm) continue
       lm.ghost.visible    = false
       lm.finished.visible = true
     }
   } else if (viewMode.value === 'preview') {
-    if (modelGhostGroup)    modelGhostGroup.visible    = true
-    if (modelFinishedGroup) modelFinishedGroup.visible = true
+    modelGhostGroup.visible    = true
+    modelFinishedGroup.visible = true
+    previewLayer.value = Math.floor(totalModelLayers.value / 2)  // start at 50%
     updatePreviewLayer()
   }
 }

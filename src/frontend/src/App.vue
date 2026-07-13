@@ -137,27 +137,26 @@
             </div>
           </Teleport>
 
-          <!-- Center: file + progress -->
-          <div class="topbar-center" v-if="klippyState === 'ready' && deviceStore.printerState !== 'standby'">
-            <div class="topbar-file">
-              <span class="topbar-filename">{{ deviceStore.filename || 'No file' }}</span>
-              <span class="topbar-pct" v-if="deviceStore.progress > 0">{{ (deviceStore.progress * 100).toFixed(1) }}%</span>
-            </div>
-            <div class="topbar-progress-track" v-if="deviceStore.progress > 0">
-              <div class="topbar-progress-fill" :style="{ width: (deviceStore.progress * 100).toFixed(1) + '%' }"></div>
-            </div>
-            <span class="topbar-eta" v-if="deviceStore.progress > 0 && deviceStore.progress < 1 && deviceStore.printDuration > 0">
-              ETA {{ topbarEta }}
-            </span>
-          </div>
-
           <!-- Right: print controls + system -->
           <div class="topbar-actions" ref="topbarActionsEl">
             <button v-if="klippyState === 'ready' && deviceStore.printerState === 'standby'"
                     class="topbar-btn topbar-btn--lit" @click="openFileDialog" title="Load file">
 <i class="mdi mdi-file-upload-outline" style="font-size:14px;margin-right:3px;vertical-align:-2px"></i>Load
             </button>
+            <!-- Print progress dial + controls — shown while printing/paused -->
             <template v-if="deviceStore.printerState === 'printing' || deviceStore.printerState === 'paused'">
+              <div class="topbar-progress-dial" title="{{ (deviceStore.progress * 100).toFixed(1) }}%">
+                <svg viewBox="0 0 36 36" class="topbar-dial-svg">
+                  <circle cx="18" cy="18" r="14" fill="none" stroke="var(--border-2)" stroke-width="3"/>
+                  <circle cx="18" cy="18" r="14" fill="none" stroke="var(--amber)" stroke-width="3"
+                          stroke-dasharray="87.96"
+                          :stroke-dashoffset="87.96 * (1 - (deviceStore.progress ?? 0))"
+                          stroke-linecap="round" transform="rotate(-90 18 18)"/>
+                  <text x="18" y="22" text-anchor="middle" font-size="9" fill="var(--amber)" font-family="var(--font-mono)">
+                    {{ Math.round((deviceStore.progress ?? 0) * 100) }}%
+                  </text>
+                </svg>
+              </div>
               <button class="topbar-btn"
                       @click="topbarGcode(deviceStore.printerState === 'printing' ? 'PAUSE' : 'RESUME')">
                 {{ deviceStore.printerState === 'printing' ? '⏸ Pause' : '▶ Resume' }}
@@ -1975,6 +1974,12 @@ a { color: inherit; text-decoration: none; }
   color: var(--teal);
   font-family: var(--font-mono);
 }
+
+.topbar-progress-dial {
+  display: flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; flex-shrink: 0;
+}
+.topbar-dial-svg { width: 36px; height: 36px; }
 
 .topbar-progress-track {
   height: 3px;
