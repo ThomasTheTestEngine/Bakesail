@@ -628,6 +628,11 @@ _SUPPORT_RE = re.compile(
     r'|FEATURE:Support',
     re.IGNORECASE
 )
+_SKIN_RE = re.compile(
+    r'TYPE:(?:Bottom surface skin|Top surface skin|Solid infill|Bridge infill|Internal solid infill)'
+    r'|FEATURE:(?:Top surface|Bottom surface|Bridge|Solid)',
+    re.IGNORECASE
+)
 _LAYER_RE  = re.compile(r'(?:^;LAYER:|layer_num|layer_change)', re.IGNORECASE)
 _Z_MOVE_RE = re.compile(r'^G[01]\s[^;]*Z([\d.]+)', re.IGNORECASE)
 _XY_RE     = re.compile(r'X([\d.]+)\s*Y([\d.]+)(?:\s*E([\d.eE+\-]+))?', re.IGNORECASE)
