@@ -434,6 +434,8 @@ def _parse_gcode_full(gcode_path, out_path):
         cur_trav = []
         cur_feature = 'other'
         last_x = last_y = None
+        last_e = 0.0
+        rel_e  = False
         is_traveling = False
 
         min_x = min_y = min_z =  1e9
@@ -451,6 +453,11 @@ def _parse_gcode_full(gcode_path, out_path):
                 line = raw.strip()
                 if not line:
                     continue
+
+                if line.upper().startswith('M83'):
+                    rel_e = True; continue
+                if line.upper().startswith('M82'):
+                    rel_e = False; continue
 
                 if line.startswith(';'):
                     feat = _detect_feature(line)
@@ -485,7 +492,15 @@ def _parse_gcode_full(gcode_path, out_path):
                 x, y = float(m.group(1)), float(m.group(2))
                 e_str = m.group(3)
                 has_e = e_str is not None
-                extruding = has_e and float(e_str) > 0
+                extruding = False
+                if has_e:
+                    e_val = float(e_str)
+                    if rel_e:
+                        extruding = e_val > 0.0001
+                        last_e += e_val
+                    else:
+                        extruding = e_val > last_e + 0.0001
+                        last_e = e_val
 
                 if last_x is not None:
                     if extruding and not is_traveling:
@@ -635,6 +650,8 @@ def _parse_gcode_preview(gcode_path, out_path):
         want_extrusion = False  # are we in a feature we care about?
         last_x   = None
         last_y   = None
+        last_e   = 0.0          # track absolute E position
+        rel_e    = False        # M83 = relative extrusion
         min_x = min_y = min_z =  1e9
         max_x = max_y = max_z = -1e9
 
@@ -649,6 +666,12 @@ def _parse_gcode_preview(gcode_path, out_path):
                 line = raw.strip()
                 if not line:
                     continue
+
+                # Track extrusion mode
+                if line.upper().startswith('M83'):
+                    rel_e = True; continue
+                if line.upper().startswith('M82'):
+                    rel_e = False; continue
 
                 # Comment lines — detect feature/layer changes
                 if line.startswith(';'):
@@ -685,7 +708,15 @@ def _parse_gcode_preview(gcode_path, out_path):
                     continue
                 x, y = float(m.group(1)), float(m.group(2))
                 e_str = m.group(3)
-                is_extrusion = e_str is not None and float(e_str) > 0
+                is_extrusion = False
+                if e_str is not None:
+                    e_val = float(e_str)
+                    if rel_e:
+                        is_extrusion = e_val > 0.0001
+                        last_e += e_val
+                    else:
+                        is_extrusion = e_val > last_e + 0.0001
+                        last_e = e_val
 
                 if is_extrusion and last_x is not None:
                     cur_segs.append((last_x, last_y, x, y))
