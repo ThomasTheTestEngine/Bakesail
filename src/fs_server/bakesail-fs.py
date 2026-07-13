@@ -428,8 +428,9 @@ def _parse_gcode_full(gcode_path, out_path):
         logging.info('[full-parse] parsing %s', gcode_path)
 
         layers = []          # [{'z': f, 'h': f, 'extr': [(x1,y1,x2,y2,feat)], 'trav': [(x1,y1,x2,y2)]}]
-        cur_z = 0.0
-        prev_z = None
+        cur_z   = 0.0
+        print_z = 0.0
+        prev_z  = None
         cur_extr = []
         cur_trav = []
         cur_feature = 'other'
@@ -454,10 +455,19 @@ def _parse_gcode_full(gcode_path, out_path):
                 if not line:
                     continue
 
-                if line.upper().startswith('M83'):
+                lu = line.upper().split(';')[0].strip()
+                if lu == 'M83' or lu.startswith('M83 '):
                     rel_e = True; continue
-                if line.upper().startswith('M82'):
+                if lu == 'M82' or lu.startswith('M82 '):
                     rel_e = False; continue
+                if lu.startswith('G92'):
+                    if 'E' in lu:
+                        import re as _re
+                        em = _re.search(r'E([\d.]+)', lu)
+                        if em:
+                            last_e = float(em.group(1))
+                            last_x = last_y = None
+                    continue
 
                 if line.startswith(';'):
                     feat = _detect_feature(line)
@@ -469,16 +479,17 @@ def _parse_gcode_full(gcode_path, out_path):
                 zm = _Z_MOVE_RE.match(line)
                 if zm:
                     new_z = round(float(zm.group(1)), 4)
-                    # Ignore Z-hops: only treat as new layer if Z increases
-                    # by at least 0.05mm above the current print Z
-                    if new_z > cur_z + 0.04:
+                    cur_z = new_z  # always track current Z
+                    # New layer = Z increases by >= 0.04mm above last PRINT Z
+                    # (not above last hop Z, which would skip real layers)
+                    if new_z > print_z + 0.04:
                         flush()
-                        prev_z = cur_z
-                        cur_z  = new_z
+                        prev_z  = print_z
+                        print_z = new_z
                         min_z = min(min_z, new_z)
                         max_z = max(max_z, new_z)
                         last_x = last_y = None
-                    # Z-hops (up then back) are silently ignored
+                    # Z moves down or small change = Z-hop return, ignored
                     continue
 
                 if not line.upper().startswith('G1'):
@@ -644,7 +655,8 @@ def _parse_gcode_preview(gcode_path, out_path):
     try:
         logging.info('[preview] parsing %s', gcode_path)
         layers   = []          # list of {'z': float, 'segs': list of (x1,y1,x2,y2)}
-        cur_z    = 0.0
+        cur_z    = 0.0    # last seen Z (may be a hop)
+        print_z  = 0.0    # last confirmed print-layer Z
         prev_z   = None
         cur_segs = []
         want_extrusion = False  # are we in a feature we care about?
@@ -668,10 +680,19 @@ def _parse_gcode_preview(gcode_path, out_path):
                     continue
 
                 # Track extrusion mode
-                if line.upper().startswith('M83'):
+                lu = line.upper().split(';')[0].strip()  # strip inline comments
+                if lu == 'M83' or lu.startswith('M83 '):
                     rel_e = True; continue
-                if line.upper().startswith('M82'):
+                if lu == 'M82' or lu.startswith('M82 '):
                     rel_e = False; continue
+                if lu.startswith('G92'):
+                    if 'E' in lu:
+                        import re as _re
+                        em = _re.search(r'E([\d.]+)', lu)
+                        if em:
+                            last_e = float(em.group(1))
+                            last_x = last_y = None  # reset position to avoid phantom segs
+                    continue
 
                 # Comment lines — detect feature/layer changes
                 if line.startswith(';'):
@@ -681,19 +702,22 @@ def _parse_gcode_preview(gcode_path, out_path):
                         want_extrusion = True
                     elif _SUPPORT_RE.search(line):
                         want_extrusion = True
+                    elif _SKIN_RE.search(line):
+                        want_extrusion = True  # bottom/top solid layers
                     elif re.search(r'TYPE:|FEATURE:', line, re.IGNORECASE):
                         # Any other feature type: don't capture
                         want_extrusion = False
                     continue
 
-                # Z change → new layer boundary (ignore Z-hops < 0.05mm rise)
+                # Z change → new layer boundary (ignore Z-hops)
                 zm = _Z_MOVE_RE.match(line)
                 if zm:
                     new_z = round(float(zm.group(1)), 4)
-                    if new_z > cur_z + 0.04:
+                    cur_z = new_z
+                    if new_z > print_z + 0.04:
                         flush_layer()
-                        prev_z = cur_z
-                        cur_z  = new_z
+                        prev_z  = print_z
+                        print_z = new_z
                         min_z = min(min_z, new_z)
                         max_z = max(max_z, new_z)
                         last_x = last_y = None
