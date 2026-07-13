@@ -274,10 +274,19 @@ async function getGcodesRoot() {
 }
 
 async function openFile(filename) {
-  pickerOpen.value  = false
-  currentFile.value = filename
-  parseState.value  = 'loading'
+  pickerOpen.value    = false
+  currentFile.value   = filename
+  parseState.value    = 'loading'
   parseProgress.value = 0
+  previewBuf = null
+  totalModelLayers.value = 0
+  modelLayerMeshes = []
+  // Reset to paths mode visually and functionally
+  viewMode.value = 'paths'
+  if (extrusionLine) extrusionLine.visible = true
+  if (travelLine)    travelLine.visible    = showTravel.value
+  if (modelGhostGroup)    modelGhostGroup.visible    = false
+  if (modelFinishedGroup) modelFinishedGroup.visible = false
 
   const root   = await getGcodesRoot()
   const fsPath = `${root}/${filename}`
@@ -528,7 +537,7 @@ function buildRibbonGeometry(buf) {
     const z  = dv.getFloat32(off, true); off += 4
     const h  = dv.getFloat32(off, true); off += 4
     const ns = dv.getUint32(off, true);  off += 4
-    if (ns === 0) { layerMeshes.push(null); continue }
+    if (ns === 0) { modelLayerMeshes.push(null); continue }
 
     const verts = []
     for (let si = 0; si < ns; si++) {
@@ -615,7 +624,6 @@ async function setViewMode(mode) {
     })
   }
 
-  previewBuf = null  // clear cache when switching files
   const buf = await loadPreviewBinary(fsPath)
   if (!buf) return
 

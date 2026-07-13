@@ -479,17 +479,16 @@ def _parse_gcode_full(gcode_path, out_path):
                 zm = _Z_MOVE_RE.match(line)
                 if zm:
                     new_z = round(float(zm.group(1)), 4)
-                    cur_z = new_z  # always track current Z
-                    # New layer = Z increases by >= 0.04mm above last PRINT Z
-                    # (not above last hop Z, which would skip real layers)
+                    cur_z = new_z
                     if new_z > print_z + 0.04:
-                        flush()
-                        prev_z  = print_z
+                        # Only flush if we actually have segments (skip pre-print Z moves)
+                        if cur_segs:
+                            flush()
+                            prev_z = print_z
                         print_z = new_z
                         min_z = min(min_z, new_z)
                         max_z = max(max_z, new_z)
                         last_x = last_y = None
-                    # Z moves down or small change = Z-hop return, ignored
                     continue
 
                 if not line.upper().startswith('G1'):
@@ -715,8 +714,9 @@ def _parse_gcode_preview(gcode_path, out_path):
                     new_z = round(float(zm.group(1)), 4)
                     cur_z = new_z
                     if new_z > print_z + 0.04:
-                        flush_layer()
-                        prev_z  = print_z
+                        if cur_extr or cur_trav:
+                            flush_layer()
+                            prev_z = print_z
                         print_z = new_z
                         min_z = min(min_z, new_z)
                         max_z = max(max_z, new_z)
