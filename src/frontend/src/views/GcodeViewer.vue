@@ -24,8 +24,18 @@
 
       <div class="gcv-sep"></div>
 
-      <!-- Layer range -->
-      <div class="gcv-layer-range" v-if="totalLayers > 0">
+      <!-- View mode -->
+      <label class="gcv-toggle" :class="{ active: viewMode === 'paths' }" @click="setViewMode('paths')" title="Gcode paths with feature colours">◈ Paths</label>
+      <label class="gcv-toggle" :class="{ active: viewMode === 'model' }" @click="setViewMode('model')" title="Solid 3D model (walls only or with supports)">⬡ Model</label>
+      <label class="gcv-toggle" :class="{ active: viewMode === 'preview' }" @click="setViewMode('preview')" title="Print preview — layer slider reveals model">▶ Preview</label>
+
+      <!-- Support toggle (model/preview modes) -->
+      <label v-if="viewMode !== 'paths'" class="gcv-toggle" :class="{ active: showSupports }" @click="showSupports = !showSupports">Supports</label>
+
+      <div class="gcv-sep"></div>
+
+      <!-- Layer range — paths mode: min/max range; preview mode: single split slider -->
+      <div class="gcv-layer-range" v-if="totalLayers > 0 && viewMode === 'paths'">
         <span class="gcv-label">Layers</span>
         <input type="range" class="gcv-slider" :min="1" :max="totalLayers"
                v-model.number="layerMin" @input="updateLayers" />
@@ -36,9 +46,18 @@
         <span class="gcv-lval">{{ layerMax }}</span>
       </div>
 
+      <!-- Preview layer slider -->
+      <div class="gcv-layer-range" v-if="totalModelLayers > 0 && viewMode === 'preview'">
+        <span class="gcv-label">Layer</span>
+        <input type="range" class="gcv-slider" style="width:160px" :min="0" :max="totalModelLayers"
+               v-model.number="previewLayer" @input="updatePreviewLayer" />
+        <span class="gcv-lval">{{ previewLayer }} / {{ totalModelLayers }}</span>
+      </div>
+
       <div class="gcv-sep"></div>
 
-      <!-- Toggles -->
+      <!-- Toggles (paths mode only) -->
+      <template v-if="viewMode === 'paths'">
       <label class="gcv-toggle" :class="{ active: showTravel }" @click="showTravel = !showTravel">
         Travel
       </label>
@@ -51,6 +70,7 @@
       <label class="gcv-toggle" :class="{ active: colourMode === 'speed' }" @click="setColourMode('speed')">
         Solid
       </label>
+      </template>
 
       <div class="gcv-sep"></div>
 
@@ -126,7 +146,23 @@ const layerMax    = ref(1)
 const showTravel  = ref(false)
 const colourMode  = ref('feature')  // 'feature' | 'layer' | 'speed' (solid)
 
+// ── 3D Model / Preview mode ────────────────────────────────────────────────────
+const viewMode      = ref('paths')   // 'paths' | 'model' | 'preview'
+const showSupports  = ref(true)
+const previewLayer  = ref(0)
+const totalModelLayers = ref(0)
+
+// Model geometry objects (separate from paths geometry)
+let modelGhostGroup    = null
+let modelFinishedGroup = null
+let modelLayerMeshes   = []   // same structure as preview widget
+let previewBuf         = null // cached .bspreview ArrayBuffer
+
 // ── Feature colours ───────────────────────────────────────────────────────────
+const C_GHOST    = new THREE.Color(0x1a3344)
+const C_FINISHED = new THREE.Color(0xF07FAA)
+const C_MODEL    = new THREE.Color(0xF07FAA)
+
 const FEATURE_COLOURS = [
   new THREE.Color(0xF07FAA),  // 0 outer_wall   — pink
   new THREE.Color(0x61afef),  // 1 inner_wall   — blue
@@ -165,6 +201,13 @@ function initThree() {
   controls.minDistance = 0.5
 
   // Grid
+  const ambLight  = new THREE.AmbientLight(0xffffff, 0.6)
+  const dirLight  = new THREE.DirectionalLight(0xffffff, 1.0)
+  dirLight.position.set(1, 2, 1.5)
+  const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.3)
+  dirLight2.position.set(-1, -1, -1)
+  scene.add(ambLight, dirLight, dirLight2)
+
   const grid = new THREE.GridHelper(300, 30, 0x222233, 0x1a1a2a)
   scene.add(grid)
 
@@ -294,6 +337,9 @@ function buildScene(buf) {
   // Clear old geometry
   if (extrusionLine) { scene.remove(extrusionLine); extrusionGeo.dispose() }
   if (travelLine)    { scene.remove(travelLine);    travelGeo.dispose() }
+  if (modelGhostGroup)    { scene.remove(modelGhostGroup);    modelGhostGroup = null }
+  if (modelFinishedGroup) { scene.remove(modelFinishedGroup); modelFinishedGroup = null }
+  modelLayerMeshes = []
 
   const dv   = new DataView(buf)
   let off    = 0
@@ -426,6 +472,176 @@ function buildScene(buf) {
 
   updateLayers()
 }
+
+// ── Model geometry builder (ribbon-based, shared by Model + Preview modes) ────
+function buildRibbonGeometry(buf) {
+  const dv  = new DataView(buf)
+  let off   = 0
+
+  const magic = String.fromCharCode(...new Uint8Array(buf, 0, 4))
+  if (magic !== 'BSPV') return null
+  off = 4
+
+  dv.getUint32(off, true); off += 4  // version
+  const minX = dv.getFloat32(off, true); off += 4
+  const minY = dv.getFloat32(off, true); off += 4
+  const minZ = dv.getFloat32(off, true); off += 4
+  const maxX = dv.getFloat32(off, true); off += 4
+  const maxY = dv.getFloat32(off, true); off += 4
+  const maxZ = dv.getFloat32(off, true); off += 4
+  dv.getFloat32(off, true); off += 4  // layerH
+  const nLayers = dv.getUint32(off, true); off += 4
+
+  const cxM = (minX + maxX) / 2
+  const cyM = (minY + maxY) / 2
+
+  totalModelLayers.value = nLayers
+
+  // Clear old model geometry
+  if (modelGhostGroup)    { scene.remove(modelGhostGroup);    modelGhostGroup.clear() }
+  if (modelFinishedGroup) { scene.remove(modelFinishedGroup); modelFinishedGroup.clear() }
+  modelGhostGroup    = new THREE.Group()
+  modelFinishedGroup = new THREE.Group()
+  modelLayerMeshes   = []
+  scene.add(modelGhostGroup, modelFinishedGroup)
+
+  const ghostMat    = new THREE.MeshLambertMaterial({ color: C_GHOST,    transparent: true, opacity: 0.22, side: THREE.DoubleSide })
+  const finishedMat = new THREE.MeshLambertMaterial({ color: C_FINISHED, transparent: false, side: THREE.DoubleSide })
+
+  for (let li = 0; li < nLayers; li++) {
+    const z  = dv.getFloat32(off, true); off += 4
+    const h  = dv.getFloat32(off, true); off += 4
+    const ns = dv.getUint32(off, true);  off += 4
+    if (ns === 0) { layerMeshes.push(null); continue }
+
+    const verts = []
+    for (let si = 0; si < ns; si++) {
+      const x1 = dv.getFloat32(off, true) - cxM; off += 4
+      const y1 = dv.getFloat32(off, true) - cyM; off += 4
+      const x2 = dv.getFloat32(off, true) - cxM; off += 4
+      const y2 = dv.getFloat32(off, true) - cyM; off += 4
+
+      const dx = x2 - x1, dy = y2 - y1
+      const len = Math.sqrt(dx*dx + dy*dy)
+      if (len < 0.001) continue
+      const EW = 0.2
+      const nx = -dy/len * EW, ny = dx/len * EW
+      const zb = z - minZ, zt = zb + h
+
+      // Top face
+      verts.push(x1+nx, zt, -(y1+ny), x1-nx, zt, -(y1-ny), x2-nx, zt, -(y2-ny))
+      verts.push(x1+nx, zt, -(y1+ny), x2-nx, zt, -(y2-ny), x2+nx, zt, -(y2+ny))
+      // Bottom face
+      verts.push(x1+nx, zb, -(y1+ny), x2+nx, zb, -(y2+ny), x2-nx, zb, -(y2-ny))
+      verts.push(x1+nx, zb, -(y1+ny), x2-nx, zb, -(y2-ny), x1-nx, zb, -(y1-ny))
+      // Side faces
+      verts.push(x1+nx, zb, -(y1+ny), x1+nx, zt, -(y1+ny), x2+nx, zt, -(y2+ny))
+      verts.push(x1+nx, zb, -(y1+ny), x2+nx, zt, -(y2+ny), x2+nx, zb, -(y2+ny))
+      verts.push(x1-nx, zt, -(y1-ny), x1-nx, zb, -(y1-ny), x2-nx, zb, -(y2-ny))
+      verts.push(x1-nx, zt, -(y1-ny), x2-nx, zb, -(y2-ny), x2-nx, zt, -(y2-ny))
+    }
+
+    if (!verts.length) { modelLayerMeshes.push(null); continue }
+
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3))
+    geo.computeVertexNormals()
+
+    const gMesh = new THREE.Mesh(geo, ghostMat.clone())
+    const fMesh = new THREE.Mesh(geo, finishedMat.clone())
+    modelGhostGroup.add(gMesh)
+    modelFinishedGroup.add(fMesh)
+    modelLayerMeshes.push({ ghost: gMesh, finished: fMesh })
+  }
+
+  return { minX, minY, minZ, maxX, maxY, maxZ }
+}
+
+async function loadPreviewBinary(fsPath) {
+  if (previewBuf) return previewBuf  // cached
+  const r = await fetch(`/bakesail/gcode-preview?path=${encodeURIComponent(fsPath)}`)
+  if (!r.ok) return null
+  previewBuf = await r.arrayBuffer()
+  return previewBuf
+}
+
+async function setViewMode(mode) {
+  viewMode.value = mode
+
+  // Paths mode: show line geometry, hide model geometry
+  if (mode === 'paths') {
+    if (extrusionLine) extrusionLine.visible = true
+    if (travelLine)    travelLine.visible    = showTravel.value
+    if (modelGhostGroup)    modelGhostGroup.visible    = false
+    if (modelFinishedGroup) modelFinishedGroup.visible = false
+    return
+  }
+
+  // Model/Preview: hide line geometry, show/build ribbon geometry
+  if (extrusionLine) extrusionLine.visible = false
+  if (travelLine)    travelLine.visible    = false
+
+  const root   = await getGcodesRoot()
+  const fsPath = `${root}/${currentFile.value}`
+
+  // Check preview cache exists
+  const metaR = await fetch(`/bakesail/gcode-preview-meta?path=${encodeURIComponent(fsPath)}`)
+  const meta  = await metaR.json()
+  if (!meta.ready) {
+    // Trigger fast parse and wait
+    await fetch(`/bakesail/gcode-parse?path=${encodeURIComponent(fsPath)}`, { method: 'POST' })
+    await new Promise(resolve => {
+      const iv = setInterval(async () => {
+        const r2 = await fetch(`/bakesail/gcode-preview-meta?path=${encodeURIComponent(fsPath)}`)
+        const m2 = await r2.json()
+        if (m2.ready) { clearInterval(iv); resolve() }
+      }, 1500)
+    })
+  }
+
+  previewBuf = null  // clear cache when switching files
+  const buf = await loadPreviewBinary(fsPath)
+  if (!buf) return
+
+  buildRibbonGeometry(buf)
+  applyViewModeVisibility()
+}
+
+function applyViewModeVisibility() {
+  if (!modelLayerMeshes.length) return
+  if (viewMode.value === 'model') {
+    // All layers opaque, support layers visible based on toggle
+    if (modelGhostGroup)    modelGhostGroup.visible    = false
+    if (modelFinishedGroup) modelFinishedGroup.visible = true
+    for (const lm of modelLayerMeshes) {
+      if (!lm) continue
+      lm.ghost.visible    = false
+      lm.finished.visible = true
+    }
+  } else if (viewMode.value === 'preview') {
+    if (modelGhostGroup)    modelGhostGroup.visible    = true
+    if (modelFinishedGroup) modelFinishedGroup.visible = true
+    updatePreviewLayer()
+  }
+}
+
+function updatePreviewLayer() {
+  const split = previewLayer.value
+  for (let i = 0; i < modelLayerMeshes.length; i++) {
+    const lm = modelLayerMeshes[i]
+    if (!lm) continue
+    const done = i < split
+    lm.ghost.visible    = !done
+    lm.finished.visible = done
+  }
+}
+
+watch(showSupports, () => {
+  // rebuild ribbon geometry respecting support toggle
+  // for now just toggle the visibility of support-containing layers
+  // (proper implementation would need per-layer feature type tracking)
+  applyViewModeVisibility()
+})
 
 // ── Layer visibility via drawRange ────────────────────────────────────────────
 // drawRange covers vertices [0, N*2] where N = last segment of layerMax

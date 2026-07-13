@@ -328,12 +328,7 @@ function parseBinary(buf) {
     layerMeshes.push({ ghost: gMesh, finished: fMesh, z: z - minZ, h, poly: polyPoints })
   }
 
-  // Bottom cap (layer 0)
-  if (layerMeshes[0]?.poly?.length > 2) {
-    bottomCapMesh = buildCap(layerMeshes[0].poly, layerMeshes[0].z, finishedMat.clone())
-    bottomCapMesh.visible = false
-    finishedGroup.add(bottomCapMesh)
-  }
+  // (caps removed — polyPoints from segment endpoints aren't clean polygons)
 
   // Position camera to frame the model
   const diagXY = Math.sqrt((maxX-minX)**2 + (maxY-minY)**2)
@@ -367,22 +362,7 @@ function updateLayers(layer) {
     lm.finished.visible = done
   }
 
-  // Bottom cap: show once layer 1 is done
-  if (bottomCapMesh) bottomCapMesh.visible = layer > 0
-
-  // Top cap: remove old, add new at current finished layer top
-  if (topCapMesh) {
-    finishedGroup.remove(topCapMesh)
-    topCapMesh.geometry.dispose()
-    topCapMesh = null
-  }
-  const topIdx = layer - 1
-  if (topIdx >= 0 && topIdx < layerMeshes.length && layerMeshes[topIdx]?.poly?.length > 2) {
-    const lm = layerMeshes[topIdx]
-    const mat = new THREE.MeshLambertMaterial({ color: C.finished, side: THREE.DoubleSide })
-    topCapMesh = buildCap(lm.poly, lm.z + lm.h, mat)
-    finishedGroup.add(topCapMesh)
-  }
+  // (no caps — see parseBinary comment)
 }
 
 // ── Subscription & print tracking ─────────────────────────────────────────────
@@ -399,12 +379,13 @@ async function fetchFileMeta(filename) {
 }
 
 function computeLayerFromPosition(filePos) {
-  if (!fileMeta) return null
-  const total  = fileMeta.layer_count ?? 0
-  const size   = fileMeta.size ?? 0
-  const start  = fileMeta.gcode_start_byte ?? 0
-  if (total < 1 || size <= start) return null
-  return Math.max(0, Math.min(total, Math.floor(((filePos - start) / (size - start)) * total)))
+  if (!fileMeta || totalLayers.value < 1) return null
+  const size  = fileMeta.size ?? 0
+  const start = fileMeta.gcode_start_byte ?? 0
+  if (size <= start) return null
+  const fraction = Math.max(0, Math.min(1, (filePos - start) / (size - start)))
+  // Map fraction to binary layer index (totalLayers = Z-move layers in .bspreview)
+  return Math.floor(fraction * totalLayers.value)
 }
 
 onMounted(() => {
