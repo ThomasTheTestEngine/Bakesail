@@ -303,7 +303,9 @@ async function openFile(filename) {
   if (!meta.ready) {
     // Trigger parse and poll
     parseState.value = 'parsing'
-    await fetch(`/bakesail/gcode-parse-full?path=${encodeURIComponent(fsPath)}`, { method: 'POST' })
+    console.log('[gcv] triggering full parse:', fsPath)
+    const pr = await fetch(`/bakesail/gcode-parse-full?path=${encodeURIComponent(fsPath)}`, { method: 'POST' })
+    console.log('[gcv] parse-full response:', pr.status, await pr.text())
     await pollUntilReady(fsPath)
   }
 
@@ -313,22 +315,19 @@ async function openFile(filename) {
 async function pollUntilReady(fsPath) {
   return new Promise(resolve => {
     let elapsed = 0
-    let failures = 0
+    const MAX_WAIT = 300  // 5 minutes max
     const iv = setInterval(async () => {
       elapsed += 2
       parseProgress.value = Math.round(100 - 100 / (1 + elapsed / 20))
+      if (elapsed > MAX_WAIT) {
+        clearInterval(iv); parseState.value = 'error'; resolve(); return
+      }
       try {
         const r = await fetch(`/bakesail/gcode-full-meta?path=${encodeURIComponent(fsPath)}`)
-        if (!r.ok) {
-          failures++
-          if (failures > 3) { clearInterval(iv); parseState.value = 'error'; resolve() }
-          return
-        }
-        failures = 0
+        if (!r.ok) return
         const m = await r.json()
         if (m.ready) { clearInterval(iv); parseProgress.value = 99; resolve() }
-        if (m.error) { clearInterval(iv); parseState.value = 'error'; resolve() }
-      } catch { failures++; if (failures > 5) { clearInterval(iv); parseState.value = 'error'; resolve() } }
+      } catch { /* keep polling */ }
     }, 2000)
   })
 }
