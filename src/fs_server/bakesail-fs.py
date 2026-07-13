@@ -481,13 +481,15 @@ def _parse_gcode_full(gcode_path, out_path):
                     new_z = round(float(zm.group(1)), 4)
                     cur_z = new_z
                     if new_z > print_z + 0.04:
-                        # Only flush if we actually have segments (skip pre-print Z moves)
                         if cur_segs:
+                            # Real layer change with content — flush and advance
+                            prev_z  = print_z
                             flush()
-                            prev_z = print_z
-                        print_z = new_z
-                        min_z = min(min_z, new_z)
-                        max_z = max(max_z, new_z)
+                            print_z = new_z
+                            min_z = min(min_z, new_z)
+                            max_z = max(max_z, new_z)
+                        # else: no segments yet (pre-print moves) — track as candidate
+                        # but don't advance print_z so next real layer is still detected
                         last_x = last_y = None
                     continue
 
@@ -528,6 +530,7 @@ def _parse_gcode_full(gcode_path, out_path):
                     is_traveling = False
                 last_x, last_y = x, y
 
+        if cur_extr or cur_trav: prev_z = print_z
         flush()
 
         # Modal layer height
@@ -715,11 +718,11 @@ def _parse_gcode_preview(gcode_path, out_path):
                     cur_z = new_z
                     if new_z > print_z + 0.04:
                         if cur_extr or cur_trav:
+                            prev_z   = print_z
                             flush_layer()
-                            prev_z = print_z
-                        print_z = new_z
-                        min_z = min(min_z, new_z)
-                        max_z = max(max_z, new_z)
+                            print_z  = new_z
+                            min_z = min(min_z, new_z)
+                            max_z = max(max_z, new_z)
                         last_x = last_y = None
 
                 # XY moves in a wanted feature
@@ -743,6 +746,8 @@ def _parse_gcode_preview(gcode_path, out_path):
                         last_e = e_val
 
                 if is_extrusion and last_x is not None:
+                    if not cur_segs and not layers:
+                        print_z = cur_z  # anchor print_z to actual first extrusion Z
                     cur_segs.append((last_x, last_y, x, y))
                     min_x = min(min_x, last_x, x)
                     max_x = max(max_x, last_x, x)
