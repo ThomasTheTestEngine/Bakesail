@@ -505,14 +505,14 @@ function buildScene(buf) {
 
 // ── Model geometry builder (ribbon-based, shared by Model + Preview modes) ────
 function buildRibbonGeometry(buf) {
-  const dv  = new DataView(buf)
-  let off   = 0
+  const dv = new DataView(buf)
+  let off = 0
 
   const magic = String.fromCharCode(...new Uint8Array(buf, 0, 4))
   if (magic !== 'BSPV') return null
   off = 4
 
-  dv.getUint32(off, true); off += 4  // version
+  const version = dv.getUint32(off, true); off += 4
   const minX = dv.getFloat32(off, true); off += 4
   const minY = dv.getFloat32(off, true); off += 4
   const minZ = dv.getFloat32(off, true); off += 4
@@ -524,10 +524,8 @@ function buildRibbonGeometry(buf) {
 
   const cxM = (minX + maxX) / 2
   const cyM = (minY + maxY) / 2
-
   totalModelLayers.value = nLayers
 
-  // Always create fresh groups (buildScene may have null'd the old ones)
   if (modelGhostGroup)    scene.remove(modelGhostGroup)
   if (modelFinishedGroup) scene.remove(modelFinishedGroup)
   modelGhostGroup    = new THREE.Group()
@@ -538,50 +536,60 @@ function buildRibbonGeometry(buf) {
   const ghostMat    = new THREE.MeshLambertMaterial({ color: C_GHOST,    transparent: true, opacity: 0.22, side: THREE.DoubleSide })
   const finishedMat = new THREE.MeshLambertMaterial({ color: C_FINISHED, transparent: false, side: THREE.DoubleSide })
 
-  for (let li = 0; li < nLayers; li++) {
-    const z  = dv.getFloat32(off, true); off += 4
-    const h  = dv.getFloat32(off, true); off += 4
-    const ns = dv.getUint32(off, true);  off += 4
-    if (ns === 0) { modelLayerMeshes.push(null); continue }
-
+  // Build ribbon geometry from n segments at this layer's Z height
+  function buildRibbons(nSegs, z, h) {
     const verts = []
-    for (let si = 0; si < ns; si++) {
+    for (let si = 0; si < nSegs; si++) {
       const x1 = dv.getFloat32(off, true) - cxM; off += 4
       const y1 = dv.getFloat32(off, true) - cyM; off += 4
       const x2 = dv.getFloat32(off, true) - cxM; off += 4
       const y2 = dv.getFloat32(off, true) - cyM; off += 4
-
       const dx = x2 - x1, dy = y2 - y1
       const len = Math.sqrt(dx*dx + dy*dy)
       if (len < 0.001) continue
-      const EW = 0.2
-      const nx = -dy/len * EW, ny = dx/len * EW
+      const EW = 0.2, nx = -dy/len*EW, ny = dx/len*EW
       const zb = z - minZ, zt = zb + h
-
-      // Top face
-      verts.push(x1+nx, zt, -(y1+ny), x1-nx, zt, -(y1-ny), x2-nx, zt, -(y2-ny))
-      verts.push(x1+nx, zt, -(y1+ny), x2-nx, zt, -(y2-ny), x2+nx, zt, -(y2+ny))
-      // Bottom face
-      verts.push(x1+nx, zb, -(y1+ny), x2+nx, zb, -(y2+ny), x2-nx, zb, -(y2-ny))
-      verts.push(x1+nx, zb, -(y1+ny), x2-nx, zb, -(y2-ny), x1-nx, zb, -(y1-ny))
-      // Side faces
-      verts.push(x1+nx, zb, -(y1+ny), x1+nx, zt, -(y1+ny), x2+nx, zt, -(y2+ny))
-      verts.push(x1+nx, zb, -(y1+ny), x2+nx, zt, -(y2+ny), x2+nx, zb, -(y2+ny))
-      verts.push(x1-nx, zt, -(y1-ny), x1-nx, zb, -(y1-ny), x2-nx, zb, -(y2-ny))
-      verts.push(x1-nx, zt, -(y1-ny), x2-nx, zb, -(y2-ny), x2-nx, zt, -(y2-ny))
+      verts.push(x1+nx,zt,-(y1+ny), x1-nx,zt,-(y1-ny), x2-nx,zt,-(y2-ny))
+      verts.push(x1+nx,zt,-(y1+ny), x2-nx,zt,-(y2-ny), x2+nx,zt,-(y2+ny))
+      verts.push(x1+nx,zb,-(y1+ny), x2+nx,zb,-(y2+ny), x2-nx,zb,-(y2-ny))
+      verts.push(x1+nx,zb,-(y1+ny), x2-nx,zb,-(y2-ny), x1-nx,zb,-(y1-ny))
+      verts.push(x1+nx,zb,-(y1+ny), x1+nx,zt,-(y1+ny), x2+nx,zt,-(y2+ny))
+      verts.push(x1+nx,zb,-(y1+ny), x2+nx,zt,-(y2+ny), x2+nx,zb,-(y2+ny))
+      verts.push(x1-nx,zt,-(y1-ny), x1-nx,zb,-(y1-ny), x2-nx,zb,-(y2-ny))
+      verts.push(x1-nx,zt,-(y1-ny), x2-nx,zb,-(y2-ny), x2-nx,zt,-(y2-ny))
     }
-
-    if (!verts.length) { modelLayerMeshes.push(null); continue }
-
+    if (!verts.length) return null
     const geo = new THREE.BufferGeometry()
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3))
     geo.computeVertexNormals()
+    return geo
+  }
 
-    const gMesh = new THREE.Mesh(geo, ghostMat.clone())
-    const fMesh = new THREE.Mesh(geo, finishedMat.clone())
-    modelGhostGroup.add(gMesh)
-    modelFinishedGroup.add(fMesh)
-    modelLayerMeshes.push({ ghost: gMesh, finished: fMesh })
+  for (let li = 0; li < nLayers; li++) {
+    const z  = dv.getFloat32(off, true); off += 4
+    const h  = dv.getFloat32(off, true); off += 4
+    const nw = dv.getUint32(off, true);  off += 4
+    let ns = 0; if (version >= 2) { ns = dv.getUint32(off, true); off += 4 }
+
+    const wallGeo = buildRibbons(nw, z, h)
+    const supGeo  = (version >= 2) ? buildRibbons(ns, z, h) : null
+
+    if (!wallGeo && !supGeo) { modelLayerMeshes.push(null); continue }
+
+    const entry = {}
+    if (wallGeo) {
+      entry.ghost    = new THREE.Mesh(wallGeo, ghostMat.clone())
+      entry.finished = new THREE.Mesh(wallGeo, finishedMat.clone())
+      modelGhostGroup.add(entry.ghost)
+      modelFinishedGroup.add(entry.finished)
+    }
+    if (supGeo) {
+      entry.ghostSup    = new THREE.Mesh(supGeo, ghostMat.clone())
+      entry.finishedSup = new THREE.Mesh(supGeo, finishedMat.clone())
+      modelGhostGroup.add(entry.ghostSup)
+      modelFinishedGroup.add(entry.finishedSup)
+    }
+    modelLayerMeshes.push(entry)
   }
 
   return { minX, minY, minZ, maxX, maxY, maxZ }
