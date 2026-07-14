@@ -677,12 +677,13 @@ def _parse_gcode_preview(gcode_path, out_path):
     """
     try:
         logging.info('[preview] parsing %s', gcode_path)
-        layers   = []          # list of {'z': float, 'segs': list of (x1,y1,x2,y2)}
+        layers      = []  # list of {'z', 'wall_segs', 'support_segs'}
         cur_z    = 0.0    # last seen Z (may be a hop)
         print_z  = 0.0    # last confirmed print-layer Z
         prev_z   = None
         cur_segs = []
-        want_extrusion = False  # are we in a feature we care about?
+        want_extrusion = False
+        is_support     = False  # current feature is support
         last_x   = None
         last_y   = None
         last_e   = 0.0
@@ -695,8 +696,10 @@ def _parse_gcode_preview(gcode_path, out_path):
         def flush_layer():
             nonlocal cur_segs
             if cur_segs and prev_z is not None:
-                layers.append({'z': prev_z, 'segs': cur_segs})
-                cur_segs = []
+                wall_segs    = [(s[0],s[1],s[2],s[3]) for s in cur_segs if s[4]==0]
+                support_segs = [(s[0],s[1],s[2],s[3]) for s in cur_segs if s[4]==1]
+                layers.append({'z': prev_z, 'wall_segs': wall_segs, 'support_segs': support_segs})
+            cur_segs = []
 
         with open(gcode_path, 'r', errors='replace', buffering=1 << 20) as f:
             for raw in f:
@@ -723,15 +726,18 @@ def _parse_gcode_preview(gcode_path, out_path):
                 if line.startswith(';'):
                     if _OUTER_WALL_RE.search(line):
                         want_extrusion = True
+                        is_support = False
                     elif _INNER_WALL_RE.search(line):
                         want_extrusion = True
+                        is_support = False
                     elif _SUPPORT_RE.search(line):
                         want_extrusion = True
                     elif _SKIN_RE.search(line):
-                        want_extrusion = True  # bottom/top solid layers
+                        want_extrusion = True
+                        is_support = False
                     elif re.search(r'TYPE:|FEATURE:', line, re.IGNORECASE):
-                        # Any other feature type: don't capture
                         want_extrusion = False
+                        is_support = False
                     continue
 
                 # Z change → new layer boundary (ignore Z-hops)
@@ -785,7 +791,7 @@ def _parse_gcode_preview(gcode_path, out_path):
                     if (dx*dx + dy*dy) > 0.000001:
                         if not cur_segs and not layers:
                             print_z = cur_z
-                        cur_segs.append((last_x, last_y, x, y))
+                        cur_segs.append((last_x, last_y, x, y, 1 if is_support else 0))
                         min_x = min(min_x, last_x, x)
                         max_x = max(max_x, last_x, x)
                         min_y = min(min_y, last_y, y)
@@ -803,11 +809,10 @@ def _parse_gcode_preview(gcode_path, out_path):
                 heights.append(dz)
         modal_h = max(set(heights), key=heights.count) if heights else 0.2
 
-        # Write binary
+        # Write binary BSPV v2
         with open(out_path, 'wb') as f:
-            # Header
             f.write(struct.pack('<4sIfffffff I',
-                b'BSPV', 1,
+                b'BSPV', 2,
                 min_x if min_x < 1e8 else 0,
                 min_y if min_y < 1e8 else 0,
                 min_z if min_z < 1e8 else 0,
@@ -817,22 +822,25 @@ def _parse_gcode_preview(gcode_path, out_path):
                 modal_h,
                 len(layers),
             ))
-            # Layers
             for i, layer in enumerate(layers):
-                segs = layer['segs']
+                ws = layer['wall_segs']; ss = layer['support_segs']
                 if i + 1 < len(layers):
                     h = round(layers[i+1]['z'] - layer['z'], 4)
                 else:
                     h = modal_h
                 h = max(0.05, min(h, 1.0))
-                f.write(struct.pack('<ffI', layer['z'], h, len(segs)))
-                if segs:
-                    flat = [v for s in segs for v in s]
+                f.write(struct.pack('<ffII', layer['z'], h, len(ws), len(ss)))
+                if ws:
+                    flat = [v for s in ws for v in s]
+                    f.write(struct.pack('<%df' % len(flat), *flat))
+                if ss:
+                    flat = [v for s in ss for v in s]
                     f.write(struct.pack('<%df' % len(flat), *flat))
 
-        logging.info('[preview] wrote %s (%d layers, %d total segs)',
+        logging.info('[preview] wrote %s (%d layers, %d wall segs, %d support segs)',
                      out_path, len(layers),
-                     sum(len(l['segs']) for l in layers))
+                     sum(len(l['wall_segs']) for l in layers),
+                     sum(len(l['support_segs']) for l in layers))
     except Exception as e:
         logging.exception('[preview] parse error for %s: %s', gcode_path, e)
     finally:

@@ -652,8 +652,10 @@ function applyViewModeVisibility() {
     modelFinishedGroup.visible = true
     for (const lm of modelLayerMeshes) {
       if (!lm) continue
-      lm.ghost.visible    = false
-      lm.finished.visible = true
+      if (lm.ghost)       lm.ghost.visible       = false
+      if (lm.finished)    lm.finished.visible    = true
+      if (lm.ghostSup)    lm.ghostSup.visible    = false
+      if (lm.finishedSup) lm.finishedSup.visible = showSupports.value
     }
   } else if (viewMode.value === 'preview') {
     modelGhostGroup.visible    = true
@@ -669,16 +671,16 @@ function updatePreviewLayer() {
     const lm = modelLayerMeshes[i]
     if (!lm) continue
     const done = i < split
-    lm.ghost.visible    = !done
-    lm.finished.visible = done
+    if (lm.ghost)       lm.ghost.visible       = !done
+    if (lm.finished)    lm.finished.visible    = done
+    if (lm.ghostSup)    lm.ghostSup.visible    = showSupports.value && !done
+    if (lm.finishedSup) lm.finishedSup.visible = showSupports.value && done
   }
 }
 
 watch(showSupports, () => {
-  // rebuild ribbon geometry respecting support toggle
-  // for now just toggle the visibility of support-containing layers
-  // (proper implementation would need per-layer feature type tracking)
-  applyViewModeVisibility()
+  if (viewMode.value === 'model') applyViewModeVisibility()
+  else if (viewMode.value === 'preview') updatePreviewLayer()
 })
 
 // ── Layer visibility via drawRange ────────────────────────────────────────────
