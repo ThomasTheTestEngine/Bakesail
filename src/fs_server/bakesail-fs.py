@@ -437,6 +437,8 @@ def _parse_gcode_full(gcode_path, out_path):
         last_x = last_y = None
         last_e = 0.0
         rel_e  = False
+        is_retracted = False   # true when E is below pre-retract level
+        retract_e = 0.0        # E value when retraction started
         is_traveling = False
 
         min_x = min_y = min_z =  1e9
@@ -506,10 +508,26 @@ def _parse_gcode_full(gcode_path, out_path):
                 if has_e:
                     e_val = float(e_str)
                     if rel_e:
-                        extruding = e_val > 0.0001
+                        if e_val < -0.0001:       # retract
+                            is_retracted = True
+                        elif e_val > 0.001 and not is_retracted:
+                            extruding = True
+                        elif e_val > 0.001 and is_retracted:
+                            is_retracted = False   # unretract, not extruding yet
                         last_e += e_val
                     else:
-                        extruding = e_val > last_e + 0.0001
+                        de = e_val - last_e
+                        if de < -0.0001:          # retract
+                            is_retracted = True
+                            retract_e = last_e
+                        elif de > 0.001:
+                            if is_retracted and e_val <= retract_e + 0.001:
+                                is_retracted = False  # still unretracting
+                            elif is_retracted:
+                                is_retracted = False
+                                extruding = True
+                            else:
+                                extruding = True
                         last_e = e_val
 
                 if last_x is not None:
@@ -667,8 +685,10 @@ def _parse_gcode_preview(gcode_path, out_path):
         want_extrusion = False  # are we in a feature we care about?
         last_x   = None
         last_y   = None
-        last_e   = 0.0          # track absolute E position
-        rel_e    = False        # M83 = relative extrusion
+        last_e   = 0.0
+        rel_e    = False
+        is_retracted = False
+        retract_e    = 0.0
         min_x = min_y = min_z =  1e9
         max_x = max_y = max_z = -1e9
 
