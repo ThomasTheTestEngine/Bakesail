@@ -762,12 +762,24 @@ def _parse_gcode_preview(gcode_path, out_path):
                 if e_str is not None:
                     e_val = float(e_str)
                     if rel_e:
-                        is_extrusion = e_val > 0.001
+                        if e_val < -0.0001:
+                            is_retracted = True
+                        elif e_val > 0.001 and not is_retracted:
+                            is_extrusion = True
+                        elif e_val > 0.001 and is_retracted:
+                            is_retracted = False
                         last_e += e_val
                     else:
-                        is_extrusion = de = e_val - last_e; is_extrusion = de > 0.001
+                        de = e_val - last_e
+                        if de < -0.0001:
+                            is_retracted = True; retract_e = last_e
+                        elif de > 0.001:
+                            if is_retracted:
+                                is_retracted = False
+                                is_extrusion = e_val > retract_e + 0.001
+                            else:
+                                is_extrusion = True
                         last_e = e_val
-
                 if is_extrusion and last_x is not None:
                     dx = x - last_x; dy = y - last_y
                     if (dx*dx + dy*dy) > 0.000001:
