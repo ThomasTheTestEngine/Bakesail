@@ -742,14 +742,16 @@ def _parse_gcode_preview(gcode_path, out_path):
                 if e_str is not None:
                     e_val = float(e_str)
                     if rel_e:
-                        is_extrusion = e_val > 0.0001
+                        is_extrusion = e_val > 0.001
                         last_e += e_val
                     else:
-                        is_extrusion = e_val > last_e + 0.0001
+                        is_extrusion = de = e_val - last_e; is_extrusion = de > 0.001
                         last_e = e_val
 
                 if is_extrusion and last_x is not None:
-                    if not cur_segs and not layers:
+                    dx = x - last_x; dy = y - last_y
+                    if (dx*dx + dy*dy) > 0.000001:
+                     if not cur_segs and not layers:
                         print_z = cur_z  # anchor print_z to actual first extrusion Z
                     cur_segs.append((last_x, last_y, x, y))
                     min_x = min(min_x, last_x, x)
