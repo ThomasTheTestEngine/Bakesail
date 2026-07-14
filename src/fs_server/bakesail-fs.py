@@ -481,15 +481,13 @@ def _parse_gcode_full(gcode_path, out_path):
                     new_z = round(float(zm.group(1)), 4)
                     cur_z = new_z
                     if new_z > print_z + 0.04:
-                        if cur_segs:
+                        if cur_extr or cur_trav:
                             # Real layer change with content — flush and advance
                             prev_z  = print_z
-                            flush()
+                            flush_layer()
                             print_z = new_z
                             min_z = min(min_z, new_z)
                             max_z = max(max_z, new_z)
-                        # else: no segments yet (pre-print moves) — track as candidate
-                        # but don't advance print_z so next real layer is still detected
                         last_x = last_y = None
                     continue
 
