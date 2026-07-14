@@ -102,6 +102,11 @@
         </div>
         <div class="gcv-splash-sub">This runs once and is cached for future opens.</div>
       </div>
+      <div v-if="parseState === 'building'" class="gcv-splash">
+        <div class="gcv-splash-text">Building 3D model…</div>
+        <div class="gcv-parse-bar"><div class="gcv-parse-fill" style="width:60%"></div></div>
+        <div class="gcv-splash-sub">{{ currentFile }}</div>
+      </div>
       <div v-if="parseState === 'error'" class="gcv-splash">
         <div class="gcv-splash-icon" style="color:#e05555">✗</div>
         <div class="gcv-splash-text" style="color:#e05555">Failed to reach FS server</div>
@@ -134,7 +139,8 @@ const parseProgress = ref(0)
 const statusText   = computed(() => ({
   idle:    '',
   parsing: 'Parsing…',
-  loading: 'Loading into GPU…',
+  loading:   'Loading into GPU…',
+  building:  'Building 3D model…',
   ready:   `${totalLayers.value} layers · ${totalSegs.value.toLocaleString()} segments`,
   error:   'Parse failed',
 }[parseState.value] ?? ''))
@@ -594,6 +600,7 @@ async function setViewMode(mode) {
 
   // Paths mode: show line geometry, hide model geometry
   if (mode === 'paths') {
+    parseState.value = 'ready'  // clear any building state
     if (extrusionLine) extrusionLine.visible = true
     if (travelLine)    travelLine.visible    = showTravel.value
     if (modelGhostGroup)    modelGhostGroup.visible    = false
@@ -623,13 +630,16 @@ async function setViewMode(mode) {
     })
   }
 
+  parseState.value = 'building'
   const buf = await loadPreviewBinary(fsPath)
   console.log('[gcv] preview buf:', buf ? buf.byteLength + ' bytes' : 'null')
-  if (!buf) return
+  if (!buf) { parseState.value = 'error'; return }
 
+  await new Promise(r => setTimeout(r, 0))  // let Vue render the splash
   const bounds = buildRibbonGeometry(buf)
   console.log('[gcv] ribbon bounds:', bounds, 'layers:', modelLayerMeshes.length, 'total:', totalModelLayers.value)
   applyViewModeVisibility()
+  parseState.value = 'ready'
   console.log('[gcv] ghost visible:', modelGhostGroup?.visible, 'finished visible:', modelFinishedGroup?.visible)
 }
 
