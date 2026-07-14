@@ -748,8 +748,8 @@ def _parse_gcode_preview(gcode_path, out_path):
                             max_z = max(max_z, new_z)
                         last_x = last_y = None
 
-                # XY moves in a wanted feature
-                if not want_extrusion:
+                # Track ALL G1 moves to keep last_x/y/E current
+                if not line.upper().startswith('G1'):
                     continue
                 if not line.upper().startswith('G1'):
                     continue
@@ -780,16 +780,16 @@ def _parse_gcode_preview(gcode_path, out_path):
                             else:
                                 is_extrusion = True
                         last_e = e_val
-                if is_extrusion and last_x is not None:
+                if is_extrusion and want_extrusion and last_x is not None:
                     dx = x - last_x; dy = y - last_y
                     if (dx*dx + dy*dy) > 0.000001:
-                     if not cur_segs and not layers:
-                        print_z = cur_z  # anchor print_z to actual first extrusion Z
-                    cur_segs.append((last_x, last_y, x, y))
-                    min_x = min(min_x, last_x, x)
-                    max_x = max(max_x, last_x, x)
-                    min_y = min(min_y, last_y, y)
-                    max_y = max(max_y, last_y, y)
+                        if not cur_segs and not layers:
+                            print_z = cur_z
+                        cur_segs.append((last_x, last_y, x, y))
+                        min_x = min(min_x, last_x, x)
+                        max_x = max(max_x, last_x, x)
+                        min_y = min(min_y, last_y, y)
+                        max_y = max(max_y, last_y, y)
 
                 last_x, last_y = x, y
 
