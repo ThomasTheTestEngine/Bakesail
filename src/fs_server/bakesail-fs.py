@@ -639,13 +639,12 @@ _INNER_WALL_RE = re.compile(
     re.IGNORECASE
 )
 _SUPPORT_RE = re.compile(
-    r'TYPE:(?:Support|SUPPORT|Support material|Support interface)'
-    r'|feature support'
-    r'|FEATURE:Support',
+    r'TYPE:(?:Support|Support material|Support interface|Support transition|Overhang wall)'
+    r'|FEATURE:(?:Support|Support interface)',
     re.IGNORECASE
 )
 _SKIN_RE = re.compile(
-    r'TYPE:(?:Bottom surface skin|Top surface skin|Solid infill|Bridge infill|Internal solid infill)'
+    r'TYPE:(?:Bottom surface|Top surface|Solid infill|Bridge infill|Internal solid infill|Internal bridge infill)'
     r'|FEATURE:(?:Top surface|Bottom surface|Bridge|Solid)',
     re.IGNORECASE
 )
