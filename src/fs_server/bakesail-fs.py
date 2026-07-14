@@ -484,7 +484,7 @@ def _parse_gcode_full(gcode_path, out_path):
                         if cur_extr or cur_trav:
                             # Real layer change with content — flush and advance
                             prev_z  = print_z
-                            flush_layer()
+                            flush()
                             print_z = new_z
                             min_z = min(min_z, new_z)
                             max_z = max(max_z, new_z)
