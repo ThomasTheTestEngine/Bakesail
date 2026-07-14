@@ -71,6 +71,7 @@ class FSHandler(http.server.BaseHTTPRequestHandler):
         elif ep == '/write':          self._write(get('path'))
         elif ep == '/gcode-parse':         self._gcode_parse(get('path'))
         elif ep == '/gcode-parse-full':     self._gcode_parse_full(get('path'))
+        elif ep == '/gcode-purge':          self._gcode_purge(get('path'))
         else:                               self._err(404, 'Not found')
 
     def do_DELETE(self):
@@ -238,7 +239,7 @@ class FSHandler(http.server.BaseHTTPRequestHandler):
             return self._err(404, 'File not found: ' + path)
         if not path.lower().endswith(('.gcode', '.gc', '.g', '.gco')):
             return self._err(400, 'Not a gcode file')
-        out = path + PREVIEW_SUFFIX
+        out = cache_path(path, PREVIEW_SUFFIX_EXT)
         if path not in PARSE_LOCK:
             PARSE_LOCK[path] = True
             PARSE_QUEUE.put(path)
@@ -249,7 +250,7 @@ class FSHandler(http.server.BaseHTTPRequestHandler):
     def _gcode_preview(self, path):
         """Serve the binary preview file for a gcode path."""
         path = os.path.realpath(os.path.expanduser(path))
-        out  = path + PREVIEW_SUFFIX
+        out  = cache_path(path, PREVIEW_SUFFIX_EXT)
         if not os.path.isfile(out):
             return self._err(404, 'Preview not ready: ' + out)
         try:
@@ -270,7 +271,7 @@ class FSHandler(http.server.BaseHTTPRequestHandler):
     def _gcode_preview_meta(self, path):
         """Return JSON metadata about parse status for a gcode file."""
         path = os.path.realpath(os.path.expanduser(path))
-        out  = path + PREVIEW_SUFFIX
+        out  = cache_path(path, PREVIEW_SUFFIX_EXT)
         parsing = path in PARSE_LOCK
         ready   = os.path.isfile(out)
         meta = {
@@ -288,7 +289,7 @@ class FSHandler(http.server.BaseHTTPRequestHandler):
         if not os.path.isfile(path):
             return self._err(404, 'File not found: ' + path)
         key = path + ':full'
-        out = path + FULL_SUFFIX
+        out = cache_path(path, FULL_SUFFIX)
         if key not in PARSE_LOCK:
             PARSE_LOCK[key] = True
             FULL_PARSE_QUEUE.put(path)
@@ -298,7 +299,7 @@ class FSHandler(http.server.BaseHTTPRequestHandler):
 
     def _gcode_full(self, path):
         path = os.path.realpath(os.path.expanduser(path))
-        out  = path + FULL_SUFFIX
+        out  = cache_path(path, FULL_SUFFIX)
         if not os.path.isfile(out):
             return self._err(404, 'Full parse not ready')
         try:
@@ -318,13 +319,21 @@ class FSHandler(http.server.BaseHTTPRequestHandler):
 
     def _gcode_full_meta(self, path):
         path = os.path.realpath(os.path.expanduser(path))
-        out  = path + FULL_SUFFIX
+        out  = cache_path(path, FULL_SUFFIX)
         key  = path + ':full'
         self._json({
             'ready':   os.path.isfile(out),
             'parsing': key in PARSE_LOCK,
             'size':    os.path.getsize(out) if os.path.isfile(out) else 0,
         })
+
+    def _gcode_purge(self, path):
+        """Delete cache files for a gcode path, return status."""
+        path = os.path.realpath(os.path.expanduser(path))
+        if not os.path.isfile(path):
+            return self._err(404, 'File not found')
+        purge_cache(path)
+        self._json({'status': 'purged', 'path': path})
 
     def _search(self, root, q):
         root = os.path.realpath(os.path.expanduser(root))
@@ -371,7 +380,23 @@ class FSHandler(http.server.BaseHTTPRequestHandler):
 
 
 
-FULL_SUFFIX = '.bsgcode'   # full gcode parse cache
+FULL_SUFFIX    = '.bsgcode'
+PREVIEW_SUFFIX_EXT = '.bspreview'  # extension only — path computed by cache_path()
+
+def cache_path(gcode_path, suffix):
+    """Return path to cache file in .bakesail_cache/ subdirectory."""
+    d = os.path.dirname(gcode_path)
+    f = os.path.basename(gcode_path)
+    cache_dir = os.path.join(d, '.bakesail_cache')
+    os.makedirs(cache_dir, exist_ok=True)
+    return os.path.join(cache_dir, f + suffix)
+
+def purge_cache(gcode_path):
+    """Delete all cache files for a gcode file."""
+    for suffix in (PREVIEW_SUFFIX_EXT, FULL_SUFFIX):
+        p = cache_path(gcode_path, suffix)
+        try: os.remove(p)
+        except FileNotFoundError: pass
 
 # Feature type → index mapping (shared with frontend)
 FEATURE_TYPES = {
@@ -609,7 +634,7 @@ def _full_parse_worker():
     while True:
         path = FULL_PARSE_QUEUE.get()
         try:
-            out = path + FULL_SUFFIX
+            out = cache_path(path, FULL_SUFFIX)
             _parse_gcode_full(path, out)
         finally:
             FULL_PARSE_QUEUE.task_done()
@@ -620,7 +645,7 @@ _tf.start()
 # ── Gcode Preview Parser ──────────────────────────────────────────────────────
 
 
-PREVIEW_SUFFIX  = '.bspreview'   # compact binary cache
+# PREVIEW_SUFFIX_EXT defined above with FULL_SUFFIX
 PARSE_QUEUE     = queue.Queue()
 PARSE_LOCK      = {}             # path → True while parsing
 
@@ -850,7 +875,7 @@ def _parse_worker():
     while True:
         path = PARSE_QUEUE.get()
         try:
-            out = path + PREVIEW_SUFFIX
+            out = cache_path(path, PREVIEW_SUFFIX_EXT)
             _parse_gcode_preview(path, out)
         finally:
             PARSE_QUEUE.task_done()

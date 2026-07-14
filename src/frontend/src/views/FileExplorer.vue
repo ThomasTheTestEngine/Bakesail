@@ -49,11 +49,17 @@
                 :disabled="!canWrite">+ File</button>
         <button class="btn btn-ghost btn-sm fe-btn" @click="promptNewDir"
                 :disabled="!canWrite">+ Dir</button>
-        <button class="btn btn-ghost btn-sm fe-btn" @click="parseAllGcode"
+        <button class="btn btn-ghost btn-sm fe-btn" @click="parseAllGcode(false)"
                 v-if="isInGcodesDir"
                 :disabled="parsing"
                 :title="parsing ? 'Parsing…' : 'Parse all gcode files for preview'">
           {{ parsing ? '⟳ Parsing…' : '⬡ Parse All' }}
+        </button>
+        <button class="btn btn-ghost btn-sm fe-btn" @click="parseAllGcode(true)"
+                v-if="isInGcodesDir"
+                :disabled="parsing"
+                title="Delete cache and re-parse all gcode files">
+          ✕⬡ Purge & Parse
         </button>
         <button class="btn btn-ghost btn-sm fe-btn fe-btn--danger" @click="confirmDelete"
                 :disabled="selected.size === 0 || !canWrite">✕ Delete</button>
@@ -207,7 +213,28 @@ const isInGcodesDir = computed(() => {
   return segments.value.length > 0
 })
 
-async function parseAllGcode() {
+// Resolve gcodes root once and cache it
+let _gcodesRoot = null
+async function getGcodesRoot() {
+  if (_gcodesRoot) return _gcodesRoot
+  try {
+    const r = await fetch('/server/files/roots')
+    const d = await r.json()
+    const items = d.result ?? d
+    _gcodesRoot = Array.isArray(items) ? items.find(x => x.name === 'gcodes')?.path : null
+  } catch { _gcodesRoot = null }
+  return _gcodesRoot
+}
+
+async function getFsPath(name) {
+  if (adv.value) return absPath.value.replace(/\/$/, '') + '/' + name
+  const root = await getGcodesRoot()
+  if (!root) return null
+  const sub = segments.value.slice(1).join('/')
+  return `${root}/${sub ? sub + '/' : ''}${name}`
+}
+
+async function parseAllGcode(purge = false) {
   if (parsing.value) return
   parsing.value = true
   parseMsg.value = ''
@@ -216,26 +243,19 @@ async function parseAllGcode() {
     if (!gcodeFiles.length) { parseMsg.value = 'No gcode files here'; return }
     let queued = 0
     for (const f of gcodeFiles) {
-      let fsPath
-      if (adv.value) {
-        fsPath = absPath.value.replace(/\/$/, '') + '/' + f.name
-      } else {
-        try {
-          const r = await fetch('/server/files/roots')
-          const d = await r.json()
-          const items = d.result ?? d
-          const root = Array.isArray(items) ? items.find(x => x.name === 'gcodes')?.path : null
-          const sub  = segments.value.slice(1).join('/')
-          fsPath = root ? `${root}/${sub ? sub + '/' : ''}${f.name}` : null
-        } catch { fsPath = null }
-      }
+      const fsPath = await getFsPath(f.name)
+      console.log('[fe] parse fsPath:', fsPath)
       if (!fsPath) continue
-      await fetch(`/bakesail/gcode-parse?path=${encodeURIComponent(fsPath)}`, { method: 'POST' }).catch(() => {})
-      await fetch(`/bakesail/gcode-parse-full?path=${encodeURIComponent(fsPath)}`, { method: 'POST' }).catch(() => {})
+      if (purge) {
+        await fetch(`/bakesail/gcode-purge?path=${encodeURIComponent(fsPath)}`, { method: 'POST' }).catch(() => {})
+      }
+      const r1 = await fetch(`/bakesail/gcode-parse?path=${encodeURIComponent(fsPath)}`, { method: 'POST' }).catch(() => null)
+      const r2 = await fetch(`/bakesail/gcode-parse-full?path=${encodeURIComponent(fsPath)}`, { method: 'POST' }).catch(() => null)
+      console.log('[fe] parse responses:', r1?.status, r2?.status)
       queued++
     }
-    parseMsg.value = `Queued ${queued} file${queued !== 1 ? 's' : ''}`
-    setTimeout(() => { parseMsg.value = '' }, 4000)
+    parseMsg.value = `${purge ? 'Purged & queued' : 'Queued'} ${queued} file${queued !== 1 ? 's' : ''}`
+    setTimeout(() => { parseMsg.value = '' }, 5000)
   } finally {
     parsing.value = false
   }
