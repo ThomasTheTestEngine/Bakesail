@@ -720,7 +720,7 @@ def _parse_gcode_preview(gcode_path, out_path):
                     new_z = round(float(zm.group(1)), 4)
                     cur_z = new_z
                     if new_z > print_z + 0.04:
-                        if cur_extr or cur_trav:
+                        if cur_segs:
                             prev_z   = print_z
                             flush_layer()
                             print_z  = new_z
