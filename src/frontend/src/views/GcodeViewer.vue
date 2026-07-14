@@ -624,13 +624,17 @@ async function setViewMode(mode) {
   }
 
   const buf = await loadPreviewBinary(fsPath)
+  console.log('[gcv] preview buf:', buf ? buf.byteLength + ' bytes' : 'null')
   if (!buf) return
 
-  buildRibbonGeometry(buf)
+  const bounds = buildRibbonGeometry(buf)
+  console.log('[gcv] ribbon bounds:', bounds, 'layers:', modelLayerMeshes.length, 'total:', totalModelLayers.value)
   applyViewModeVisibility()
+  console.log('[gcv] ghost visible:', modelGhostGroup?.visible, 'finished visible:', modelFinishedGroup?.visible)
 }
 
 function applyViewModeVisibility() {
+  console.log('[gcv] applyVisibility mode:', viewMode.value, 'layers:', modelLayerMeshes.length)
   if (!modelLayerMeshes.length) return
   if (!modelGhostGroup || !modelFinishedGroup) return
   if (viewMode.value === 'model') {
