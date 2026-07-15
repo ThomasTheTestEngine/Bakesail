@@ -30,7 +30,7 @@
       <label class="gcv-toggle" :class="{ active: viewMode === 'preview' }" @click="setViewMode('preview')" title="Print preview — layer slider reveals model">▶ Preview</label>
 
       <!-- Support toggle (model/preview modes) -->
-      <label v-if="viewMode !== 'paths'" class="gcv-toggle" :class="{ active: showSupports }" @click="showSupports = !showSupports">Supports</label>
+      <label class="gcv-toggle" :class="{ active: showSupports }" @click="showSupports = !showSupports">Supports</label>
 
       <div class="gcv-sep"></div>
 
@@ -185,6 +185,8 @@ let extrusionGeo = null, extrusionLine = null
 let travelGeo    = null, travelLine    = null
 let layerBounds  = []    // [{extrStart, travelStart}] per layer + sentinel
 let cx = 0, cy = 0, minZ = 0   // centring offsets
+let extrCol  = null   // Float32Array — kept alive for support toggle rewrite
+let extrFeat = null   // Uint8Array   — feature index per segment
 
 function initThree() {
   const W = wrapEl.value.offsetWidth
@@ -367,6 +369,7 @@ function buildScene(buf) {
   // Clear old geometry
   if (extrusionLine) { scene.remove(extrusionLine); extrusionGeo.dispose() }
   if (travelLine)    { scene.remove(travelLine);    travelGeo.dispose() }
+  extrCol = null; extrFeat = null
   if (modelGhostGroup)    { scene.remove(modelGhostGroup);    modelGhostGroup = null }
   if (modelFinishedGroup) { scene.remove(modelFinishedGroup); modelFinishedGroup = null }
   modelLayerMeshes = []
@@ -418,7 +421,8 @@ function buildScene(buf) {
   const EXTR_STRIDE = 6 * 4 + 1  // 25 bytes
 
   const extrPos = new Float32Array(nExtr * 6)   // 2 verts * 3 floats
-  const extrCol = new Float32Array(nExtr * 6)   // 2 verts * 3 floats (RGB)
+  extrCol  = new Float32Array(nExtr * 6)         // 2 verts * 3 floats (RGB) — kept at module level
+  extrFeat = new Uint8Array(nExtr)               // feature index per segment — kept at module level
   const extrLyr = new Float32Array(nExtr * 2)   // layer index per vertex
 
   // Compute layer index lookup from layerBounds
@@ -445,6 +449,8 @@ function buildScene(buf) {
     const pi = s * 6
     extrPos[pi]   = x1;  extrPos[pi+1] = z1;  extrPos[pi+2] = -y1
     extrPos[pi+3] = x2;  extrPos[pi+4] = z2;  extrPos[pi+5] = -y2
+
+    extrFeat[s] = fi
 
     const c  = FEATURE_COLOURS[fi] ?? FEATURE_COLOURS[6]
     extrCol[pi]   = c.r;  extrCol[pi+1] = c.g;  extrCol[pi+2] = c.b
@@ -686,8 +692,29 @@ function updatePreviewLayer() {
   }
 }
 
+// Rewrite extrusion colour buffer respecting showSupports (paths mode)
+const SUPPORT_FEAT = 3  // index in FEATURE_COLOURS
+function reapplyExtrColours() {
+  if (!extrusionGeo || !extrCol || !extrFeat) return
+  const hide = !showSupports.value
+  for (let s = 0; s < extrFeat.length; s++) {
+    const fi = extrFeat[s]
+    const pi = s * 6
+    if (fi === SUPPORT_FEAT && hide) {
+      extrCol[pi] = extrCol[pi+1] = extrCol[pi+2] = 0
+      extrCol[pi+3] = extrCol[pi+4] = extrCol[pi+5] = 0
+    } else {
+      const c = FEATURE_COLOURS[fi] ?? FEATURE_COLOURS[6]
+      extrCol[pi]   = c.r;  extrCol[pi+1] = c.g;  extrCol[pi+2] = c.b
+      extrCol[pi+3] = c.r;  extrCol[pi+4] = c.g;  extrCol[pi+5] = c.b
+    }
+  }
+  extrusionGeo.attributes.color.needsUpdate = true
+}
+
 watch(showSupports, () => {
-  if (viewMode.value === 'model') applyViewModeVisibility()
+  if (viewMode.value === 'paths') reapplyExtrColours()
+  else if (viewMode.value === 'model') applyViewModeVisibility()
   else if (viewMode.value === 'preview') updatePreviewLayer()
 })
 
