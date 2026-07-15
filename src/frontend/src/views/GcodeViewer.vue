@@ -579,6 +579,7 @@ function buildRibbonGeometry(buf) {
 
     const wallGeo = buildRibbons(nw, z, h)
     const supGeo  = (version >= 2) ? buildRibbons(ns, z, h) : null
+    if (li === 0) console.log('[gcv] ribbon v' + version + ' layer0: nw=' + nw + ' ns=' + ns)
 
     if (!wallGeo && !supGeo) { modelLayerMeshes.push(null); continue }
 
