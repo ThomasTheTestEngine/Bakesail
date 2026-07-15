@@ -756,6 +756,7 @@ def _parse_gcode_preview(gcode_path, out_path):
                         is_support = False
                     elif _SUPPORT_RE.search(line):
                         want_extrusion = True
+                        is_support = True
                     elif _SKIN_RE.search(line):
                         want_extrusion = True
                         is_support = False
