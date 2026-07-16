@@ -153,6 +153,8 @@
                        :placeholder="printer.hotendTarget > 0 ? printer.hotendTarget.toFixed(0) : '0'"
                        @keydown.enter.prevent="e => { setHotend(hotendInput); hotendInput = ''; e.target.blur() }"
                        @keydown.escape="e => { hotendInput = ''; e.target.blur() }" />
+                <span v-if="printer.hotendTarget > 0 && Math.abs((printer.hotendTemp ?? 0) - printer.hotendTarget) > 2"
+                      class="wmon-temp-setpoint">{{ printer.hotendTarget.toFixed(0) }}°</span>
                 <span class="wmon-sensor-val">{{ printer.hotendTemp?.toFixed(1) ?? '—' }}°C</span>
               </div>
               <!-- Bed -->
@@ -168,6 +170,8 @@
                        :placeholder="printer.bedTarget > 0 ? printer.bedTarget.toFixed(0) : '0'"
                        @keydown.enter.prevent="e => { setBed(bedInput); bedInput = ''; e.target.blur() }"
                        @keydown.escape="e => { bedInput = ''; e.target.blur() }" />
+                <span v-if="printer.bedTarget > 0 && Math.abs((printer.bedTemp ?? 0) - printer.bedTarget) > 2"
+                      class="wmon-temp-setpoint">{{ printer.bedTarget.toFixed(0) }}°</span>
                 <span class="wmon-sensor-val">{{ printer.bedTemp?.toFixed(1) ?? '—' }}°C</span>
               </div>
               <!-- Dynamic temperature_sensor * (read-only, no target input) -->
@@ -1310,6 +1314,7 @@ onUnmounted(() => {
 .wmon-temp-input::placeholder { color: var(--text-muted); }
 .wmon-sensor-name { font-size: 12px; font-weight: 600; flex: 1; }
 .wmon-sensor-val  { font-size: 13px; font-family: var(--font-mono); font-weight: 700; color: var(--teal); }
+.wmon-temp-setpoint { font-size: 12px; font-family: var(--font-mono); font-weight: 600; color: var(--amber); }
 .wmon-sensor-target { font-size: 11px; color: var(--text-muted); }
 
 .wmon-led-swatches { display: flex; gap: 3px; flex-wrap: wrap; }
