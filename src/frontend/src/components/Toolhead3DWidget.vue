@@ -84,6 +84,16 @@ function handleStatus(data) {
       livePos.z = mr.live_position[2]
     }
   }
+  if (data.print_stats) {
+    const ps = data.print_stats
+    if (ps.filename != null) printFilename.value = ps.filename || null
+    if (ps.state    != null) printState.value    = ps.state
+  }
+  if (data.virtual_sdcard) {
+    const vs = data.virtual_sdcard
+    if (vs.file_position != null) filePosition.value = vs.file_position
+    if (vs.file_size     != null) fileSize.value     = vs.file_size
+  }
 }
 
 // ── Homing state ──────────────────────────────────────────────────────────────
@@ -147,6 +157,17 @@ let bedPlane        // THREE.Plane at Y=0 for continuous XY raycasting
 let zDragPlane      // THREE.Plane at Z-rail X for Z raycasting
 let animFrameId
 
+// ── Print preview ribbon overlay ──────────────────────────────────────────────
+let printGhostGroup    = null   // semi-transparent layers above split
+let printFinishedGroup = null   // opaque layers below split
+let printLayerMeshes   = []     // [{ghost, ghostSup, finished, finishedSup}|null]
+let printLayerSplit    = 0      // layers revealed so far
+
+const printFilename  = ref(null)   // print_stats.filename
+const printState     = ref(null)   // print_stats.state
+const filePosition   = ref(0)
+const fileSize       = ref(0)
+
 // ── Drag state ────────────────────────────────────────────────────────────────
 const isDragging  = ref(false)
 let   dragMode    = null   // 'xy' | 'z'
@@ -184,6 +205,184 @@ const C = {
   rulerY:   0xF07FAA,   // --amber (pink) — Y axis
   rulerZ:   0xF0D87A,   // --yellow       — Z axis
 }
+
+// ── Print preview ribbon ───────────────────────────────────────────────────────
+// Colours matched to GcodeViewer model mode
+const C_PRINT_GHOST    = new THREE.Color(0x1a3344)
+const C_PRINT_FINISHED = new THREE.Color(0xF07FAA)
+const C_PRINT_SUP_FIN  = new THREE.Color(0xe5c07b)
+const C_PRINT_SUP_GHO  = new THREE.Color(0x1a3344)
+
+function clearPrintPreview() {
+  if (printGhostGroup)    { scene?.remove(printGhostGroup);    printGhostGroup    = null }
+  if (printFinishedGroup) { scene?.remove(printFinishedGroup); printFinishedGroup = null }
+  printLayerMeshes = []
+  printLayerSplit  = 0
+}
+
+async function loadPrintPreview(filename) {
+  if (!scene) return
+  clearPrintPreview()
+  if (!filename) return
+
+  // Resolve gcodes root
+  let root = null
+  try {
+    const r = await fetch('/server/files/roots')
+    const d = await r.json()
+    const items = d.result ?? d
+    root = Array.isArray(items) ? items.find(x => x.name === 'gcodes')?.path : null
+  } catch { /* ignore */ }
+  if (!root) root = '/home/cunt/printer_data/gcodes'
+
+  const fsPath = `${root}/${filename}`
+  const r = await fetch(`/bakesail/gcode-preview?path=${encodeURIComponent(fsPath)}`)
+  if (!r.ok) { console.log('[t3d] no preview for', filename); return }
+  const buf = await r.arrayBuffer()
+  buildPrintRibbons(buf)
+  updatePrintLayer()
+}
+
+function buildPrintRibbons(buf) {
+  const dv = new DataView(buf)
+  let off = 0
+
+  const magic = String.fromCharCode(...new Uint8Array(buf, 0, 4))
+  if (magic !== 'BSPV') { console.warn('[t3d] bad preview magic:', magic); return }
+  off = 4
+
+  const version = dv.getUint32(off, true); off += 4
+  const minX    = dv.getFloat32(off, true); off += 4
+  /* minY */     dv.getFloat32(off, true); off += 4
+  const minZ    = dv.getFloat32(off, true); off += 4
+  /* maxX */     dv.getFloat32(off, true); off += 4
+  /* maxY */     dv.getFloat32(off, true); off += 4
+  /* maxZ */     dv.getFloat32(off, true); off += 4
+  /* layerH */   dv.getFloat32(off, true); off += 4
+  const nLayers = dv.getUint32(off, true); off += 4
+
+  printGhostGroup    = new THREE.Group()
+  printFinishedGroup = new THREE.Group()
+  printLayerMeshes   = []
+  scene.add(printGhostGroup, printFinishedGroup)
+
+  const ghostMat    = new THREE.MeshLambertMaterial({ color: C_PRINT_GHOST,    transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false })
+  const finMat      = new THREE.MeshLambertMaterial({ color: C_PRINT_FINISHED, transparent: false, side: THREE.DoubleSide })
+  const supFinMat   = new THREE.MeshLambertMaterial({ color: C_PRINT_SUP_FIN,  transparent: false, side: THREE.DoubleSide })
+  const supGhoMat   = new THREE.MeshLambertMaterial({ color: C_PRINT_SUP_GHO,  transparent: true,  opacity: 0.18, side: THREE.DoubleSide, depthWrite: false })
+
+  // Build flat ribbon quads for N segments at printer Z height z
+  // Printer coords → Three.js: (x, y, z) → (x, z - minZ, -y)
+  function buildRibbons(nSegs, z, h) {
+    const verts = []
+    const EW = 0.2
+    for (let si = 0; si < nSegs; si++) {
+      const x1 = dv.getFloat32(off, true); off += 4
+      const y1 = dv.getFloat32(off, true); off += 4
+      const x2 = dv.getFloat32(off, true); off += 4
+      const y2 = dv.getFloat32(off, true); off += 4
+      const dx = x2 - x1, dy = y2 - y1
+      const len = Math.sqrt(dx*dx + dy*dy)
+      if (len < 0.001) continue
+      const nx = -dy/len*EW, ny = dx/len*EW
+      // Convert to Three.js coords: printer (px, py, pz) → three (px, pz, -py)
+      const zb = z - minZ, zt = zb + h
+      // top face
+      verts.push(x1+nx, zt, -(y1+ny),  x1-nx, zt, -(y1-ny),  x2-nx, zt, -(y2-ny))
+      verts.push(x1+nx, zt, -(y1+ny),  x2-nx, zt, -(y2-ny),  x2+nx, zt, -(y2+ny))
+      // bottom face
+      verts.push(x1+nx, zb, -(y1+ny),  x2+nx, zb, -(y2+ny),  x2-nx, zb, -(y2-ny))
+      verts.push(x1+nx, zb, -(y1+ny),  x2-nx, zb, -(y2-ny),  x1-nx, zb, -(y1-ny))
+      // side A
+      verts.push(x1+nx, zb, -(y1+ny),  x1+nx, zt, -(y1+ny),  x2+nx, zt, -(y2+ny))
+      verts.push(x1+nx, zb, -(y1+ny),  x2+nx, zt, -(y2+ny),  x2+nx, zb, -(y2+ny))
+      // side B
+      verts.push(x1-nx, zt, -(y1-ny),  x1-nx, zb, -(y1-ny),  x2-nx, zb, -(y2-ny))
+      verts.push(x1-nx, zt, -(y1-ny),  x2-nx, zb, -(y2-ny),  x2-nx, zt, -(y2-ny))
+    }
+    if (!verts.length) return null
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3))
+    geo.computeVertexNormals()
+    return geo
+  }
+
+  for (let li = 0; li < nLayers; li++) {
+    const z  = dv.getFloat32(off, true); off += 4
+    const h  = dv.getFloat32(off, true); off += 4
+    const nw = dv.getUint32(off, true);  off += 4
+    let   ns = 0; if (version >= 2) { ns = dv.getUint32(off, true); off += 4 }
+
+    const wallGeo = buildRibbons(nw, z, h)
+    const supGeo  = (version >= 2 && ns > 0) ? buildRibbons(ns, z, h) : null
+
+    if (!wallGeo && !supGeo) { printLayerMeshes.push(null); continue }
+
+    const entry = {}
+    if (wallGeo) {
+      entry.ghost    = new THREE.Mesh(wallGeo, ghostMat.clone())
+      entry.finished = new THREE.Mesh(wallGeo, finMat.clone())
+      printGhostGroup.add(entry.ghost)
+      printFinishedGroup.add(entry.finished)
+    }
+    if (supGeo) {
+      entry.ghostSup    = new THREE.Mesh(supGeo, supGhoMat.clone())
+      entry.finishedSup = new THREE.Mesh(supGeo, supFinMat.clone())
+      printGhostGroup.add(entry.ghostSup)
+      printFinishedGroup.add(entry.finishedSup)
+    }
+    printLayerMeshes.push(entry)
+  }
+  console.log('[t3d] print preview built:', nLayers, 'layers, v' + version)
+}
+
+function updatePrintLayer() {
+  const split = printLayerSplit
+  for (let i = 0; i < printLayerMeshes.length; i++) {
+    const lm = printLayerMeshes[i]
+    if (!lm) continue
+    const done = i < split
+    if (lm.ghost)       lm.ghost.visible       = !done
+    if (lm.finished)    lm.finished.visible     = done
+    if (lm.ghostSup)    lm.ghostSup.visible     = !done
+    if (lm.finishedSup) lm.finishedSup.visible  = done
+  }
+}
+
+// Watch for print file changes → load/clear preview
+watch(printFilename, async (fname, prev) => {
+  if (fname === prev) return
+  if (fname) {
+    await loadPrintPreview(fname)
+  } else {
+    clearPrintPreview()
+  }
+})
+
+// Watch for print state → clear when done/cancelled
+watch(printState, (state) => {
+  if (state === 'complete' || state === 'cancelled' || state === 'error') {
+    // Keep model visible but freeze at full reveal so you can see the finished print
+    if (state === 'complete' && printLayerMeshes.length) {
+      printLayerSplit = printLayerMeshes.length
+      updatePrintLayer()
+      if (printGhostGroup) printGhostGroup.visible = false
+    } else {
+      clearPrintPreview()
+    }
+  }
+})
+
+// Watch file_position → update layer split
+watch([filePosition, fileSize], ([pos, size]) => {
+  if (!printLayerMeshes.length || size <= 0) return
+  const ratio = Math.min(1, pos / size)
+  const newSplit = Math.floor(ratio * printLayerMeshes.length)
+  if (newSplit !== printLayerSplit) {
+    printLayerSplit = newSplit
+    updatePrintLayer()
+  }
+})
 
 // ── Scene init ────────────────────────────────────────────────────────────────
 function initScene() {
@@ -666,6 +865,14 @@ onMounted(async () => {
       const r2 = await send('printer.objects.query', { objects: { motion_report: ['live_position'] } })
       if (r2?.status?.motion_report) handleStatus({ motion_report: r2.status.motion_report })
     } catch { /* optional */ }
+    // Query print state so preview loads immediately if a print is already running
+    try {
+      const r3 = await send('printer.objects.query', {
+        objects: { print_stats: ['filename', 'state'], virtual_sdcard: ['file_position', 'file_size'] }
+      })
+      if (r3?.status?.print_stats)   handleStatus({ print_stats:   r3.status.print_stats })
+      if (r3?.status?.virtual_sdcard) handleStatus({ virtual_sdcard: r3.status.virtual_sdcard })
+    } catch { /* optional */ }
   } catch { /* degrade gracefully */ }
 
   // fetchLimits sets limitsReady which makes wrapEl render, so wait a tick
@@ -681,7 +888,10 @@ onMounted(async () => {
 
   initScene()
 
-  // Pointer listeners on GL canvas
+  // If a print was already running when we mounted, load the preview now
+  if (printFilename.value) loadPrintPreview(printFilename.value)
+
+
   glCanvas.value.addEventListener('pointerdown', onPointerDown)
   glCanvas.value.addEventListener('pointermove', onPointerMove)
   window.addEventListener('pointerup', onPointerUp)
@@ -695,6 +905,7 @@ onUnmounted(() => {
   if (unsubStatus) unsubStatus()
   cancelAnimationFrame(animFrameId)
   resizeObserver?.disconnect()
+  clearPrintPreview()
   glCanvas.value?.removeEventListener('pointerdown', onPointerDown)
   glCanvas.value?.removeEventListener('pointermove', onPointerMove)
   window.removeEventListener('pointerup', onPointerUp)
