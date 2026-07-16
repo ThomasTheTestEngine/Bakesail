@@ -266,10 +266,10 @@ function buildPrintRibbons(buf) {
   printLayerMeshes   = []
   scene.add(printGhostGroup, printFinishedGroup)
 
-  const ghostMat    = new THREE.MeshLambertMaterial({ color: C_PRINT_GHOST,    transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false })
-  const finMat      = new THREE.MeshLambertMaterial({ color: C_PRINT_FINISHED, transparent: false, side: THREE.DoubleSide })
-  const supFinMat   = new THREE.MeshLambertMaterial({ color: C_PRINT_SUP_FIN,  transparent: false, side: THREE.DoubleSide })
-  const supGhoMat   = new THREE.MeshLambertMaterial({ color: C_PRINT_SUP_GHO,  transparent: true,  opacity: 0.18, side: THREE.DoubleSide, depthWrite: false })
+  const ghostMat    = new THREE.MeshBasicMaterial({ color: C_PRINT_GHOST,    transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false })
+  const finMat      = new THREE.MeshBasicMaterial({ color: C_PRINT_FINISHED, transparent: false, side: THREE.DoubleSide })
+  const supFinMat   = new THREE.MeshBasicMaterial({ color: C_PRINT_SUP_FIN,  transparent: false, side: THREE.DoubleSide })
+  const supGhoMat   = new THREE.MeshBasicMaterial({ color: C_PRINT_SUP_GHO,  transparent: true,  opacity: 0.18, side: THREE.DoubleSide, depthWrite: false })
 
   // Build flat ribbon quads for N segments at printer Z height z
   // Printer coords → Three.js: (x, y, z) → (x, z - minZ, -y)
@@ -352,6 +352,7 @@ function updatePrintLayer() {
 // Watch for print file changes → load/clear preview
 watch(printFilename, async (fname, prev) => {
   if (fname === prev) return
+  if (!scene) return  // scene not yet initialized; onMounted handles initial load
   if (fname) {
     await loadPrintPreview(fname)
   } else {
@@ -723,6 +724,9 @@ function onPointerDown(e) {
   if (e.button !== 0) return              // right-click / two-finger-click → OrbitControls
   if (activePointerIds.size > 1) return   // two fingers down → OrbitControls
   if (!isHomed.value) return
+  // Block movement commands while a print is running or paused
+  const ps = printState.value
+  if (ps === 'printing' || ps === 'paused') return
 
   const hit = raycastScene(e)
 
