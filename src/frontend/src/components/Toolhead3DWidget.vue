@@ -263,13 +263,15 @@ function buildPrintRibbons(buf) {
 
   printGhostGroup    = new THREE.Group()
   printFinishedGroup = new THREE.Group()
+  printFinishedGroup.renderOrder = 0
+  printGhostGroup.renderOrder    = 1
   printLayerMeshes   = []
-  scene.add(printGhostGroup, printFinishedGroup)
+  scene.add(printFinishedGroup, printGhostGroup)
 
-  const ghostMat    = new THREE.MeshBasicMaterial({ color: C_PRINT_GHOST,    transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false })
+  const ghostMat    = new THREE.MeshBasicMaterial({ color: C_PRINT_GHOST,    transparent: true, opacity: 0.06, side: THREE.DoubleSide, depthWrite: false })
   const finMat      = new THREE.MeshBasicMaterial({ color: C_PRINT_FINISHED, transparent: false, side: THREE.DoubleSide })
   const supFinMat   = new THREE.MeshBasicMaterial({ color: C_PRINT_SUP_FIN,  transparent: false, side: THREE.DoubleSide })
-  const supGhoMat   = new THREE.MeshBasicMaterial({ color: C_PRINT_SUP_GHO,  transparent: true,  opacity: 0.18, side: THREE.DoubleSide, depthWrite: false })
+  const supGhoMat   = new THREE.MeshBasicMaterial({ color: C_PRINT_SUP_GHO,  transparent: true,  opacity: 0.06, side: THREE.DoubleSide, depthWrite: false })
 
   // Build flat ribbon quads for N segments at printer Z height z
   // Printer coords → Three.js: (x, y, z) → (x, z - minZ, -y)
@@ -910,6 +912,7 @@ onUnmounted(() => {
   cancelAnimationFrame(animFrameId)
   resizeObserver?.disconnect()
   clearPrintPreview()
+  scene = null
   glCanvas.value?.removeEventListener('pointerdown', onPointerDown)
   glCanvas.value?.removeEventListener('pointermove', onPointerMove)
   window.removeEventListener('pointerup', onPointerUp)
