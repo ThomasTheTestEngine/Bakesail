@@ -45,27 +45,49 @@
         <button class="ws-close-btn" @click="$emit('closeSettings')">✕</button>
         <div class="ws-popout-title">Widget Settings</div>
 
-        <div class="ws-field-row">
-          <label class="ws-field-label">Font size</label>
-          <input class="ws-field-input ws-field-input--sm" type="number"
-                 v-model.number="widget.config.fontSize" min="10" max="72" />
-          <span class="ws-field-unit">px</span>
-        </div>
+        <!-- Generic appearance — hidden for toolhead3d which has its own options -->
+        <template v-if="widget.type !== 'toolhead3d'">
+          <div class="ws-field-row">
+            <label class="ws-field-label">Font size</label>
+            <input class="ws-field-input ws-field-input--sm" type="number"
+                   v-model.number="widget.config.fontSize" min="10" max="72" />
+            <span class="ws-field-unit">px</span>
+          </div>
 
-        <div class="ws-field-row">
-          <label class="ws-field-label">Value colour</label>
-          <input class="ws-color-swatch" type="color"
-                 :value="widget.config.valueColor || '#E8E8E8'"
-                 @input="widget.config.valueColor = $event.target.value" />
-        </div>
+          <div class="ws-field-row">
+            <label class="ws-field-label">Value colour</label>
+            <input class="ws-color-swatch" type="color"
+                   :value="widget.config.valueColor || '#E8E8E8'"
+                   @input="widget.config.valueColor = $event.target.value" />
+          </div>
 
-        <div class="ws-field-row">
-          <label class="ws-field-label">Background</label>
-          <input class="ws-color-swatch" type="color"
-                 :value="widget.config.bgColor || '#141414'"
-                 @input="widget.config.bgColor = $event.target.value" />
-          <button class="ws-clear-btn" @click="delete widget.config.bgColor" title="Clear">↺</button>
-        </div>
+          <div class="ws-field-row">
+            <label class="ws-field-label">Background</label>
+            <input class="ws-color-swatch" type="color"
+                   :value="widget.config.bgColor || '#141414'"
+                   @input="widget.config.bgColor = $event.target.value" />
+            <button class="ws-clear-btn" @click="delete widget.config.bgColor" title="Clear">↺</button>
+          </div>
+        </template>
+
+        <!-- Toolhead 3D specific options -->
+        <template v-if="widget.type === 'toolhead3d'">
+          <div class="ws-fields-section">
+            <div class="ws-fields-title">Display</div>
+            <label class="ws-field-toggle">
+              <input type="checkbox"
+                     :checked="widget.config.showLockBtn !== false"
+                     @change="widget.config.showLockBtn = $event.target.checked" />
+              Lock button
+            </label>
+            <label class="ws-field-toggle">
+              <input type="checkbox"
+                     :checked="widget.config.showPerspectiveLabels !== false"
+                     @change="widget.config.showPerspectiveLabels = $event.target.checked" />
+              Perspective labels
+            </label>
+          </div>
+        </template>
 
         <div v-if="allFields && allFields.length > 0" class="ws-fields-section">
           <div class="ws-fields-title">Display</div>

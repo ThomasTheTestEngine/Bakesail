@@ -241,18 +241,47 @@
         <!-- ── Print Progress ─────────────────────────────────── -->
         <template v-else-if="w.type === 'progress'">
           <div class="w-progress">
-            <div class="wp-filename">{{ printer.filename || 'No file loaded' }}</div>
-            <div class="wp-bar-track">
-              <div class="wp-bar-fill" :style="{ width: (printer.progress * 100).toFixed(1) + '%' }"></div>
+
+            <!-- Active job section -->
+            <template v-if="printer.filename">
+              <div class="wp-filename">{{ printer.filename }}</div>
+              <div class="wp-bar-track">
+                <div class="wp-bar-fill" :style="{ width: (printer.progress * 100).toFixed(1) + '%' }"></div>
+              </div>
+              <div class="wp-stats">
+                <span class="wp-pct">{{ (printer.progress * 100).toFixed(1) }}%</span>
+                <span class="wp-time" v-if="printer.printDuration > 0">{{ formatDuration(printer.printDuration) }}</span>
+                <span class="wp-eta"  v-if="printer.progress > 0 && printer.progress < 1">ETA {{ formatEta(printer.printDuration, printer.progress) }}</span>
+              </div>
+              <div class="wp-layer" v-if="printer.currentLayer != null">
+                Layer {{ printer.currentLayer }}<span class="wp-layer-total" v-if="printer.totalLayers"> / {{ printer.totalLayers }}</span>
+              </div>
+            </template>
+            <div v-else class="wp-idle">No file loaded</div>
+
+            <!-- Recent files dropdown -->
+            <div class="wp-recent">
+              <button class="wp-recent-toggle" @click="wpToggleDropdown">
+                <span class="wp-recent-label">
+                  <span v-if="wpFiles.length">{{ wpFiles[0]?.filename ?? 'Recent files' }}</span>
+                  <span v-else class="wp-recent-empty">Recent files</span>
+                </span>
+                <i :class="wpDropdownOpen ? 'mdi mdi-chevron-up' : 'mdi mdi-chevron-down'" class="wp-recent-chevron"></i>
+              </button>
+              <div v-if="wpDropdownOpen" class="wp-recent-list">
+                <div v-if="wpFilesLoading" class="wp-recent-row wp-recent-loading">Loading…</div>
+                <div v-else-if="!wpFiles.length" class="wp-recent-row wp-recent-loading">No files found</div>
+                <div v-else v-for="f in wpFiles" :key="f.filename" class="wp-recent-row">
+                  <span class="wp-recent-name" :title="f.filename">{{ f.filename }}</span>
+                  <span class="wp-recent-time">{{ wpFmtDuration(f.estimated_time) }}</span>
+                  <button class="wp-recent-print"
+                          :disabled="printer.isPrinting || printer.isPaused"
+                          @click="wpStartPrint(f.filename)"
+                          title="Print">▶</button>
+                </div>
+              </div>
             </div>
-            <div class="wp-stats">
-              <span class="wp-pct">{{ (printer.progress * 100).toFixed(1) }}%</span>
-              <span class="wp-time" v-if="!isFieldHidden(w,'time') && printer.printDuration > 0">{{ formatDuration(printer.printDuration) }}</span>
-              <span class="wp-eta"  v-if="!isFieldHidden(w,'eta') && printer.progress > 0 && printer.progress < 1">ETA {{ formatEta(printer.printDuration, printer.progress) }}</span>
-            </div>
-            <div class="wp-filament" v-if="!isFieldHidden(w,'filament') && printer.filamentUsed > 0">
-              {{ (printer.filamentUsed / 1000).toFixed(2) }}m used
-            </div>
+
           </div>
         </template>
 
@@ -593,6 +622,46 @@ import Toolhead3DWidget   from '../components/Toolhead3DWidget.vue'
 const settings = useSettingsStore()
 const deviceStore = useDeviceStore()
 const { klippyState, sendGcode, subscribeToStatus } = useMoonraker()
+
+// ── Progress widget: recent files dropdown ─────────────────────
+const wpDropdownOpen  = ref(false)
+const wpFiles         = ref([])    // sorted by modified desc, top 5 shown
+const wpFilesLoading  = ref(false)
+
+async function wpLoadFiles() {
+  if (wpFiles.value.length) return   // already loaded
+  wpFilesLoading.value = true
+  try {
+    const r = await fetch('/server/files/directory?path=gcodes&extended=true')
+    if (!r.ok) return
+    const d = await r.json()
+    wpFiles.value = (d.result?.files ?? [])
+      .filter(f => /\.(gcode|gc|g|gco)$/i.test(f.filename))
+      .sort((a, b) => b.modified - a.modified)
+      .slice(0, 5)
+  } catch { /* ignore */ } finally {
+    wpFilesLoading.value = false
+  }
+}
+
+async function wpStartPrint(filename) {
+  wpDropdownOpen.value = false
+  try {
+    await fetch(`/printer/print/start?filename=${encodeURIComponent(filename)}`, { method: 'POST' })
+  } catch { /* ignore */ }
+}
+
+function wpToggleDropdown() {
+  wpDropdownOpen.value = !wpDropdownOpen.value
+  if (wpDropdownOpen.value) wpLoadFiles()
+}
+
+function wpFmtDuration(s) {
+  if (!s) return '—'
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60)
+  if (h > 0) return `${h}h ${m}m`
+  return `${m}m`
+}
 const _uid = Math.random().toString(36).slice(2, 7)
 
 // ── Printer state ──────────────────────────────────────────────
@@ -1383,15 +1452,46 @@ onUnmounted(() => {
 .wch-canvas { flex: 1; width: 100%; min-height: 0; }
 
 /* Progress */
-.w-progress { display: flex; flex-direction: column; gap: 8px; justify-content: center; height: 100%; }
+.w-progress { display: flex; flex-direction: column; gap: 6px; height: 100%; overflow: hidden; }
 .wp-filename  { font-size: 12px; color: var(--text-dim); font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.wp-bar-track { height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+.wp-bar-track { height: 6px; background: var(--surface-2); border-radius: 4px; overflow: hidden; flex-shrink: 0; }
 .wp-bar-fill  { height: 100%; background: var(--amber); border-radius: 4px; transition: width 0.8s ease; }
-.wp-stats { display: flex; align-items: baseline; gap: 14px; }
-.wp-pct  { font-size: 22px; font-weight: 700; font-family: var(--font-mono); }
+.wp-stats { display: flex; align-items: baseline; gap: 12px; }
+.wp-pct  { font-size: 20px; font-weight: 700; font-family: var(--font-mono); }
 .wp-time { font-size: 12px; color: var(--text-dim);  font-family: var(--font-mono); }
 .wp-eta  { font-size: 12px; color: var(--teal);      font-family: var(--font-mono); }
-.wp-filament { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); }
+.wp-layer { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); }
+.wp-layer-total { color: var(--text-muted); }
+.wp-idle { font-size: 12px; color: var(--text-muted); font-style: italic; }
+.wp-recent { margin-top: auto; border-top: 1px solid var(--border); }
+.wp-recent-toggle {
+  width: 100%; display: flex; align-items: center; gap: 6px;
+  background: none; border: none; cursor: pointer;
+  padding: 5px 2px; color: var(--text-dim); font-size: 11px;
+  font-family: var(--font-mono);
+}
+.wp-recent-toggle:hover { color: var(--text); }
+.wp-recent-label { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-recent-empty { color: var(--text-muted); font-style: italic; }
+.wp-recent-chevron { font-size: 14px; flex-shrink: 0; }
+.wp-recent-list { display: flex; flex-direction: column; gap: 1px; }
+.wp-recent-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 2px; font-size: 11px; font-family: var(--font-mono);
+  border-radius: var(--radius);
+}
+.wp-recent-row:hover { background: var(--surface-2); }
+.wp-recent-loading { color: var(--text-muted); font-style: italic; justify-content: center; }
+.wp-recent-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); }
+.wp-recent-time { flex-shrink: 0; color: var(--text-muted); }
+.wp-recent-print {
+  flex-shrink: 0; background: none; border: 1px solid var(--amber);
+  color: var(--amber); border-radius: var(--radius); cursor: pointer;
+  font-size: 10px; padding: 1px 5px; line-height: 1.4;
+  transition: background 0.1s, color 0.1s;
+}
+.wp-recent-print:hover:not(:disabled) { background: var(--amber); color: var(--bg); }
+.wp-recent-print:disabled { opacity: 0.35; cursor: not-allowed; }
 
 /* Fan */
 .w-fan { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 6px; }
