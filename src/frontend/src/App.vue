@@ -143,8 +143,8 @@
                     class="topbar-btn topbar-btn--lit" @click="openFileDialog" title="Load file">
 <i class="mdi mdi-file-upload-outline" style="font-size:14px;margin-right:3px;vertical-align:-2px"></i>Load
             </button>
-            <!-- Print progress dial + controls — shown while printing/paused -->
-            <template v-if="deviceStore.printerState === 'printing' || deviceStore.printerState === 'paused'">
+            <!-- Print progress dial + controls — shown from prepare phase through completion -->
+            <template v-if="deviceStore.filename && klippyState === 'ready' && (deviceStore.printerState === 'printing' || deviceStore.printerState === 'paused' || (deviceStore.printerState === 'standby' && deviceStore.idleState === 'Printing'))">
               <div class="topbar-progress-dial" title="{{ (deviceStore.progress * 100).toFixed(1) }}%">
                 <svg viewBox="0 0 36 36" class="topbar-dial-svg">
                   <circle cx="18" cy="18" r="14" fill="none" stroke="var(--border-2)" stroke-width="3"/>
@@ -242,7 +242,7 @@
 
           <!-- Console mode: scrollable line list -->
           <div v-if="!cbarTerminal" class="cbar-output" ref="cbarOutputEl" @scroll="cbarOnScroll">
-            <div v-for="(line, i) in cbarLines" :key="i" class="cbar-line" :class="cbarLineClass(line)">
+            <div v-for="(line, i) in cbarFilteredLines" :key="i" class="cbar-line" :class="cbarLineClass(line)">
               <span class="cbar-line-time">{{ line.time }}</span>
               <span class="cbar-line-text" v-html="cbarColourize(line.text)"></span>
             </div>
@@ -270,8 +270,18 @@
               <button :class="['cbar-mode-btn', cbarTerminal ? 'cbar-mode-btn--active' : '']"
                       @click="!cbarTerminal && cbarSetTerminal(true)">Terminal</button>
             </div>
-            <button class="cbar-btn" @click="cbarClear" title="Clear"><i class="mdi mdi-delete-sweep-outline"></i></button>
-            <button v-if="!cbarTerminal" class="cbar-btn cbar-send" @click="cbarSubmit" title="Send"><i class="mdi mdi-send"></i></button>
+            <!-- Gear menu (console mode only) -->
+            <div v-if="!cbarTerminal" class="cbar-gear-wrap" @click.stop>
+              <button class="cbar-btn" :class="{ 'cbar-btn--active': cbarGearOpen }" @click="cbarGearOpen = !cbarGearOpen" title="Console settings">
+                <i class="mdi mdi-cog-outline"></i>
+              </button>
+              <div v-if="cbarGearOpen" class="cbar-gear-menu" @click.stop>
+                <label class="cbar-gear-item">
+                  <input type="checkbox" v-model="cbarFilterUnknown" />
+                  Hide "Unknown command" messages
+                </label>
+              </div>
+            </div>
             <div class="cbar-divider-v"></div>
             <button class="cbar-btn" @click.stop="cbarCollapse()" title="Minimize console">
               <i class="mdi mdi-arrow-collapse-up"></i>
@@ -756,6 +766,16 @@ let   cbarTermWs     = null
 let   cbarDragY      = null
 const CBAR_MAX       = 500
 
+// Console gear menu
+const cbarGearOpen        = ref(false)
+const cbarFilterUnknown   = ref(true)   // hide "// Unknown command: EXCLUDE_…" by default
+
+const UNKNOWN_CMD_RE = /\/\/ Unknown command:/i
+const cbarFilteredLines = computed(() => {
+  if (!cbarFilterUnknown.value) return cbarLines.value
+  return cbarLines.value.filter(l => !UNKNOWN_CMD_RE.test(l.text))
+})
+
 const CBAR_COLOURS = {
   30:'#555',31:'#e05555',32:'#4caf7d',33:'#f0d87a',
   34:'#80b4e0',35:'#c678dd',36:'#56b6c2',37:'#e8e8e8',
@@ -964,6 +984,18 @@ watch(klippyState, async val => {
   if (val === 'ready') { await fetchConsoleHistory(); cbarScrollBottom() }
 })
 
+// Tab title: "X% printing file.gcode" while printing/paused, else "Bakesail"
+watch(() => [deviceStore.printerState, deviceStore.progress, deviceStore.filename], () => {
+  const ps = deviceStore.printerState
+  if ((ps === 'printing' || ps === 'paused') && deviceStore.filename) {
+    const pct  = Math.round((deviceStore.progress ?? 0) * 100)
+    const name = deviceStore.filename.split('/').pop()
+    document.title = `${pct}% ${ps === 'paused' ? '(paused) ' : ''}${name}`
+  } else {
+    document.title = 'Bakesail'
+  }
+}, { immediate: true })
+
 // Re-init xterm when console bar reopens while in terminal mode
 watch(cbarOpen, async (isOpen) => {
   if (isOpen && cbarTerminal.value) {
@@ -998,7 +1030,7 @@ const topbarLabel = computed(() => {
   const ps = deviceStore.printerState
   const meta = PRINTER_STATE_META[ps]
   // If standby but Klipper is executing gcode (homing, QGL, etc.) → Busy
-  if (ps === 'standby' && deviceStore.idleState === 'Printing') return 'Busy'
+  if (ps === 'standby' && deviceStore.idleState === 'Printing') return 'Preparing printer'
   return meta?.label ?? ps
 })
 
@@ -1096,6 +1128,7 @@ function hostShutdown() {
 // Close power menu on outside click
 if (typeof window !== 'undefined') {
   window.addEventListener('click', () => { powerMenuOpen.value = false })
+  window.addEventListener('click', () => { cbarGearOpen.value = false })
 }
 
 // ── Theme ─────────────────────────────────────────────────────────
@@ -1818,8 +1851,33 @@ a { color: inherit; text-decoration: none; }
   flex-shrink: 0;
 }
 .cbar-btn:hover { color: var(--text); }
-.cbar-send { color: var(--teal); }
-.cbar-send:hover { color: var(--text); }
+.cbar-btn--active { color: var(--teal); }
+.cbar-gear-wrap { position: relative; }
+.cbar-gear-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  padding: 6px 4px;
+  min-width: 220px;
+  z-index: 200;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+.cbar-gear-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-radius: calc(var(--radius) - 2px);
+  white-space: nowrap;
+}
+.cbar-gear-item:hover { background: var(--surface-3); color: var(--text); }
+.cbar-gear-item input[type="checkbox"] { accent-color: var(--teal); cursor: pointer; }
 
 /* Log output */
 .cbar-output {
@@ -1828,7 +1886,6 @@ a { color: inherit; text-decoration: none; }
   padding: 4px 12px;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
   gap: 1px;
 }
 
