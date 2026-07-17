@@ -248,13 +248,42 @@
               <div class="wp-bar-track">
                 <div class="wp-bar-fill" :style="{ width: (printer.progress * 100).toFixed(1) + '%' }"></div>
               </div>
-              <div class="wp-stats">
+              <div class="wp-stats-row">
                 <span class="wp-pct">{{ (printer.progress * 100).toFixed(1) }}%</span>
-                <span class="wp-time" v-if="printer.printDuration > 0">{{ formatDuration(printer.printDuration) }}</span>
-                <span class="wp-eta"  v-if="printer.progress > 0 && printer.progress < 1">ETA {{ formatEta(printer.printDuration, printer.progress) }}</span>
+                <span class="wp-state-badge" :class="`wp-state--${printer.state}`">{{ printer.state }}</span>
               </div>
-              <div class="wp-layer" v-if="printer.currentLayer != null">
-                Layer {{ printer.currentLayer }}<span class="wp-layer-total" v-if="printer.totalLayers"> / {{ printer.totalLayers }}</span>
+              <div class="wp-grid">
+                <div class="wp-cell">
+                  <div class="wp-cell-label">Speed</div>
+                  <div class="wp-cell-val">{{ printer.speed != null ? Math.round(printer.speed) : '—' }}<span class="wp-cell-unit"> mm/s</span></div>
+                </div>
+                <div class="wp-cell">
+                  <div class="wp-cell-label">Filament</div>
+                  <div class="wp-cell-val">{{ printer.filamentUsed > 0 ? (printer.filamentUsed / 1000).toFixed(2) : '—' }}<span class="wp-cell-unit"> m</span></div>
+                </div>
+                <div class="wp-cell">
+                  <div class="wp-cell-label">Layer</div>
+                  <div class="wp-cell-val">
+                    <template v-if="printer.currentLayer != null">{{ printer.currentLayer }}<span class="wp-cell-unit"> / {{ printer.totalLayers ?? '?' }}</span></template>
+                    <template v-else>—</template>
+                  </div>
+                </div>
+                <div class="wp-cell">
+                  <div class="wp-cell-label">Elapsed</div>
+                  <div class="wp-cell-val">{{ formatDuration(printer.printDuration) }}</div>
+                </div>
+                <div class="wp-cell">
+                  <div class="wp-cell-label">ETA</div>
+                  <div class="wp-cell-val">{{ formatEta(printer.printDuration, printer.progress) }}</div>
+                </div>
+                <div class="wp-cell">
+                  <div class="wp-cell-label">Remaining</div>
+                  <div class="wp-cell-val">{{ wpRemainingStr }}</div>
+                </div>
+                <div class="wp-cell">
+                  <div class="wp-cell-label">Est. total</div>
+                  <div class="wp-cell-val">{{ printer.estimatedTime != null ? formatDuration(printer.estimatedTime) : '—' }}</div>
+                </div>
               </div>
             </template>
             <div v-else class="wp-idle">No file loaded</div>
@@ -621,7 +650,7 @@ import Toolhead3DWidget   from '../components/Toolhead3DWidget.vue'
 
 const settings = useSettingsStore()
 const deviceStore = useDeviceStore()
-const { klippyState, sendGcode, subscribeToStatus } = useMoonraker()
+const { klippyState, send, sendGcode, subscribeToStatus } = useMoonraker()
 
 // ── Progress widget: recent files dropdown ─────────────────────
 const wpDropdownOpen  = ref(false)
@@ -681,6 +710,9 @@ const printer = reactive({
   filamentUsed:  0,
   currentLayer:  null,
   totalLayers:   null,
+  estimatedTime: null,
+  speed:         null,
+  flow:          null,
   progress:      0,
   speedFactor:   1.0,
   extrudeFactor: 1.0,
@@ -738,12 +770,14 @@ function handleStatus(data) {
     if (ps.print_duration != null) printer.printDuration = ps.print_duration
     if (ps.filament_used  != null) printer.filamentUsed  = ps.filament_used
     if (ps.info?.current_layer != null) printer.currentLayer = ps.info.current_layer
-    if (ps.info?.total_layer   != null) printer.totalLayers  = ps.info.total_layer
+    if (ps.info?.total_layer   != null) printer.totalLayers   = ps.info.total_layer
+    if (ps.estimated_time      != null) printer.estimatedTime = ps.estimated_time
   }
   if (data.gcode_move) {
     if (data.gcode_move.speed_factor   != null) printer.speedFactor   = data.gcode_move.speed_factor
     if (data.gcode_move.extrude_factor != null) printer.extrudeFactor = data.gcode_move.extrude_factor
     if (data.gcode_move.homing_origin  != null) printer.zOffset       = data.gcode_move.homing_origin[2]
+    if (data.gcode_move.speed          != null) printer.speed         = data.gcode_move.speed / 60  // mm/min → mm/s
   }
   if (data.toolhead) {
     if (data.toolhead.position   != null) { printer.posX = data.toolhead.position[0]; printer.posY = data.toolhead.position[1]; printer.posZ = data.toolhead.position[2] }
@@ -1055,6 +1089,12 @@ function formatEta(elapsed, progress) {
   return new Date(Date.now() + remaining * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
+const wpRemainingStr = computed(() => {
+  if (!printer.progress || printer.progress <= 0 || printer.progress >= 1) return '—'
+  const rem = (printer.printDuration / printer.progress) - printer.printDuration
+  return rem > 0 ? formatDuration(rem) : '—'
+})
+
 const defaultMacros = ['BED_MESH_CALIBRATE', 'LOAD_FILAMENT', 'UNLOAD_FILAMENT']
 
 // ── Cancel confirm ─────────────────────────────────────────────
@@ -1257,6 +1297,13 @@ onMounted(async () => {
     }, 80)
   }
   unsubscribe = subscribeToStatus(handleStatus)
+  // Populate print state immediately without waiting for first push
+  try {
+    const r = await send('printer.objects.query', {
+      objects: { print_stats: null, display_status: null, gcode_move: ['speed', 'speed_factor', 'extrude_factor', 'homing_origin'] }
+    })
+    if (r?.status) handleStatus(r.status)
+  } catch { /* degrade gracefully */ }
   chartTimer = setInterval(drawCharts, 1000)
   _historyTimer = setInterval(() => _pushHistory(Date.now()), 2000)
 })
@@ -1453,15 +1500,20 @@ onUnmounted(() => {
 
 /* Progress */
 .w-progress { display: flex; flex-direction: column; gap: 6px; height: 100%; overflow: hidden; }
-.wp-filename  { font-size: 12px; color: var(--text-dim); font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.wp-bar-track { height: 6px; background: var(--surface-2); border-radius: 4px; overflow: hidden; flex-shrink: 0; }
+.wp-filename  { font-size: 11px; color: var(--text-dim); font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
+.wp-bar-track { height: 5px; background: var(--surface-2); border-radius: 4px; overflow: hidden; flex-shrink: 0; }
 .wp-bar-fill  { height: 100%; background: var(--amber); border-radius: 4px; transition: width 0.8s ease; }
-.wp-stats { display: flex; align-items: baseline; gap: 12px; }
+.wp-stats-row { display: flex; align-items: center; gap: 8px; }
 .wp-pct  { font-size: 20px; font-weight: 700; font-family: var(--font-mono); }
-.wp-time { font-size: 12px; color: var(--text-dim);  font-family: var(--font-mono); }
-.wp-eta  { font-size: 12px; color: var(--teal);      font-family: var(--font-mono); }
-.wp-layer { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); }
-.wp-layer-total { color: var(--text-muted); }
+.wp-state-badge { font-size: 10px; font-family: var(--font-mono); padding: 1px 6px; border-radius: var(--radius); background: var(--surface-2); color: var(--text-muted); }
+.wp-state--printing { color: var(--amber); }
+.wp-state--paused   { color: var(--yellow); }
+.wp-state--complete { color: var(--green); }
+.wp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; flex-shrink: 0; }
+.wp-cell { display: flex; flex-direction: column; gap: 1px; }
+.wp-cell-label { font-size: 9px; color: var(--text-muted); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.05em; }
+.wp-cell-val   { font-size: 12px; font-family: var(--font-mono); color: var(--text); }
+.wp-cell-unit  { color: var(--text-muted); font-size: 10px; }
 .wp-idle { font-size: 12px; color: var(--text-muted); font-style: italic; }
 .wp-recent { margin-top: auto; border-top: 1px solid var(--border); }
 .wp-recent-toggle {

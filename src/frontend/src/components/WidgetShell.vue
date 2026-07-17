@@ -86,6 +86,12 @@
                      @change="widget.config.showPerspectiveLabels = $event.target.checked" />
               Perspective labels
             </label>
+            <label class="ws-field-toggle">
+              <input type="checkbox"
+                     :checked="widget.config.showPerspectiveCube !== false"
+                     @change="widget.config.showPerspectiveCube = $event.target.checked" />
+              Perspective cube
+            </label>
           </div>
         </template>
 

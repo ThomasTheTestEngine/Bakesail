@@ -42,6 +42,15 @@
         <span class="th3d-not-homed-text">{{ isHoming ? 'HOMING…' : 'NOT HOMED' }}</span>
       </div>
 
+      <!-- Lock button — disables click-to-move -->
+      <button v-if="props.widget?.config?.showLockBtn !== false"
+              class="th3d-lock-btn"
+              :class="{ 'th3d-lock-btn--locked': movementLocked }"
+              @click="movementLocked = !movementLocked"
+              :title="movementLocked ? 'Movement locked — click to unlock' : 'Lock movement'">
+        <i :class="movementLocked ? 'mdi mdi-lock' : 'mdi mdi-lock-open-outline'"></i>
+      </button>
+
       <!-- Live coordinate readout strip (always visible, highlights during drag) -->
       <div class="th3d-readout" :class="{ 'th3d-readout--drag': isDragging }">
         <span class="th3d-ax th3d-ax--x">X <em>{{ fmtN(dispX) }}</em></span>
@@ -179,6 +188,7 @@ const filePosition   = ref(0)
 const fileSize       = ref(0)
 const hasModel       = ref(false)  // true when a preview is loaded
 const modelCleared   = ref(false)  // user clicked Clear Model
+const movementLocked = ref(false)  // lock button state
 
 // ── Drag state ────────────────────────────────────────────────────────────────
 const isDragging  = ref(false)
@@ -704,15 +714,15 @@ function drawOverlay() {
   }
 
   // ── Perspective cube ───────────────────────────────────────────────────────
-  if (cubeVisible.value) drawPerspectiveCube(ctx, oc.width, oc.height)
+  if (cubeVisible.value && props.widget?.config?.showPerspectiveCube !== false) drawPerspectiveCube(ctx, oc.width, oc.height)
 }
 
 function drawPerspectiveLabels(ctx, xMax, yMax) {
   const LABELS = [
-    { text: 'FRONT', pos: new THREE.Vector3(xMax / 2, 0,        0)        },  // Y=0 edge midpoint
-    { text: 'BACK',  pos: new THREE.Vector3(xMax / 2, 0,       -yMax)     },  // Y=yMax edge
-    { text: 'LEFT',  pos: new THREE.Vector3(0,         0,       -yMax / 2) },  // X=0 edge
-    { text: 'RIGHT', pos: new THREE.Vector3(xMax,      0,       -yMax / 2) },  // X=xMax edge
+    { text: 'FRONT', pos: new THREE.Vector3(xMax / 2,  -0.5,        0)        },
+    { text: 'BACK',  pos: new THREE.Vector3(xMax / 2,  -0.5,       -yMax)     },
+    { text: 'LEFT',  pos: new THREE.Vector3(0,          -0.5,       -yMax / 2) },
+    { text: 'RIGHT', pos: new THREE.Vector3(xMax,       -0.5,       -yMax / 2) },
   ]
   ctx.font = 'bold 11px monospace'
   ctx.textAlign = 'center'
@@ -752,18 +762,18 @@ const CUBE_FACE_LABELS = [
 
 function drawPerspectiveCube(ctx, cw, ch) {
   if (!camera) return
-  const SIZE   = 56
+  const SIZE   = 60
   const MARGIN = 10
   const cx     = cw - SIZE / 2 - MARGIN
   const cy     = SIZE / 2 + MARGIN
 
-  // Camera rotation without translation
-  const quat = camera.quaternion
-  const mat  = new THREE.Matrix4().makeRotationFromQuaternion(quat)
+  // Invert camera quaternion — we want the world orientation relative to camera,
+  // not the camera orientation in world space (which makes it appear reversed)
+  const quat = camera.quaternion.clone().invert()
 
   // Project cube vertex at normalized position
   function proj(v) {
-    const r = v.clone().applyMatrix4(mat)
+    const r = v.clone().applyQuaternion(quat)
     return { x: cx + r.x * SIZE / 2, y: cy - r.y * SIZE / 2, z: r.z }
   }
 
@@ -782,7 +792,7 @@ function drawPerspectiveCube(ctx, cw, ch) {
     const pts   = f.verts.map(([x,y,z]) => proj(new THREE.Vector3(x, y, z)))
     const avgZ  = pts.reduce((s,p) => s + p.z, 0) / pts.length
     const rotN  = f.normal.clone().applyQuaternion(quat)
-    const dot   = rotN.z  // facing camera if positive
+    const dot   = rotN.z  // positive = facing camera in inverted space
     return { ...f, pts, avgZ, dot }
   }).sort((a, b) => a.avgZ - b.avgZ)
 
@@ -866,6 +876,7 @@ function onPointerDown(e) {
   // Block movement commands while a print is running or paused
   const ps = printState.value
   if (ps === 'printing' || ps === 'paused') return
+  if (movementLocked.value) return
 
   const hit = raycastScene(e)
 
@@ -1170,6 +1181,23 @@ watch(() => [livePos.x, livePos.y, livePos.z, pos.x, pos.y, pos.z], () => {
   0%, 100% { opacity: 0.5; }
   50%       { opacity: 1;   }
 }
+.th3d-lock-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(20,20,30,0.65);
+  border: 1px solid var(--border-2);
+  color: var(--text-muted);
+  font-size: 15px;
+  width: 28px; height: 28px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(4px);
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.th3d-lock-btn:hover { color: var(--text); border-color: var(--text-dim); }
+.th3d-lock-btn--locked { color: var(--amber); border-color: var(--amber); background: rgba(240,127,50,0.12); }
 .th3d-clear-model {
   position: absolute;
   bottom: 36px;
