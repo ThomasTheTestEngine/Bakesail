@@ -12,8 +12,10 @@
     - Left-click-drag on Z handle → Z positioning. A horizontal slice plane
       shows at the dragged height, with Z rail tick overlay. Releases send
       G90 / G0 Z{} F600.
-    - Right-drag / scroll → orbit / zoom (OrbitControls).
-    - Left-drag on empty space → orbit.
+    - Left-drag on bed/Z-handle → move toolhead (XY or Z).
+    - Left-drag on empty space / right-drag / two-finger-drag → orbit.
+    - CMD/Ctrl + left-drag, middle-drag, or right-drag → pan (screen-space, all axes).
+    - Scroll → zoom.
 
   Coordinate mapping (Three.js Y-up):
     Printer X  → Three.js  X   (unchanged)
@@ -405,15 +407,16 @@ function initScene() {
   // Camera
   camera = new THREE.PerspectiveCamera(45, w / h, 1, 5000)
 
-  // OrbitControls — right-drag to orbit, scroll to zoom, left-drag on empty = orbit
+  // OrbitControls — left-drag = orbit, right/middle-drag = pan, scroll = zoom
+  // screenSpacePanning=true means pan moves in camera space (all axes, slicer-style)
   controls = new OrbitControls(camera, canvas)
   controls.enableDamping = true
   controls.dampingFactor = 0.12
-  controls.screenSpacePanning = false
+  controls.screenSpacePanning = true
   controls.mouseButtons = {
     LEFT:   THREE.MOUSE.ROTATE,
-    MIDDLE: THREE.MOUSE.DOLLY,
-    RIGHT:  THREE.MOUSE.ROTATE,
+    MIDDLE: THREE.MOUSE.PAN,
+    RIGHT:  THREE.MOUSE.PAN,
   }
   controls.touches = {
     ONE: THREE.TOUCH.ROTATE,
@@ -723,8 +726,9 @@ function raycastScene(e) {
 
 function onPointerDown(e) {
   activePointerIds.add(e.pointerId)
-  if (e.button !== 0) return              // right-click / two-finger-click → OrbitControls
-  if (activePointerIds.size > 1) return   // two fingers down → OrbitControls
+  if (e.button !== 0) return              // right-click / middle → OrbitControls pan
+  if (activePointerIds.size > 1) return   // two fingers → OrbitControls
+  if (e.metaKey || e.ctrlKey) return      // CMD/Ctrl + drag → OrbitControls pan
   if (!isHomed.value) return
   // Block movement commands while a print is running or paused
   const ps = printState.value
