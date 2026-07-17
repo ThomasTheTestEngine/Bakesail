@@ -49,6 +49,13 @@
         <span class="th3d-ax th3d-ax--z">Z <em>{{ fmtN(dispZ) }}</em></span>
         <span v-if="isDragging" class="th3d-drag-hint">release to move</span>
       </div>
+
+      <!-- Clear model button — only shown when a model is loaded -->
+      <button v-if="hasModel && !modelCleared" class="th3d-clear-model"
+              @click="modelCleared = true"
+              :title="`Z movement blocked below ${(printPreviewMaxZ + 5).toFixed(1)}mm — click to allow`">
+        ✕ Clear model
+      </button>
     </div>
   </div>
 </template>
@@ -164,11 +171,14 @@ let printGhostGroup    = null   // semi-transparent layers above split
 let printFinishedGroup = null   // opaque layers below split
 let printLayerMeshes   = []     // [{ghost, ghostSup, finished, finishedSup}|null]
 let printLayerSplit    = 0      // layers revealed so far
+let printPreviewMaxZ   = 0      // tallest layer Z in printer coords (for Z floor)
 
 const printFilename  = ref(null)   // print_stats.filename
 const printState     = ref(null)   // print_stats.state
 const filePosition   = ref(0)
 const fileSize       = ref(0)
+const hasModel       = ref(false)  // true when a preview is loaded
+const modelCleared   = ref(false)  // user clicked Clear Model
 
 // ── Drag state ────────────────────────────────────────────────────────────────
 const isDragging  = ref(false)
@@ -218,8 +228,11 @@ const C_PRINT_SUP_GHO  = new THREE.Color(0x1a3344)
 function clearPrintPreview() {
   if (printGhostGroup)    { scene?.remove(printGhostGroup);    printGhostGroup    = null }
   if (printFinishedGroup) { scene?.remove(printFinishedGroup); printFinishedGroup = null }
-  printLayerMeshes = []
-  printLayerSplit  = 0
+  printLayerMeshes   = []
+  printLayerSplit    = 0
+  printPreviewMaxZ   = 0
+  hasModel.value     = false
+  modelCleared.value = false
 }
 
 async function loadPrintPreview(filename) {
@@ -259,9 +272,11 @@ function buildPrintRibbons(buf) {
   const minZ    = dv.getFloat32(off, true); off += 4
   /* maxX */     dv.getFloat32(off, true); off += 4
   /* maxY */     dv.getFloat32(off, true); off += 4
-  /* maxZ */     dv.getFloat32(off, true); off += 4
+  const maxZ    = dv.getFloat32(off, true); off += 4
   /* layerH */   dv.getFloat32(off, true); off += 4
   const nLayers = dv.getUint32(off, true); off += 4
+
+  printPreviewMaxZ = maxZ
 
   printGhostGroup    = new THREE.Group()
   printFinishedGroup = new THREE.Group()
@@ -338,6 +353,7 @@ function buildPrintRibbons(buf) {
     printLayerMeshes.push(entry)
   }
   console.log('[t3d] print preview built:', nLayers, 'layers, v' + version)
+  hasModel.value = true
 }
 
 function updatePrintLayer() {
@@ -424,6 +440,9 @@ function initScene() {
   }
 
   positionCamera()  // needs controls to exist — must come after OrbitControls init
+
+  // Show orientation cube whenever camera moves
+  controls.addEventListener('change', showCube)
 
   raycaster  = new THREE.Raycaster()
   bedPlane   = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
@@ -638,7 +657,7 @@ function syncToolhead() {
   if (zHandleMesh) zHandleMesh.position.y = z
 }
 
-// ── Overlay canvas: ruler labels + tick labels ────────────────────────────────
+// ── Overlay canvas: ruler labels + tick labels + perspective labels ───────────
 function drawOverlay() {
   const oc  = overlayCanvas.value
   if (!oc) return
@@ -678,6 +697,120 @@ function drawOverlay() {
     ctx.fillText(String(z), sp.x, sp.y)
   }
   ctx.textAlign = 'left'
+
+  // ── Perspective edge labels ────────────────────────────────────────────────
+  if (props.widget?.config?.showPerspectiveLabels !== false) {
+    drawPerspectiveLabels(ctx, xMax, yMax)
+  }
+
+  // ── Perspective cube ───────────────────────────────────────────────────────
+  if (cubeVisible.value) drawPerspectiveCube(ctx, oc.width, oc.height)
+}
+
+function drawPerspectiveLabels(ctx, xMax, yMax) {
+  const LABELS = [
+    { text: 'FRONT', pos: new THREE.Vector3(xMax / 2, 0,        0)        },  // Y=0 edge midpoint
+    { text: 'BACK',  pos: new THREE.Vector3(xMax / 2, 0,       -yMax)     },  // Y=yMax edge
+    { text: 'LEFT',  pos: new THREE.Vector3(0,         0,       -yMax / 2) },  // X=0 edge
+    { text: 'RIGHT', pos: new THREE.Vector3(xMax,      0,       -yMax / 2) },  // X=xMax edge
+  ]
+  ctx.font = 'bold 11px monospace'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  for (const { text, pos } of LABELS) {
+    const sp = projectToScreen(pos)
+    if (!sp) continue
+    ctx.fillStyle = 'rgba(255,255,255,0.18)'
+    ctx.fillRect(sp.x - 22, sp.y - 8, 44, 16)
+    ctx.fillStyle = 'rgba(255,255,255,0.55)'
+    ctx.fillText(text, sp.x, sp.y)
+  }
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+  ctx.font = '10px monospace'
+}
+
+// ── Perspective cube ───────────────────────────────────────────────────────────
+// Draws a small orientation cube in the top-right corner using the camera quaternion.
+const cubeVisible   = ref(false)
+let   cubeHideTimer = null
+
+function showCube() {
+  cubeVisible.value = true
+  if (cubeHideTimer) clearTimeout(cubeHideTimer)
+  cubeHideTimer = setTimeout(() => { cubeVisible.value = false }, 1500)
+}
+
+const CUBE_FACE_LABELS = [
+  { normal: new THREE.Vector3( 0,  0,  1), label: 'FRONT' },
+  { normal: new THREE.Vector3( 0,  0, -1), label: 'BACK'  },
+  { normal: new THREE.Vector3(-1,  0,  0), label: 'LEFT'  },
+  { normal: new THREE.Vector3( 1,  0,  0), label: 'RIGHT' },
+  { normal: new THREE.Vector3( 0,  1,  0), label: 'TOP'   },
+  { normal: new THREE.Vector3( 0, -1,  0), label: 'BOT'   },
+]
+
+function drawPerspectiveCube(ctx, cw, ch) {
+  if (!camera) return
+  const SIZE   = 56
+  const MARGIN = 10
+  const cx     = cw - SIZE / 2 - MARGIN
+  const cy     = SIZE / 2 + MARGIN
+
+  // Camera rotation without translation
+  const quat = camera.quaternion
+  const mat  = new THREE.Matrix4().makeRotationFromQuaternion(quat)
+
+  // Project cube vertex at normalized position
+  function proj(v) {
+    const r = v.clone().applyMatrix4(mat)
+    return { x: cx + r.x * SIZE / 2, y: cy - r.y * SIZE / 2, z: r.z }
+  }
+
+  // Draw each face if it's facing the camera (dot > 0 after rotation)
+  const faces = [
+    { verts: [[-1,-1, 1],[ 1,-1, 1],[ 1, 1, 1],[-1, 1, 1]], normal: new THREE.Vector3(0, 0, 1), label: 'FRONT' },
+    { verts: [[ 1,-1,-1],[-1,-1,-1],[-1, 1,-1],[ 1, 1,-1]], normal: new THREE.Vector3(0, 0,-1), label: 'BACK'  },
+    { verts: [[-1,-1,-1],[-1,-1, 1],[-1, 1, 1],[-1, 1,-1]], normal: new THREE.Vector3(-1,0, 0), label: 'LEFT'  },
+    { verts: [[ 1,-1, 1],[ 1,-1,-1],[ 1, 1,-1],[ 1, 1, 1]], normal: new THREE.Vector3(1, 0, 0), label: 'RIGHT' },
+    { verts: [[-1, 1, 1],[ 1, 1, 1],[ 1, 1,-1],[-1, 1,-1]], normal: new THREE.Vector3(0, 1, 0), label: 'TOP'   },
+    { verts: [[-1,-1,-1],[ 1,-1,-1],[ 1,-1, 1],[-1,-1, 1]], normal: new THREE.Vector3(0,-1, 0), label: 'BOT'   },
+  ]
+
+  // Sort by average z depth (painter's algorithm)
+  const projected = faces.map(f => {
+    const pts   = f.verts.map(([x,y,z]) => proj(new THREE.Vector3(x, y, z)))
+    const avgZ  = pts.reduce((s,p) => s + p.z, 0) / pts.length
+    const rotN  = f.normal.clone().applyQuaternion(quat)
+    const dot   = rotN.z  // facing camera if positive
+    return { ...f, pts, avgZ, dot }
+  }).sort((a, b) => a.avgZ - b.avgZ)
+
+  ctx.save()
+  for (const face of projected) {
+    const alpha = Math.max(0, face.dot)
+    // Face fill
+    ctx.beginPath()
+    ctx.moveTo(face.pts[0].x, face.pts[0].y)
+    for (let i = 1; i < face.pts.length; i++) ctx.lineTo(face.pts[i].x, face.pts[i].y)
+    ctx.closePath()
+    ctx.fillStyle = `rgba(30,50,70,${0.55 + alpha * 0.3})`
+    ctx.fill()
+    ctx.strokeStyle = `rgba(100,160,200,0.5)`
+    ctx.lineWidth = 0.8
+    ctx.stroke()
+
+    // Face label (only visible faces)
+    if (face.dot > 0.3) {
+      const center = face.pts.reduce((acc, p) => ({ x: acc.x + p.x / 4, y: acc.y + p.y / 4 }), { x: 0, y: 0 })
+      ctx.font = `bold ${Math.round(7 + alpha * 3)}px monospace`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillStyle = `rgba(200,230,255,${0.4 + alpha * 0.6})`
+      ctx.fillText(face.label, center.x, center.y)
+    }
+  }
+  ctx.restore()
 }
 
 /**
@@ -779,7 +912,8 @@ function onPointerMove(e) {
   } else if (dragMode === 'z') {
     const hitPt = new THREE.Vector3()
     if (raycaster.ray.intersectPlane(zDragPlane, hitPt)) {
-      dragTarget.z = Math.max(0, Math.min(limits.zMax, hitPt.y))
+      const zFloor = (hasModel.value && !modelCleared.value) ? printPreviewMaxZ + 5 : 0
+      dragTarget.z = Math.max(zFloor, Math.min(limits.zMax, hitPt.y))
       updateZSlice()
     }
   }
@@ -1035,5 +1169,24 @@ watch(() => [livePos.x, livePos.y, livePos.z, pos.x, pos.y, pos.z], () => {
 @keyframes th3d-hint-pulse {
   0%, 100% { opacity: 0.5; }
   50%       { opacity: 1;   }
+}
+.th3d-clear-model {
+  position: absolute;
+  bottom: 36px;
+  right: 8px;
+  background: rgba(20,20,30,0.75);
+  border: 1px solid var(--border-2);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  padding: 3px 8px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: color 0.15s, border-color 0.15s;
+}
+.th3d-clear-model:hover {
+  color: var(--amber);
+  border-color: var(--amber);
 }
 </style>
