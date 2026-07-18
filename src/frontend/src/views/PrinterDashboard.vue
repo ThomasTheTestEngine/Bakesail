@@ -291,10 +291,7 @@
             <!-- Recent files dropdown -->
             <div class="wp-recent">
               <button class="wp-recent-toggle" @click="wpToggleDropdown">
-                <span class="wp-recent-label">
-                  <span v-if="wpFiles.length">{{ wpFiles[0]?.filename ?? 'Recent files' }}</span>
-                  <span v-else class="wp-recent-empty">Recent files</span>
-                </span>
+                <span class="wp-recent-label">Recent files</span>
                 <i :class="wpDropdownOpen ? 'mdi mdi-chevron-up' : 'mdi mdi-chevron-down'" class="wp-recent-chevron"></i>
               </button>
               <div v-if="wpDropdownOpen" class="wp-recent-list">
@@ -1304,6 +1301,7 @@ onMounted(async () => {
     })
     if (r?.status) handleStatus(r.status)
   } catch { /* degrade gracefully */ }
+  wpLoadFiles()  // load recent files immediately, don't wait for dropdown open
   chartTimer = setInterval(drawCharts, 1000)
   _historyTimer = setInterval(() => _pushHistory(Date.now()), 2000)
 })

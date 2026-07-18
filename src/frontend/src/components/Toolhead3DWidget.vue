@@ -174,6 +174,7 @@ let raycaster
 let bedPlane        // THREE.Plane at Y=0 for continuous XY raycasting
 let zDragPlane      // THREE.Plane at Z-rail X for Z raycasting
 let animFrameId
+let perspLabelGroup = null  // Group containing flat bed-edge label meshes
 
 // ── Print preview ribbon overlay ──────────────────────────────────────────────
 let printGhostGroup    = null   // semi-transparent layers above split
@@ -266,6 +267,7 @@ async function loadPrintPreview(filename) {
   const buf = await r.arrayBuffer()
   buildPrintRibbons(buf)
   updatePrintLayer()
+  controls?.update()
 }
 
 function buildPrintRibbons(buf) {
@@ -415,6 +417,10 @@ watch([filePosition, fileSize], ([pos, size]) => {
   }
 })
 
+watch(() => props.widget?.config?.showPerspectiveLabels, () => {
+  updatePerspectiveLabelsVisibility()
+})
+
 // ── Scene init ────────────────────────────────────────────────────────────────
 function initScene() {
   const canvas = glCanvas.value
@@ -459,6 +465,7 @@ function initScene() {
   zDragPlane = new THREE.Plane()  // recomputed camera-relative at drag start
 
   buildScene()
+  buildPerspectiveLabels3D()
   syncToolhead()
 
   // Render loop
@@ -667,6 +674,63 @@ function syncToolhead() {
   if (zHandleMesh) zHandleMesh.position.y = z
 }
 
+// ── Perspective labels — flat PlaneGeometry meshes lying on the bed plane ─────
+function makeLabelTexture(text, widthPx = 256, heightPx = 64) {
+  const c   = document.createElement('canvas')
+  c.width   = widthPx
+  c.height  = heightPx
+  const ctx = c.getContext('2d')
+  ctx.clearRect(0, 0, widthPx, heightPx)
+  ctx.font      = 'bold 36px monospace'
+  ctx.fillStyle = 'rgba(255,255,255,0.55)'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'top'
+  ctx.fillText(text, widthPx / 2, 8)
+  const tex = new THREE.CanvasTexture(c)
+  tex.needsUpdate = true
+  return tex
+}
+
+function buildPerspectiveLabels3D() {
+  if (perspLabelGroup) { scene.remove(perspLabelGroup); perspLabelGroup = null }
+  const { xMax, yMax } = limits
+  const OFFSET = 12   // mm beyond bed edge
+  const WIDTH  = 40   // mm wide in printer space
+  const HEIGHT = 12   // mm tall in printer space (lies flat, so this is depth in -Y)
+
+  const defs = [
+    // text, centre X (printer), centre Y (printer), rotation around Y axis (radians)
+    { text: 'FRONT', cx: xMax / 2, cy: -OFFSET,        ry: 0              },
+    { text: 'BACK',  cx: xMax / 2, cy:  yMax + OFFSET,  ry: Math.PI       },
+    { text: 'LEFT',  cx: -OFFSET,  cy:  yMax / 2,        ry: Math.PI / 2  },
+    { text: 'RIGHT', cx: xMax + OFFSET, cy: yMax / 2,   ry: -Math.PI / 2 },
+  ]
+
+  perspLabelGroup = new THREE.Group()
+  for (const { text, cx, cy, ry } of defs) {
+    const tex  = makeLabelTexture(text)
+    const mat  = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, depthWrite: false })
+    const geo  = new THREE.PlaneGeometry(WIDTH, HEIGHT)
+    const mesh = new THREE.Mesh(geo, mat)
+    // Lie flat on bed: rotate plane from XY → XZ (face up), then apply label rotation
+    mesh.rotation.x = -Math.PI / 2   // face up (normal points +Y)
+    mesh.rotation.z = ry              // rotate around Z after X rotation
+    // Position: printer X → Three X, printer Y → Three -Z, Y=0 → bed surface
+    mesh.position.set(cx, 0.1, -cy)  // 0.1mm above bed to avoid z-fighting
+    // Since we rotated X first then Z, we need to undo the coupling:
+    mesh.rotation.order = 'ZXY'
+    mesh.rotation.x = -Math.PI / 2
+    mesh.rotation.y = ry
+    perspLabelGroup.add(mesh)
+  }
+  scene.add(perspLabelGroup)
+  perspLabelGroup.visible = props.widget?.config?.showPerspectiveLabels !== false
+}
+
+function updatePerspectiveLabelsVisibility() {
+  if (perspLabelGroup) perspLabelGroup.visible = props.widget?.config?.showPerspectiveLabels !== false
+}
+
 // ── Overlay canvas: ruler labels + tick labels + perspective labels ───────────
 function drawOverlay() {
   const oc  = overlayCanvas.value
@@ -708,37 +772,14 @@ function drawOverlay() {
   }
   ctx.textAlign = 'left'
 
-  // ── Perspective edge labels ────────────────────────────────────────────────
-  if (props.widget?.config?.showPerspectiveLabels !== false) {
-    drawPerspectiveLabels(ctx, xMax, yMax)
-  }
+  // ── Perspective labels are 3D meshes in scene, not 2D overlay ────────────
+  // (see buildPerspectiveLabels3D / updatePerspectiveLabelsVisibility)
 
   // ── Perspective cube ───────────────────────────────────────────────────────
   if (cubeVisible.value && props.widget?.config?.showPerspectiveCube !== false) drawPerspectiveCube(ctx, oc.width, oc.height)
 }
 
-function drawPerspectiveLabels(ctx, xMax, yMax) {
-  const LABELS = [
-    { text: 'FRONT', pos: new THREE.Vector3(xMax / 2,  -0.5,        0)        },
-    { text: 'BACK',  pos: new THREE.Vector3(xMax / 2,  -0.5,       -yMax)     },
-    { text: 'LEFT',  pos: new THREE.Vector3(0,          -0.5,       -yMax / 2) },
-    { text: 'RIGHT', pos: new THREE.Vector3(xMax,       -0.5,       -yMax / 2) },
-  ]
-  ctx.font = 'bold 11px monospace'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  for (const { text, pos } of LABELS) {
-    const sp = projectToScreen(pos)
-    if (!sp) continue
-    ctx.fillStyle = 'rgba(255,255,255,0.18)'
-    ctx.fillRect(sp.x - 22, sp.y - 8, 44, 16)
-    ctx.fillStyle = 'rgba(255,255,255,0.55)'
-    ctx.fillText(text, sp.x, sp.y)
-  }
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'middle'
-  ctx.font = '10px monospace'
-}
+// (perspective labels are 3D PlaneGeometry meshes — see buildPerspectiveLabels3D)
 
 // ── Perspective cube ───────────────────────────────────────────────────────────
 // Draws a small orientation cube in the top-right corner using the camera quaternion.
@@ -1061,6 +1102,7 @@ onUnmounted(() => {
   cancelAnimationFrame(animFrameId)
   resizeObserver?.disconnect()
   clearPrintPreview()
+  if (perspLabelGroup) { scene?.remove(perspLabelGroup); perspLabelGroup = null }
   scene = null
   glCanvas.value?.removeEventListener('pointerdown', onPointerDown)
   glCanvas.value?.removeEventListener('pointermove', onPointerMove)

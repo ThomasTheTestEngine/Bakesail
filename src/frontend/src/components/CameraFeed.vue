@@ -16,7 +16,7 @@
     <template v-else>
       <img
         class="cam-img"
-        :src="streamUrl"
+        :src="streamUrlWithBuster"
         :alt="displayName"
         @error="streamError = true"
         @load="onFrame"
@@ -78,14 +78,9 @@ const streamUrl = computed(() => {
 })
 
 // ── FPS counter ───────────────────────────────────────────────────────────────
-// For an mjpeg stream, each `load` event on the img = one decoded frame.
 const fps         = ref(null)
 let   frameCount  = 0
 let   fpsInterval = null
-
-function onFrame() {
-  frameCount++
-}
 
 watch(
   () => resolvedCam.value?.showFps,
@@ -106,7 +101,41 @@ watch(
   { immediate: true },
 )
 
-onUnmounted(() => clearInterval(fpsInterval))
+// ── Stream stall detection ────────────────────────────────────────────────────
+// Browsers sometimes silently stall MJPEG streams. If we get no @load event
+// for 8 seconds, force-reconnect by busting the URL cache parameter.
+let stallTimer   = null
+const stallBuster = ref(0)
+
+const streamUrlWithBuster = computed(() => {
+  const base = streamUrl.value
+  if (!base) return base
+  // Only append buster when non-zero (initial load uses clean URL)
+  return stallBuster.value ? base + (base.includes('?') ? '&' : '?') + '_t=' + stallBuster.value : base
+})
+
+function resetStallTimer() {
+  if (stallTimer) clearTimeout(stallTimer)
+  stallTimer = setTimeout(() => {
+    stallBuster.value = Date.now()
+    resetStallTimer()
+  }, 8000)
+}
+
+function onFrame() {
+  frameCount++
+  resetStallTimer()
+}
+
+watch(streamUrl, (url) => {
+  if (url) { streamError.value = false; stallBuster.value = 0; resetStallTimer() }
+  else { if (stallTimer) clearTimeout(stallTimer) }
+}, { immediate: true })
+
+onUnmounted(() => {
+  clearInterval(fpsInterval)
+  if (stallTimer) clearTimeout(stallTimer)
+})
 </script>
 
 <style scoped>
