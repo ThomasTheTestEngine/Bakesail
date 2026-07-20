@@ -1244,7 +1244,10 @@ function drawCharts() {
       continue
     }
 
-    const pad = { t: 8, r: 8, b: 28, l: 38 }
+    const nSeries  = chartSeries(id).filter(s => isSeriesVisible(id, s.key) && (tempHistory[s.key]?.length || s.key === 'hotend' || s.key === 'bed')).length
+    const maxCols0 = Math.max(1, Math.floor((w - 46) / 60))
+    const legendRows = Math.ceil(nSeries / maxCols0)
+    const pad = { t: 8, r: 8, b: 14 + legendRows * 14, l: 38 }
     const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b
     const rawMin = Math.min(...allVals), rawMax = Math.max(...allVals)
     const spread = rawMax - rawMin || 10
@@ -1284,11 +1287,21 @@ function drawCharts() {
         i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
       })
       ctx.stroke()
-      // Legend dot
+      // Legend dot + label — dynamic width, wrap to second row if needed
+      ctx.font = '10px system-ui'
+      const labelW   = ctx.measureText(s.label).width
+      const itemW    = 8 + 4 + labelW + 12   // gap + dot-radius + text + right-pad
+      const maxCols  = Math.floor((w - pad.l - pad.r) / 60) || 1
+      const row      = Math.floor(li / maxCols)
+      const col      = li % maxCols
+      // Distribute evenly across available width
+      const slotW    = (w - pad.l - pad.r) / maxCols
+      const lx       = pad.l + col * slotW + 8
+      const ly       = h - 28 + row * 14
       ctx.fillStyle = s.colour
-      ctx.beginPath(); ctx.arc(pad.l + 8 + li * 70, h - 20, 4, 0, Math.PI * 2); ctx.fill()
-      ctx.fillStyle = colT; ctx.font = '10px system-ui'; ctx.textAlign = 'left'
-      ctx.fillText(s.label, pad.l + 16 + li * 70, h - 16)
+      ctx.beginPath(); ctx.arc(lx, ly - 4, 4, 0, Math.PI * 2); ctx.fill()
+      ctx.fillStyle = colT; ctx.textAlign = 'left'
+      ctx.fillText(s.label, lx + 8, ly - 4)
       li++
     }
   }
