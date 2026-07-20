@@ -227,14 +227,14 @@ let surfaceMesh, wireframeMesh, probedDots, flatMesh
 let animFrameId
 
 function heightColour(t) {
-  // Blue (cold) → white (mid) → red (hot), matching Mainsail
-  if (t < 0.5) {
-    const s = t * 2
-    return new THREE.Color(s, s, 1)
-  } else {
-    const s = (t - 0.5) * 2
-    return new THREE.Color(1, 1 - s, 1 - s)
-  }
+  // Bakesail palette: teal (#80B4E0) → green (#4CAF7D) → pink (#F07FAA)
+  const low  = new THREE.Color(0x80B4E0)  // --teal
+  const mid  = new THREE.Color(0x4CAF7D)  // --green
+  const high = new THREE.Color(0xF07FAA)  // --amber/pink
+  const out  = new THREE.Color()
+  if (t < 0.5) out.lerpColors(low, mid, t * 2)
+  else         out.lerpColors(mid, high, (t - 0.5) * 2)
+  return out
 }
 
 function buildScene() {
@@ -364,9 +364,9 @@ function drawLegend() {
   const ctx = c.getContext('2d')
   const h = c.height, w = c.width
   const grad = ctx.createLinearGradient(0, 0, 0, h)
-  grad.addColorStop(0,   '#ff2222')
-  grad.addColorStop(0.5, '#ffffff')
-  grad.addColorStop(1,   '#2222ff')
+  grad.addColorStop(0,    '#F07FAA')  // pink (high)
+  grad.addColorStop(0.5,  '#4CAF7D')  // green (mid)
+  grad.addColorStop(1,    '#80B4E0')  // teal (low)
   ctx.fillStyle = grad
   ctx.fillRect(0, 0, w, h)
 }
