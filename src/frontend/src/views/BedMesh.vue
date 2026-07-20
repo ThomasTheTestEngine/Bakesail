@@ -255,7 +255,7 @@ function buildScene() {
 
   const minX = xs[0], maxX = xs[xs.length-1]
   const minY = ys[0], maxY = ys[ys.length-1]
-  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2
+  const cx = 0, cy = 0
 
   const info = meshInfo.value
   const minV = info.minV, range = info.range || 0.001
@@ -350,8 +350,9 @@ function buildScene() {
 
   // Reposition camera
   const diagXY = Math.sqrt((maxX-minX)**2 + (maxY-minY)**2)
-  controls.target.set(0, Z_VISUAL * zScale.value * 0.4, 0)
-  camera.position.set(diagXY * 0.8, diagXY * 0.7, diagXY * 0.8)
+  const midX = (minX + maxX) / 2, midY = (minY + maxY) / 2
+  controls.target.set(midX, Z_VISUAL * zScale.value * 0.4, -midY)
+  camera.position.set(midX + diagXY * 0.8, diagXY * 0.7, -midY + diagXY * 0.8)
   controls.update()
 
   drawLegend()
