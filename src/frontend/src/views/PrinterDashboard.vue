@@ -1166,6 +1166,8 @@ function mcuDisplayName(key) {
   if (key === 'mcu') return 'MCU'
   return key.replace(/^btt\s*/i, '').replace(/_/g, ' ')
 }
+
+function chartSeries(id) {
   const series = [
     { key: 'hotend', label: 'Hotend', colour: seriesColour(id, 'hotend', 0), data: () => tempHistory.hotend },
     { key: 'bed',    label: 'Bed',    colour: seriesColour(id, 'bed', 1),    data: () => tempHistory.bed   },
