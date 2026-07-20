@@ -14,6 +14,7 @@ import MaterialLibrary from '../views/MaterialLibrary.vue'
 import FileExplorer      from '../views/FileExplorer.vue'
 import PrinterJobManager from '../views/PrinterJobManager.vue'
 import GcodeViewer      from '../views/GcodeViewer.vue'
+import BedMesh          from '../views/BedMesh.vue'
 
 export const routes_extra = [
   { path: '/wizard', name: 'wizard', component: SetupWizard },
@@ -53,6 +54,14 @@ export const ALL_TABS = [
     label: 'Job Manager',
     icon: '⊡',
     component: PrinterJobManager,
+    onlyFor: ['3d_printer'],
+  },
+  {
+    path: '/bed-mesh',
+    name: 'bed-mesh',
+    label: 'Bed Mesh',
+    icon: '⊞',
+    component: BedMesh,
     onlyFor: ['3d_printer'],
   },
   {

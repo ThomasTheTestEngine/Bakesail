@@ -176,7 +176,7 @@
               </div>
               <!-- Dynamic temperature_sensor * (read-only, no target input) -->
               <div class="wmon-sensor-row" v-for="(obj, name) in tempSensors" :key="name">
-                <span class="wmon-sensor-name">{{ name.replace('temperature_sensor ','') }}</span>
+                <span class="wmon-sensor-name">{{ sensorDisplayName(name) }}</span>
                 <span class="wmon-sensor-val">{{ obj.temperature?.toFixed(1) ?? '—' }}°C</span>
                 <span class="wmon-sensor-target" v-if="obj.target != null && obj.target > 0">→ {{ obj.target.toFixed(0) }}°</span>
               </div>
@@ -1153,7 +1153,19 @@ function setSeriesColour(widgetId, key, colour) {
   layout.saveLayout('')
 }
 
-function chartSeries(id) {
+function sensorDisplayName(key) {
+  const raw = key.replace(/^temperature_sensor\s+/, '').replace(/_/g, ' ')
+  // Normalise common BTT/host/MCU names to friendly labels
+  const lower = raw.toLowerCase()
+  if (/btt.?pi|raspberry.?pi|rpi|host/.test(lower)) return 'Host'
+  if (/btt.?mcu|^mcu$/.test(lower)) return 'MCU'
+  return raw
+}
+
+function mcuDisplayName(key) {
+  if (key === 'mcu') return 'MCU'
+  return key.replace(/^btt\s*/i, '').replace(/_/g, ' ')
+}
   const series = [
     { key: 'hotend', label: 'Hotend', colour: seriesColour(id, 'hotend', 0), data: () => tempHistory.hotend },
     { key: 'bed',    label: 'Bed',    colour: seriesColour(id, 'bed', 1),    data: () => tempHistory.bed   },
@@ -1161,7 +1173,7 @@ function chartSeries(id) {
   let pi = 0
   for (const name of Object.keys(deviceStore.dynamicObjects)) {
     if (name.startsWith('temperature_sensor ')) {
-      const label = name.replace('temperature_sensor ', '')
+      const label = sensorDisplayName(name)
       series.push({ key: name, label, colour: seriesColour(id, name, pi), data: () => tempHistory[name] ?? [] })
       pi++
     }
@@ -1234,7 +1246,7 @@ function drawCharts() {
     const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b
     const rawMin = Math.min(...allVals), rawMax = Math.max(...allVals)
     const spread = rawMax - rawMin || 10
-    const minT = rawMin - spread * 0.1
+    const minT = 0   // always start at 0°C so relative positions are accurate
     const maxT = rawMax + spread * 0.1
 
     // Y grid lines

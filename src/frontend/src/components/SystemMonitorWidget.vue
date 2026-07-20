@@ -184,7 +184,9 @@ function mcuTemp(mcuName) {
 }
 
 function mcuLabel(name) {
-  return name === 'mcu' ? 'mcu' : name  // keep full name for secondary MCUs
+  if (name === 'mcu') return 'MCU'
+  // Strip leading BTT prefix for cleaner names (e.g. "BTT EBBCan" → "EBBCan")
+  return name.replace(/^btt\s*/i, '')
 }
 
 // CPU %: proc_stats cpu_usage[] is per-core 0-100; average
